@@ -1,0 +1,218 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate Version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag is on main branch
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag must point to a commit on the main branch"
+            exit 1
+          fi
+          echo "Tag is on main ✓"
+
+      - name: Extract version from tag
+        id: extract
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          echo "version=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Tag version: $TAG"
+
+      - name: Verify all package versions match
+        run: |
+          TAG="${{ steps.extract.outputs.version }}"
+          for pkg in sidekick-docker-vscode/package.json sidekick-docker-cli/package.json sidekick-docker-shared/package.json; do
+            PKG_VERSION=$(node -e "console.log(require('./$pkg').version)")
+            if [[ "$PKG_VERSION" != "$TAG" ]]; then
+              echo "::error::$pkg version ($PKG_VERSION) does not match tag (v$TAG)"
+              exit 1
+            fi
+            echo "$pkg: $PKG_VERSION ✓"
+          done
+
+  publish-extension:
+    name: Publish VS Code Extension
+    runs-on: ubuntu-latest
+    needs: validate
+
+    defaults:
+      run:
+        working-directory: sidekick-docker-vscode
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sidekick-docker-vscode/package-lock.json
+
+      - name: Build shared library
+        working-directory: sidekick-docker-shared
+        run: npm ci && npm run build
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Package .vsix
+        run: npx @vscode/vsce package -o sidekick-docker-vscode-${{ needs.validate.outputs.version }}.vsix
+
+      - name: Upload .vsix artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: sidekick-docker-vscode/sidekick-docker-vscode-${{ needs.validate.outputs.version }}.vsix
+
+      - name: Publish to Open VSX
+        run: npx ovsx publish sidekick-docker-vscode-${{ needs.validate.outputs.version }}.vsix || echo "Already published — continuing"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+
+  publish-cli:
+    name: Publish CLI to npm
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build shared library
+        working-directory: sidekick-docker-shared
+        run: npm ci && npm run build
+
+      - name: Install CLI dependencies
+        working-directory: sidekick-docker-cli
+        run: npm ci
+
+      - name: Run CLI tests
+        working-directory: sidekick-docker-cli
+        run: npm test
+
+      - name: Build CLI
+        working-directory: sidekick-docker-cli
+        run: npm run build
+
+      - name: Verify binary
+        working-directory: sidekick-docker-cli
+        run: node dist/sidekick-docker.mjs --version
+
+      - name: Publish to npm (skip if already published)
+        working-directory: sidekick-docker-cli
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          if npm view "sidekick-docker@$VERSION" version 2>/dev/null; then
+            echo "Version $VERSION already published, skipping"
+          else
+            npm publish
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  publish-shared:
+    name: Publish Shared Library to npm
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build shared library
+        working-directory: sidekick-docker-shared
+        run: npm ci && npm run build
+
+      - name: Publish to npm (skip if already published)
+        working-directory: sidekick-docker-shared
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          if npm view "sidekick-docker-shared@$VERSION" version 2>/dev/null; then
+            echo "Version $VERSION already published, skipping"
+          else
+            npm publish
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [validate, publish-extension, publish-cli, publish-shared]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download .vsix artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: vsix
+
+      - name: Extract changelog section
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate.outputs.version }}"
+          if [[ -f CHANGELOG.md ]]; then
+            SECTION=$(sed -n "/^## .*${VERSION}/,/^## /p" CHANGELOG.md | head -n -1)
+            if [[ -n "$SECTION" ]]; then
+              echo "body<<EOF" >> "$GITHUB_OUTPUT"
+              echo "$SECTION" >> "$GITHUB_OUTPUT"
+              echo "EOF" >> "$GITHUB_OUTPUT"
+            else
+              echo "body=Release v${VERSION}" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "body=Release v${VERSION}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ needs.validate.outputs.version }}
+          body: |
+            ${{ steps.changelog.outputs.body }}
+
+            ## Install
+
+            **VS Code / VSCodium extension**: Install from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode), the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-docker-vscode), or download the `.vsix` below.
+
+            **CLI via npm** (requires Node.js 20+):
+            ```
+            npm i -g sidekick-docker
+            ```
+
+            **Shared library via npm**:
+            ```
+            npm i sidekick-docker-shared
+            ```
+          files: |
+            sidekick-docker-vscode-${{ needs.validate.outputs.version }}.vsix
+          fail_on_unmatched_files: false

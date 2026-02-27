@@ -1,0 +1,49 @@
+import type {
+  DashboardStateSnapshot,
+  SerializedLogEntry,
+  SerializedContainerStats,
+} from '../types/messages';
+
+export interface WebviewState {
+  activePanelIndex: number;
+  selectedItemId: string | null;
+  detailTabIndex: number;
+  filterString: string;
+
+  snapshot: DashboardStateSnapshot | null;
+  logs: Map<string, SerializedLogEntry[]>;
+  stats: Map<string, { stats: SerializedContainerStats | null; loading: boolean }>;
+  envVars: Map<string, string[]>;
+
+  phrase: string;
+  toasts: { id: number; message: string; severity: 'error' | 'warning' | 'info'; timer: number }[];
+
+  // Overlay state
+  confirmVisible: boolean;
+  confirmMessage: string;
+  confirmCallback: (() => void) | null;
+  filterVisible: boolean;
+  contextMenuVisible: boolean;
+  contextMenuIndex: number;
+}
+
+export function createInitialState(): WebviewState {
+  return {
+    activePanelIndex: 0,
+    selectedItemId: null,
+    detailTabIndex: 0,
+    filterString: '',
+    snapshot: null,
+    logs: new Map(),
+    stats: new Map(),
+    envVars: new Map(),
+    phrase: '',
+    toasts: [],
+    confirmVisible: false,
+    confirmMessage: '',
+    confirmCallback: null,
+    filterVisible: false,
+    contextMenuVisible: false,
+    contextMenuIndex: 0,
+  };
+}

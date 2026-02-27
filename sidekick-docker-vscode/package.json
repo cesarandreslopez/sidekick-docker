@@ -1,0 +1,63 @@
+{
+  "name": "sidekick-docker-vscode",
+  "displayName": "Sidekick Docker",
+  "description": "Docker management dashboard for VS Code",
+  "version": "0.1.0",
+  "publisher": "CesarAndresLopez",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other",
+    "Visualization"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "author": "Cesar Andres Lopez <cesarandreslopez@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cesarandreslopez/sidekick-docker.git",
+    "directory": "sidekick-docker-vscode"
+  },
+  "homepage": "https://cesarandreslopez.github.io/sidekick-docker/",
+  "bugs": {
+    "url": "https://github.com/cesarandreslopez/sidekick-docker/issues"
+  },
+  "keywords": [
+    "docker",
+    "docker-compose",
+    "containers",
+    "dashboard",
+    "devops",
+    "docker-management",
+    "vscode"
+  ],
+  "galleryBanner": {
+    "color": "#1a1a2e",
+    "theme": "dark"
+  },
+  "icon": "images/icon-128.png",
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "sidekick-docker.openDashboard",
+        "title": "Sidekick Docker: Open Dashboard"
+      }
+    ]
+  },
+  "scripts": {
+    "build": "node esbuild.cjs",
+    "watch": "node esbuild.cjs --watch",
+    "clean": "rm -rf out"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.85.0",
+    "esbuild": "^0.24.0",
+    "sidekick-docker-shared": "file:../sidekick-docker-shared",
+    "typescript": "^5.7.0"
+  },
+  "license": "MIT"
+}

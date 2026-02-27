@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+out/
+
+# VS Code extension package
+*.vsix
+
+# TypeScript
+*.tsbuildinfo
+
+# IDE
+.idea/
+
+# Claude Code
+.claude/
+!.claude/commands/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+npm-debug.log*
+
+# Environment
+.env
+.env.local
+
+# Test coverage
+coverage/
+.coverage
+
+# Documentation build
+site/
+__pycache__/
+venv/
+.venv/

@@ -1,0 +1,80 @@
+import type { ImageInfo } from 'sidekick-docker-shared';
+import { DockerClient } from 'sidekick-docker-shared';
+import type { DockerDashboardMetrics } from '../DockerState';
+import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
+import { formatBytes, truncate, colorizeDetailKey, colorizeId, colorizeBool } from '../../formatters';
+
+export class ImagesPanel implements SidePanel {
+  readonly id = 'images';
+  readonly title = 'Images';
+  readonly shortcutKey = 3;
+
+  private client: DockerClient;
+  private onAction: () => void;
+
+  constructor(client: DockerClient, onAction: () => void) {
+    this.client = client;
+    this.onAction = onAction;
+  }
+
+  readonly detailTabs: DetailTab[] = [
+    {
+      label: 'Info',
+      render: (item) => {
+        const img = item.data as ImageInfo;
+        return [
+          colorizeDetailKey(`ID:       ${colorizeId(img.id)}`),
+          colorizeDetailKey(`Tags:     ${img.repoTags.join(', ')}`),
+          colorizeDetailKey(`Size:     ${formatBytes(img.size)}`),
+          colorizeDetailKey(`Created:  ${img.created.toLocaleString()}`),
+          colorizeDetailKey(`Dangling: ${colorizeBool(img.isDangling)}`),
+        ].join('\n');
+      },
+    },
+  ];
+
+  getItems(metrics: DockerDashboardMetrics): PanelItem[] {
+    return metrics.images.map((img): PanelItem => {
+      const tag = img.repoTags[0] || '<none>';
+      const icon = img.isDangling ? '\u25CB' : '\u25CF'; // ○ vs ●
+      return {
+        id: img.id,
+        label: `${icon} ${truncate(tag, 20)}`,
+        sortKey: img.isDangling ? 1 : 0,
+        data: img,
+        iconColor: img.isDangling ? 'gray' : '#2B4C7E',
+        rightLabel: formatBytes(img.size),
+        rightColor: 'gray',
+      };
+    });
+  }
+
+  getActions(): PanelAction[] {
+    return [
+      {
+        key: 'd',
+        label: 'Remove',
+        confirm: true,
+        confirmMessage: 'Remove this image?',
+        handler: (item) => {
+          const img = item.data as ImageInfo;
+          this.client.removeImage(img.id).then(() => this.onAction()).catch(() => {});
+        },
+      },
+      {
+        key: 'P',
+        label: 'Prune',
+        confirm: true,
+        confirmMessage: 'Prune all dangling images?',
+        handler: () => {
+          this.client.pruneImages().then(() => this.onAction()).catch(() => {});
+        },
+      },
+    ];
+  }
+
+  getSearchableText(item: PanelItem): string {
+    const img = item.data as ImageInfo;
+    return img.repoTags.join(' ');
+  }
+}

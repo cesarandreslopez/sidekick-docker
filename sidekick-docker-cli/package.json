@@ -1,0 +1,60 @@
+{
+  "name": "sidekick-docker",
+  "version": "0.1.0",
+  "description": "Docker management TUI dashboard",
+  "author": "Cesar Andres Lopez <cesarandreslopez@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cesarandreslopez/sidekick-docker.git",
+    "directory": "sidekick-docker-cli"
+  },
+  "homepage": "https://cesarandreslopez.github.io/sidekick-docker/",
+  "bugs": {
+    "url": "https://github.com/cesarandreslopez/sidekick-docker/issues"
+  },
+  "keywords": [
+    "docker",
+    "docker-compose",
+    "tui",
+    "terminal",
+    "dashboard",
+    "containers",
+    "cli",
+    "devops",
+    "docker-management"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "icon": "images/icon-128.png",
+  "type": "module",
+  "bin": {
+    "sidekick-docker": "./dist/sidekick-docker.mjs"
+  },
+  "files": [
+    "dist/sidekick-docker.mjs"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "node esbuild.cjs",
+    "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "commander": "^13.0.0",
+    "esbuild": "^0.24.0",
+    "ink": "^6.0.0",
+    "react": "^19.0.0",
+    "asciichart": "^1.5.25",
+    "sidekick-docker-shared": "file:../sidekick-docker-shared",
+    "typescript": "^5.7.0",
+    "node-pty": "^1.0.0",
+    "vitest": "^3.0.0"
+  },
+  "license": "MIT"
+}

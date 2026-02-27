@@ -1,0 +1,117 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'sidekick-docker-shared/**'
+      - 'sidekick-docker-cli/**'
+      - 'sidekick-docker-vscode/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sidekick-docker-shared/**'
+      - 'sidekick-docker-cli/**'
+      - 'sidekick-docker-vscode/**'
+
+jobs:
+  shared-tests:
+    name: Shared Library Tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: sidekick-docker-shared
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sidekick-docker-shared/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  cli-tests:
+    name: CLI Tests & Build
+    runs-on: ubuntu-latest
+    needs: shared-tests
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sidekick-docker-cli/package-lock.json
+
+      - name: Build shared library
+        working-directory: sidekick-docker-shared
+        run: npm ci && npm run build
+
+      - name: Install CLI dependencies
+        working-directory: sidekick-docker-cli
+        run: npm ci
+
+      - name: Run CLI tests
+        working-directory: sidekick-docker-cli
+        run: npm test
+
+      - name: Build CLI
+        working-directory: sidekick-docker-cli
+        run: npm run build
+
+      - name: Verify binary
+        working-directory: sidekick-docker-cli
+        run: node dist/sidekick-docker.mjs --version
+
+  build-extension:
+    name: Build VS Code Extension
+    runs-on: ubuntu-latest
+    needs: shared-tests
+
+    defaults:
+      run:
+        working-directory: sidekick-docker-vscode
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: sidekick-docker-vscode/package-lock.json
+
+      - name: Build shared library
+        working-directory: sidekick-docker-shared
+        run: npm ci && npm run build
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build extension
+        run: npm run build
+
+      - name: Create dist directory
+        run: mkdir -p dist
+
+      - name: Package extension
+        run: npx @vscode/vsce package --out dist/
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-package
+          path: sidekick-docker-vscode/dist/*.vsix
+          retention-days: 7

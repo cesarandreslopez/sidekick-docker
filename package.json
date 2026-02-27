@@ -1,0 +1,24 @@
+{
+  "name": "sidekick-docker-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Docker management TUI/CLI + VSCode extension",
+  "author": "Cesar Andres Lopez <cesarandreslopez@gmail.com>",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cesarandreslopez/sidekick-docker.git"
+  },
+  "homepage": "https://cesarandreslopez.github.io/sidekick-docker/",
+  "bugs": {
+    "url": "https://github.com/cesarandreslopez/sidekick-docker/issues"
+  },
+  "scripts": {
+    "build:shared": "cd sidekick-docker-shared && npm run build",
+    "build:cli": "cd sidekick-docker-cli && npm run build",
+    "build:vscode": "cd sidekick-docker-vscode && npm run build",
+    "build": "npm run build:shared && npm run build:cli && npm run build:vscode",
+    "clean": "cd sidekick-docker-shared && npm run clean; cd ../sidekick-docker-cli && npm run clean; cd ../sidekick-docker-vscode && npm run clean",
+    "test": "cd sidekick-docker-shared && npm test; cd ../sidekick-docker-cli && npm test"
+  },
+  "license": "MIT"
+}

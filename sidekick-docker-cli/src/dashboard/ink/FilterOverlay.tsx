@@ -1,0 +1,26 @@
+import React from 'react';
+import { Box, Text } from 'ink';
+
+interface FilterOverlayProps {
+  filterString: string;
+  matchCount?: number;
+  totalCount?: number;
+  panelTitle?: string;
+}
+
+export function FilterOverlay({ filterString, matchCount, totalCount, panelTitle }: FilterOverlayProps): React.ReactElement {
+  const countInfo = matchCount !== undefined && totalCount !== undefined && panelTitle
+    ? `  ${matchCount} of ${totalCount} ${panelTitle.toLowerCase()}`
+    : '';
+
+  return (
+    <Box position="absolute" marginTop={1} marginLeft={1}>
+      <Text backgroundColor="gray" color="white">
+        {` / ${filterString}\u2588 `}
+      </Text>
+      {countInfo && (
+        <Text color="gray">{countInfo}</Text>
+      )}
+    </Box>
+  );
+}
