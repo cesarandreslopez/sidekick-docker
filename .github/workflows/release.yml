@@ -98,7 +98,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Build shared library
@@ -133,40 +133,10 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  publish-shared:
-    name: Publish Shared Library to npm
-    runs-on: ubuntu-latest
-    needs: validate
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Build shared library
-        working-directory: sidekick-docker-shared
-        run: npm ci && npm run build
-
-      - name: Publish to npm (skip if already published)
-        working-directory: sidekick-docker-shared
-        run: |
-          VERSION="${{ needs.validate.outputs.version }}"
-          if npm view "sidekick-docker-shared@$VERSION" version 2>/dev/null; then
-            echo "Version $VERSION already published, skipping"
-          else
-            npm publish
-          fi
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-
   create-release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [validate, publish-extension, publish-cli, publish-shared]
+    needs: [validate, publish-extension, publish-cli]
 
     steps:
       - uses: actions/checkout@v4
@@ -202,16 +172,11 @@ jobs:
 
             ## Install
 
-            **VS Code / VSCodium extension**: Install from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode), the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-docker-vscode), or download the `.vsix` below.
+            **VS Code extension**: Download the `.vsix` below or install from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode).
 
             **CLI via npm** (requires Node.js 20+):
             ```
             npm i -g sidekick-docker
-            ```
-
-            **Shared library via npm**:
-            ```
-            npm i sidekick-docker-shared
             ```
           files: |
             sidekick-docker-vscode-${{ needs.validate.outputs.version }}.vsix
