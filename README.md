@@ -23,6 +23,10 @@
   <img src="assets/sidekick_docker_cli.gif" alt="Sidekick Docker TUI Demo" width="800">
 </p>
 
+<p align="center">
+  <img src="assets/sidekick_docker_vscode_extension.gif" alt="Sidekick Docker VS Code Extension Demo" width="800">
+</p>
+
 ## What is this?
 
 Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing your entire Docker environment — containers, Compose projects, images, volumes, and networks. Run it as a standalone TUI in any terminal, or open it as a panel inside VS Code. Same power, two surfaces.
@@ -80,6 +84,10 @@ Full documentation is available at the [docs site](https://cesarandreslopez.gith
 - [CLI Commands](https://cesarandreslopez.github.io/sidekick-docker/features/cli-commands/)
 - [VS Code Extension](https://cesarandreslopez.github.io/sidekick-docker/features/vscode/)
 - [Architecture](https://cesarandreslopez.github.io/sidekick-docker/architecture/overview/)
+
+## See Also
+
+**[Sidekick Agent Hub](https://github.com/cesarandreslopez/sidekick-agent-hub)** — Multi-provider AI coding agent monitor. Real-time visibility into Claude Code, OpenCode, and Codex CLI sessions with token tracking, context management, and session intelligence. Available as a [TUI on npm](https://www.npmjs.com/package/sidekick-agent-hub) and as a VS Code extension on the [Marketplace](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-for-max) and [Open VSX](https://open-vsx.org/extension/cesarandreslopez/sidekick-for-max).
 
 ## Contributing
 

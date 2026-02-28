@@ -24,6 +24,10 @@ A full-featured Docker management dashboard that runs in your terminal and in VS
   <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/sidekick_docker_cli.gif" alt="Sidekick Docker TUI Demo" width="800">
 </p>
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/sidekick_docker_vscode_extension.gif" alt="Sidekick Docker VS Code Extension Demo" width="800">
+</p>
+
 ## Feature Highlights
 
 - **Five-panel dashboard** — Containers, Compose Services, Images, Volumes, Networks
