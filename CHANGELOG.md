@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.1] - 2026-02-28
+
+### Added
+
+#### VS Code Extension — Sidebar & Tree View
+
+- Activity bar icon with dedicated "Sidekick Docker" view container
+- Container tree view grouped by state (Running / Stopped / Other)
+- Tree view badge showing running container count
+- Inline Start/Stop buttons on container tree items (contextual per state)
+- Refresh and Open Dashboard buttons in tree view title bar
+- Welcome view with "Open Dashboard" button when no containers are present
+- Status bar indicator (right-aligned) showing running/total container counts
+- Status bar shows "Docker offline" warning when daemon is unreachable
+- Click container in tree to open dashboard focused on that container
+
+#### VS Code Extension — Quick Pick Commands
+
+- `Sidekick Docker: Start Container...` — pick from stopped containers
+- `Sidekick Docker: Stop Container...` — pick from running containers
+- `Sidekick Docker: Restart Container...` — pick from running containers
+
+#### VS Code Extension — Stats Sparklines
+
+- CPU and memory sparkline charts (Unicode block characters) below progress bars
+- History data from StatsCollector (60 samples) sent to webview
+
+#### Compose Log Streaming
+
+- `ComposeClient.streamLogs()` async generator for real-time compose log streaming
+- CLI Services panel now shows live logs (replaces placeholder)
+- VS Code Services panel Logs tab with real-time compose log streaming
+- Selection-driven streaming: starts on select, stops on deselect
+
+### Fixed
+
+- Panel tab clicks not working in VS Code webview (mousedown handler was destroying DOM before click fired)
+- Double-spaced log lines in VS Code webview (whitespace: pre + display: flex + newline join)
+
 ## [0.1.0] - 2026-02-28
 
 ### Added
@@ -68,4 +107,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0

@@ -84,10 +84,12 @@ export interface DashboardStateSnapshot {
 export type ExtensionMessage =
   | { type: 'updateState'; snapshot: DashboardStateSnapshot }
   | { type: 'updateLogs'; containerId: string; entries: SerializedLogEntry[] }
-  | { type: 'updateStats'; containerId: string; stats: SerializedContainerStats | null; loading: boolean }
+  | { type: 'updateStats'; containerId: string; stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[] }
   | { type: 'updateEnv'; containerId: string; env: string[] }
   | { type: 'phraseBank'; phrases: string[] }
-  | { type: 'toast'; message: string; severity: 'error' | 'warning' | 'info' };
+  | { type: 'toast'; message: string; severity: 'error' | 'warning' | 'info' }
+  | { type: 'focusContainer'; containerId: string }
+  | { type: 'updateComposeLogs'; projectName: string; serviceName: string | null; entries: SerializedLogEntry[] };
 
 // ─── Webview → Extension ────────────────────────────────────────────
 
@@ -99,4 +101,5 @@ export type WebviewMessage =
   | { type: 'action'; actionType: string; itemId: string; panelId: string }
   | { type: 'filterChange'; filter: string }
   | { type: 'execContainer'; containerId: string }
-  | { type: 'requestRefresh' };
+  | { type: 'requestRefresh' }
+  | { type: 'selectComposeService'; projectName: string; serviceName: string | null };

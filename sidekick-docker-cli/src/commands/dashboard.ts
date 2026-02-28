@@ -10,6 +10,7 @@ import { VolumesPanel } from '../dashboard/panels/VolumesPanel';
 import { NetworksPanel } from '../dashboard/panels/NetworksPanel';
 import { LogStreamManager } from '../dashboard/LogStreamManager';
 import { StatsStreamManager } from '../dashboard/StatsStreamManager';
+import { ComposeLogStreamManager } from '../dashboard/ComposeLogStreamManager';
 import type { SidePanel } from '../dashboard/panels/types';
 import { Dashboard } from '../dashboard/ink/Dashboard';
 import { enableMouse, disableMouse } from '../dashboard/ink/mouse';
@@ -51,11 +52,20 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     scheduleRender();
   });
 
+  const composeLogManager = new ComposeLogStreamManager(composeClient, () => {
+    state.clearComposeLogs();
+    for (const entry of composeLogManager.getLogs()) {
+      state.appendComposeLog(entry);
+    }
+    scheduleRender();
+  });
+
   // Selection-driven streaming: start/stop streams when selection changes
   const onSelectionChange = (panelId: string, itemId: string | null) => {
     if (panelId === 'containers') {
       logManager.select(itemId);
       statsManager.select(itemId);
+      composeLogManager.select(null, null);
       // Fetch env vars if not cached
       if (itemId && !state.getInspectedEnv(itemId)) {
         client.inspectContainer(itemId).then(info => {
@@ -63,9 +73,20 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           scheduleRender();
         }).catch(() => {});
       }
+    } else if (panelId === 'services' && itemId) {
+      logManager.select(null);
+      statsManager.select(null);
+      // Parse service item id: "project:name" or "service:project:name"
+      const parts = itemId.split(':');
+      if (parts[0] === 'project') {
+        composeLogManager.select(parts.slice(1).join(':'), null);
+      } else if (parts[0] === 'service') {
+        composeLogManager.select(parts[1], parts.slice(2).join(':'));
+      }
     } else {
       logManager.select(null);
       statsManager.select(null);
+      composeLogManager.select(null, null);
     }
   };
 
@@ -174,6 +195,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     stopped = true;
     try { logManager.dispose(); } catch { /* ignore */ }
     try { statsManager.dispose(); } catch { /* ignore */ }
+    try { composeLogManager.dispose(); } catch { /* ignore */ }
     try { clearInterval(refreshInterval); } catch { /* ignore */ }
     try { watcher.stop(); } catch { /* ignore */ }
     try { client.dispose(); } catch { /* ignore */ }

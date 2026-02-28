@@ -123,3 +123,15 @@ export function renderEnvGrid(envLines: string[]): string {
 export function colorizeNetworkContainer(name: string, id: string): string {
   return `${escapeHtml(name)} (<span class="detail-id">${escapeHtml(id)}</span>)`;
 }
+
+export function renderSparkline(values: number[], width = 40): string {
+  if (values.length < 2) return '';
+  const max = Math.max(...values, 1);
+  const bars = '\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588';
+  const recent = values.slice(-width);
+  const sparkline = recent.map(v => {
+    const idx = Math.min(Math.floor((v / max) * (bars.length - 1)), bars.length - 1);
+    return bars[idx];
+  }).join('');
+  return `<span class="sparkline">${sparkline}</span>`;
+}

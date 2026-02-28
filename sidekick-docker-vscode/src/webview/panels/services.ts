@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { stateIcon, stateColor, escapeHtml, colorizeState, colorizeId, renderKvGrid } from '../formatters';
+import { stateIcon, stateColor, escapeHtml, colorizeState, colorizeId, renderKvGrid, colorizeLogEntry } from '../formatters';
 
 export const servicesPanel: PanelDefinition = {
   id: 'services',
@@ -48,6 +48,26 @@ export const servicesPanel: PanelDefinition = {
         }
         return 'No compose projects detected.\n\nCompose projects are detected from container labels\n(com.docker.compose.project) or from a compose file in the CWD.';
       },
+    },
+    {
+      label: 'Logs',
+      render: (item: PanelItem, state: WebviewState): string => {
+        const parts = item.id.split(':');
+        let key = '';
+        if (parts[0] === 'project') {
+          key = parts.slice(1).join(':');
+        } else if (parts[0] === 'service') {
+          key = `${parts[1]}:${parts.slice(2).join(':')}`;
+        }
+        if (!key) return 'Select a project or service to view logs.';
+
+        const entries = state.composeLogs.get(key);
+        if (!entries || entries.length === 0) {
+          return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the service produces output</div></div>';
+        }
+        return `<div class="log-content">${entries.map(e => colorizeLogEntry(e)).join('')}</div>`;
+      },
+      autoScrollBottom: true,
     },
   ] as DetailTabDefinition[],
 

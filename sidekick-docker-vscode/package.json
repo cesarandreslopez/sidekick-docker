@@ -2,7 +2,7 @@
   "name": "sidekick-docker-vscode",
   "displayName": "Sidekick Docker",
   "description": "Docker management dashboard for VS Code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "CesarAndresLopez",
   "engines": {
     "vscode": "^1.85.0"
@@ -40,12 +40,93 @@
   "icon": "images/icon-128.png",
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sidekick-docker",
+          "title": "Sidekick Docker",
+          "icon": "images/sidebar-icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sidekick-docker": [
+        {
+          "id": "sidekick-docker.containers",
+          "name": "Containers"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "sidekick-docker.openDashboard",
-        "title": "Sidekick Docker: Open Dashboard"
+        "title": "Sidekick Docker: Open Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "sidekick-docker.refreshContainers",
+        "title": "Sidekick Docker: Refresh Containers",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sidekick-docker.startContainer",
+        "title": "Start",
+        "icon": "$(debug-start)"
+      },
+      {
+        "command": "sidekick-docker.stopContainer",
+        "title": "Stop",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "sidekick-docker.openContainerInDashboard",
+        "title": "Open in Dashboard"
+      },
+      {
+        "command": "sidekick-docker.quickStart",
+        "title": "Sidekick Docker: Start Container..."
+      },
+      {
+        "command": "sidekick-docker.quickStop",
+        "title": "Sidekick Docker: Stop Container..."
+      },
+      {
+        "command": "sidekick-docker.quickRestart",
+        "title": "Sidekick Docker: Restart Container..."
       }
-    ]
+    ],
+    "viewsWelcome": [
+      {
+        "view": "sidekick-docker.containers",
+        "contents": "No containers found.\n[Open Dashboard](command:sidekick-docker.openDashboard)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "sidekick-docker.refreshContainers",
+          "when": "view == sidekick-docker.containers",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sidekick-docker.openDashboard",
+          "when": "view == sidekick-docker.containers",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sidekick-docker.startContainer",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created|dead)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "sidekick-docker.stopContainer",
+          "when": "view == sidekick-docker.containers && viewItem == container-running",
+          "group": "inline@1"
+        }
+      ]
+    }
   },
   "scripts": {
     "build": "node esbuild.cjs",

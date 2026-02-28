@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeId, renderKvGrid, renderEnvGrid } from '../formatters';
+import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline } from '../formatters';
 
 
 function findContainer(id: string, snapshot: DashboardStateSnapshot): SerializedContainerInfo | undefined {
@@ -19,7 +19,7 @@ export const containersPanel: PanelDefinition = {
       render: (item: PanelItem, state: WebviewState): string => {
         const entries = state.logs.get(item.id);
         if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
-        return `<div class="log-content">${entries.map(e => colorizeLogEntry(e)).join('\n')}</div>`;
+        return `<div class="log-content">${entries.map(e => colorizeLogEntry(e)).join('')}</div>`;
       },
       autoScrollBottom: true,
     },
@@ -41,14 +41,21 @@ export const containersPanel: PanelDefinition = {
         const cpuClamped = Math.min(s.cpuPercent, 100);
         const memClamped = Math.min(s.memoryPercent, 100);
 
+        const cpuSparkline = statsData.cpuHistory && statsData.cpuHistory.length > 1
+          ? `<div class="sparkline-row cpu">${renderSparkline(statsData.cpuHistory)}</div>` : '';
+        const memSparkline = statsData.memoryHistory && statsData.memoryHistory.length > 1
+          ? `<div class="sparkline-row memory">${renderSparkline(statsData.memoryHistory)}</div>` : '';
+
         return `<div class="stats-grid">
   <div class="stat-row">
     <div class="stat-row-label"><span class="stat-label">CPU</span><span class="stat-value">${escapeHtml(s.cpuPercent.toFixed(1))}%</span></div>
     <div class="stat-bar-track"><div class="stat-bar-fill ${barColor(s.cpuPercent)}" style="width:${cpuClamped.toFixed(1)}%"></div></div>
+    ${cpuSparkline}
   </div>
   <div class="stat-row">
     <div class="stat-row-label"><span class="stat-label">Memory</span><span class="stat-value">${escapeHtml(formatMemory(s.memoryUsage, s.memoryLimit))} (${escapeHtml(s.memoryPercent.toFixed(1))}%)</span></div>
     <div class="stat-bar-track"><div class="stat-bar-fill ${barColor(s.memoryPercent)}" style="width:${memClamped.toFixed(1)}%"></div></div>
+    ${memSparkline}
   </div>
   <div class="stat-row">
     <div class="stat-row-label"><span class="stat-label">Network I/O</span></div>

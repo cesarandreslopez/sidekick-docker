@@ -19,6 +19,7 @@ export interface DockerDashboardMetrics {
   statsCollector: StatsCollector;
   inspectedEnv: Map<string, string[]>;
   selectedContainerLogs: LogEntry[];
+  selectedComposeLogs: LogEntry[];
   lastRefresh: Date | null;
   daemonConnected: boolean;
 }
@@ -36,6 +37,7 @@ export class DockerState {
   private networks: NetworkInfo[] = [];
   private composeProjects: ComposeProject[] = [];
   private selectedLogs: LogEntry[] = [];
+  private selectedComposeLogs: LogEntry[] = [];
   private inspectedEnv = new Map<string, string[]>();
   private lastRefresh: Date | null = null;
   private daemonConnected = false;
@@ -160,6 +162,17 @@ export class DockerState {
     this.selectedLogs = [];
   }
 
+  appendComposeLog(entry: LogEntry): void {
+    this.selectedComposeLogs.push(entry);
+    if (this.selectedComposeLogs.length > 1000) {
+      this.selectedComposeLogs.shift();
+    }
+  }
+
+  clearComposeLogs(): void {
+    this.selectedComposeLogs = [];
+  }
+
   getStatsCollector(): StatsCollector {
     return this.statsCollector;
   }
@@ -182,6 +195,7 @@ export class DockerState {
       statsCollector: this.statsCollector,
       inspectedEnv: this.inspectedEnv,
       selectedContainerLogs: [...this.selectedLogs],
+      selectedComposeLogs: [...this.selectedComposeLogs],
       lastRefresh: this.lastRefresh,
       daemonConnected: this.daemonConnected,
     };

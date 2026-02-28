@@ -12,8 +12,9 @@ export interface WebviewState {
 
   snapshot: DashboardStateSnapshot | null;
   logs: Map<string, SerializedLogEntry[]>;
-  stats: Map<string, { stats: SerializedContainerStats | null; loading: boolean }>;
+  stats: Map<string, { stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[] }>;
   envVars: Map<string, string[]>;
+  composeLogs: Map<string, SerializedLogEntry[]>;
 
   phrase: string;
   toasts: { id: number; message: string; severity: 'error' | 'warning' | 'info'; timer: number }[];
@@ -37,6 +38,7 @@ export function createInitialState(): WebviewState {
     logs: new Map(),
     stats: new Map(),
     envVars: new Map(),
+    composeLogs: new Map(),
     phrase: '',
     toasts: [],
     confirmVisible: false,

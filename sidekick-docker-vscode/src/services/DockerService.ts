@@ -30,7 +30,8 @@ import type {
 export interface DockerServiceCallbacks {
   onStateChange: (snapshot: DashboardStateSnapshot) => void;
   onLogsChange: (containerId: string, entries: SerializedLogEntry[]) => void;
-  onStatsChange: (containerId: string, stats: SerializedContainerStats | null, loading: boolean) => void;
+  onStatsChange: (containerId: string, stats: SerializedContainerStats | null, loading: boolean, cpuHistory?: number[], memoryHistory?: number[]) => void;
+  onComposeLogs: (projectName: string, serviceName: string | null, entries: SerializedLogEntry[]) => void;
   onEnvLoaded: (containerId: string, env: string[]) => void;
   onError: (message: string) => void;
 }
@@ -62,6 +63,12 @@ export class DockerService {
   private statsContainerId: string | null = null;
   private statsAborted = false;
   private statsLoadingInterval: ReturnType<typeof setInterval> | null = null;
+
+  // Compose log streaming
+  private composeLogProject: string | null = null;
+  private composeLogService: string | null = null;
+  private composeLogAborted = false;
+  private composeLogs: LogEntry[] = [];
 
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -250,7 +257,9 @@ export class DockerService {
         this.statsCollector.push(containerId, stats);
         this.clearStatsLoadingInterval();
         if (!this.disposed) {
-          this.callbacks.onStatsChange(containerId, serializeStats(stats), false);
+          const cpuHistory = this.statsCollector.getCpuSeries(containerId);
+          const memoryHistory = this.statsCollector.getMemorySeries(containerId);
+          this.callbacks.onStatsChange(containerId, serializeStats(stats), false, cpuHistory, memoryHistory);
         }
       }
     } catch { /* stream ended */ }
@@ -273,6 +282,37 @@ export class DockerService {
       clearInterval(this.statsLoadingInterval);
       this.statsLoadingInterval = null;
     }
+  }
+
+  // ─── Compose log streaming ────────────────────────────────────────
+
+  async selectComposeService(projectName: string, serviceName: string | null): Promise<void> {
+    this.stopComposeLogStream();
+    this.composeLogProject = projectName;
+    this.composeLogService = serviceName;
+    this.composeLogAborted = false;
+    this.composeLogs = [];
+    this.streamComposeLogs(projectName, serviceName);
+  }
+
+  private async streamComposeLogs(projectName: string, serviceName: string | null): Promise<void> {
+    try {
+      for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined)) {
+        if (this.composeLogAborted || this.composeLogProject !== projectName) break;
+        this.composeLogs.push(entry);
+        if (this.composeLogs.length > 1000) this.composeLogs.shift();
+        if (!this.disposed) {
+          this.callbacks.onComposeLogs(projectName, serviceName, this.composeLogs.map(serializeLogEntry));
+        }
+      }
+    } catch { /* stream ended */ }
+  }
+
+  private stopComposeLogStream(): void {
+    this.composeLogAborted = true;
+    this.composeLogProject = null;
+    this.composeLogService = null;
+    this.composeLogs = [];
   }
 
   // ─── Actions ─────────────────────────────────────────────────────
@@ -374,6 +414,7 @@ export class DockerService {
     this.disposed = true;
     this.stopLogStream();
     this.stopStatsStream();
+    this.stopComposeLogStream();
     if (this.refreshInterval) clearInterval(this.refreshInterval);
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.watcher?.stop();

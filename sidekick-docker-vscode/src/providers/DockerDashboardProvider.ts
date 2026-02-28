@@ -9,14 +9,25 @@ export class DockerDashboardProvider implements vscode.Disposable {
   private service: DockerService | undefined;
   private disposables: vscode.Disposable[] = [];
   private extensionUri: vscode.Uri;
+  private pendingFocusContainerId: string | null = null;
+  private webviewReady = false;
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
   }
 
-  open(): void {
+  open(containerId?: string): void {
+    if (containerId) {
+      this.pendingFocusContainerId = containerId;
+    }
+
     if (this.panel) {
       this.panel.reveal();
+      // If webview is already ready, send focus immediately
+      if (this.webviewReady && this.pendingFocusContainerId) {
+        this._postMessage({ type: 'focusContainer', containerId: this.pendingFocusContainerId });
+        this.pendingFocusContainerId = null;
+      }
       return;
     }
 
@@ -62,6 +73,10 @@ export class DockerDashboardProvider implements vscode.Disposable {
         }
         break;
 
+      case 'selectComposeService':
+        await this.service?.selectComposeService(message.projectName, message.serviceName);
+        break;
+
       case 'action':
         await this._handleAction(message.actionType, message.itemId, message.panelId);
         break;
@@ -78,6 +93,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
   private async _initializeService(): Promise<void> {
     this.service?.dispose();
+    this.webviewReady = true;
 
     this.service = new DockerService({
       onStateChange: (snapshot) => {
@@ -86,8 +102,11 @@ export class DockerDashboardProvider implements vscode.Disposable {
       onLogsChange: (containerId, entries) => {
         this._postMessage({ type: 'updateLogs', containerId, entries });
       },
-      onStatsChange: (containerId, stats, loading) => {
-        this._postMessage({ type: 'updateStats', containerId, stats, loading });
+      onStatsChange: (containerId, stats, loading, cpuHistory, memoryHistory) => {
+        this._postMessage({ type: 'updateStats', containerId, stats, loading, cpuHistory, memoryHistory });
+      },
+      onComposeLogs: (projectName, serviceName, entries) => {
+        this._postMessage({ type: 'updateComposeLogs', projectName, serviceName, entries });
       },
       onEnvLoaded: (containerId, env) => {
         this._postMessage({ type: 'updateEnv', containerId, env });
@@ -112,6 +131,12 @@ export class DockerDashboardProvider implements vscode.Disposable {
     // Send phrase bank for local rotation in webview
     const phrases = Array.from({ length: 50 }, () => getRandomPhrase());
     this._postMessage({ type: 'phraseBank', phrases });
+
+    // Send pending focus container if any
+    if (this.pendingFocusContainerId) {
+      this._postMessage({ type: 'focusContainer', containerId: this.pendingFocusContainerId });
+      this.pendingFocusContainerId = null;
+    }
   }
 
   private async _handleAction(actionType: string, itemId: string, panelId: string): Promise<void> {
@@ -477,6 +502,17 @@ export class DockerDashboardProvider implements vscode.Disposable {
     .stat-net-rx { color: var(--vscode-testing-iconPassed, #3fb950); }
     .stat-net-tx { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
     .stat-pids { color: var(--vscode-descriptionForeground); font-size: 11px; }
+    .sparkline-row {
+      font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
+      font-size: 10px;
+      line-height: 1;
+      letter-spacing: 0;
+      margin-top: 2px;
+      overflow: hidden;
+    }
+    .sparkline { white-space: nowrap; }
+    .sparkline-row.cpu .sparkline { color: var(--vscode-editorInfo-foreground, #3794ff); }
+    .sparkline-row.memory .sparkline { color: var(--vscode-testing-iconPassed, #3fb950); }
 
     /* ─── Stats spinner ────────────────────────────────────────── */
     @keyframes spin { to { transform: rotate(360deg); } }
@@ -785,6 +821,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
   private _cleanup(): void {
     this.service?.dispose();
     this.service = undefined;
+    this.webviewReady = false;
+    this.pendingFocusContainerId = null;
     for (const d of this.disposables) d.dispose();
     this.disposables = [];
   }

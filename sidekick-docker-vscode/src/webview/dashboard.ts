@@ -36,7 +36,9 @@ function rotatePhrase(): void {
   if (phraseBank.length === 0) return;
   state.phrase = phraseBank[phraseIndex % phraseBank.length];
   phraseIndex++;
-  renderTabBar();
+  // Update phrase text without rebuilding tab bar (which would destroy click handlers)
+  const phraseEl = $tabBar.querySelector('.phrase');
+  if (phraseEl) phraseEl.textContent = state.phrase;
   // Reset 7s fallback timer
   if (phraseFallbackTimer !== undefined) clearTimeout(phraseFallbackTimer);
   phraseFallbackTimer = setTimeout(rotatePhrase, 7000);
@@ -350,6 +352,17 @@ function selectItem(id: string, items: PanelItem[]): void {
   state.selectedItemId = id;
   state.detailTabIndex = 0;
   post({ type: 'selectItem', panelId: getPanel().id, itemId: id });
+
+  // Notify extension about compose service selection for log streaming
+  if (getPanel().id === 'services') {
+    const parts = id.split(':');
+    if (parts[0] === 'project') {
+      post({ type: 'selectComposeService', projectName: parts.slice(1).join(':'), serviceName: null });
+    } else if (parts[0] === 'service') {
+      post({ type: 'selectComposeService', projectName: parts[1], serviceName: parts.slice(2).join(':') });
+    }
+  }
+
   renderSideList(items);
   renderDetailTabBar();
   renderDetailContent(items);
@@ -616,7 +629,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     }
 
     case 'updateStats': {
-      state.stats.set(msg.containerId, { stats: msg.stats, loading: msg.loading });
+      state.stats.set(msg.containerId, { stats: msg.stats, loading: msg.loading, cpuHistory: msg.cpuHistory, memoryHistory: msg.memoryHistory });
       if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 1) {
         renderDetailContent(getFilteredItems());
       }
@@ -640,6 +653,45 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 
     case 'toast': {
       addToast(msg.message, msg.severity);
+      break;
+    }
+
+    case 'focusContainer': {
+      // Switch to containers panel and select the specified container
+      if (state.activePanelIndex !== 0) {
+        state.activePanelIndex = 0;
+        state.filterString = '';
+        hideFilter();
+        hideContextMenu();
+        post({ type: 'switchPanel', panelIndex: 0 });
+      }
+      state.selectedItemId = msg.containerId;
+      state.detailTabIndex = 0;
+      post({ type: 'selectItem', panelId: 'containers', itemId: msg.containerId });
+      renderAll();
+      break;
+    }
+
+    case 'updateComposeLogs': {
+      const key = msg.serviceName ? `${msg.projectName}:${msg.serviceName}` : msg.projectName;
+      state.composeLogs.set(key, msg.entries);
+      // Re-render if viewing this service's logs
+      if (getPanel().id === 'services' && state.detailTabIndex === 1) {
+        const items = getFilteredItems();
+        const item = getSelectedItem(items);
+        if (item) {
+          const parts = item.id.split(':');
+          let itemKey = '';
+          if (parts[0] === 'project') {
+            itemKey = parts.slice(1).join(':');
+          } else if (parts[0] === 'service') {
+            itemKey = `${parts[1]}:${parts.slice(2).join(':')}`;
+          }
+          if (itemKey === key) {
+            renderDetailContent(items);
+          }
+        }
+      }
       break;
     }
   }
