@@ -1,7 +1,7 @@
 # Sidekick Docker
 
 <p align="center">
-  <img src="../assets/social_preview.png" alt="Sidekick for Docker" width="640">
+  <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/social_preview.png" alt="Sidekick for Docker" width="640">
 </p>
 
 <p align="center">
