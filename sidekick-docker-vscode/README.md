@@ -70,6 +70,10 @@ The extension uses a webview panel to render the dashboard UI. The extension hos
 
 Full documentation is available at the [docs site](https://cesarandreslopez.github.io/sidekick-docker/).
 
+## See Also
+
+**[Sidekick Agent Hub](https://github.com/cesarandreslopez/sidekick-agent-hub)** — Multi-provider AI coding agent monitor. Real-time visibility into Claude Code, OpenCode, and Codex CLI sessions with token tracking, context management, and session intelligence. Available as a [TUI on npm](https://www.npmjs.com/package/sidekick-agent-hub) and a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-for-max).
+
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for setup instructions and guidelines.
