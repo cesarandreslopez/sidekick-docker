@@ -2,6 +2,10 @@
 
 The Sidekick Docker dashboard is a five-panel TUI built with Ink and React. Each panel manages a different Docker resource type.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/sidekick_docker_cli.gif" alt="Sidekick Docker Dashboard Demo" width="800">
+</p>
+
 ## Panel Layout
 
 The dashboard uses a split layout:

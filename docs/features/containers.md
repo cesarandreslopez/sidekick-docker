@@ -51,3 +51,7 @@ Press `x` to open the context menu:
 ### Interactive Exec
 
 The exec action drops you into a shell session inside the container using `node-pty`. It tries bash, then sh, then ash. Press `Ctrl+D` or type `exit` to return to the dashboard.
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/shell_bash_into_container_cli.gif" alt="Interactive Exec Demo" width="800">
+</p>

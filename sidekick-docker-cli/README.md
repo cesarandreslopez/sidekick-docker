@@ -6,7 +6,9 @@
 
 A terminal dashboard for Docker. Manage containers, Compose projects, images, volumes, and networks — all from a single, keyboard-driven TUI.
 
-<!-- ![Sidekick Docker CLI Screenshot](../docs/screenshot-cli.png) -->
+<p align="center">
+  <img src="../assets/sidekick_docker_cli.gif" alt="Sidekick Docker CLI Demo" width="800">
+</p>
 
 ## Install
 

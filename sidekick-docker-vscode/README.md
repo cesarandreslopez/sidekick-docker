@@ -7,7 +7,9 @@
 
 A Docker management dashboard embedded directly in VS Code, VSCodium, and compatible editors. Manage containers, Compose projects, images, volumes, and networks without leaving your editor.
 
-<!-- ![Sidekick Docker VSCode Screenshot](../docs/screenshot-vscode.png) -->
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/sidekick_docker_vscode_extension.gif" alt="Sidekick Docker VS Code Extension Demo" width="800">
+</p>
 
 ## Install
 

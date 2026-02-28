@@ -19,7 +19,9 @@
   <strong>Your Docker dashboard, everywhere.</strong> A full-featured Docker management dashboard that runs in your terminal and in VS Code.
 </p>
 
-<!-- ![Sidekick Docker TUI Screenshot](docs/screenshot.png) -->
+<p align="center">
+  <img src="assets/sidekick_docker_cli.gif" alt="Sidekick Docker TUI Demo" width="800">
+</p>
 
 ## What is this?
 

@@ -20,6 +20,10 @@
 
 A full-featured Docker management dashboard that runs in your terminal and in VS Code. Manage containers, Compose projects, images, volumes, and networks from a real-time, keyboard-driven interface.
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/sidekick_docker_cli.gif" alt="Sidekick Docker TUI Demo" width="800">
+</p>
+
 ## Feature Highlights
 
 - **Five-panel dashboard** — Containers, Compose Services, Images, Volumes, Networks
