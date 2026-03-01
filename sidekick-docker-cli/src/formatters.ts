@@ -1,4 +1,6 @@
-import type { LogEntry } from 'sidekick-docker-shared';
+import type { LogEntry, SeverityLevel } from 'sidekick-docker-shared';
+import { tokenizeLogLine } from 'sidekick-docker-shared';
+import type { LogTokenType, FilterMatch } from 'sidekick-docker-shared';
 
 // Re-export pure formatters from shared package
 export {
@@ -62,6 +64,26 @@ export function sparkline(values: number[], width = 40): string {
   }).join('');
 }
 
+const SEVERITY_COLORS: Record<SeverityLevel, (s: string) => string> = {
+  error: (s: string) => `\x1b[31m${s}\x1b[39m`,
+  warn: (s: string) => `\x1b[33m${s}\x1b[39m`,
+  info: (s: string) => `\x1b[38;2;43;76;126m${s}\x1b[39m`,
+  debug: (s: string) => `\x1b[90m${s}\x1b[39m`,
+  other: (s: string) => `\x1b[90m${s}\x1b[39m`,
+};
+
+/** Severity-colored sparkline: each position colored by dominant severity in that time bucket. */
+export function severitySparkline(series: { severity: SeverityLevel; total: number }[], width = 40): string {
+  if (series.length === 0) return '';
+  const recent = series.slice(-width);
+  const max = Math.max(...recent.map(s => s.total), 1);
+  const bars = '\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588';
+  return recent.map(s => {
+    const idx = Math.min(Math.floor((s.total / max) * (bars.length - 1)), bars.length - 1);
+    return SEVERITY_COLORS[s.severity](bars[idx]);
+  }).join('');
+}
+
 // ANSI escape helpers (avoids chalk dependency)
 const ansi = {
   gray: (s: string) => `\x1b[90m${s}\x1b[39m`,
@@ -73,30 +95,79 @@ const ansi = {
   bold: (s: string) => `\x1b[1m${s}\x1b[22m`,
 };
 
-function detectLogLevel(msg: string): ((s: string) => string) | null {
-  const upper = msg.substring(0, 200).toUpperCase();
-  if (/\b(FATAL|PANIC)\b/.test(upper)) return ansi.red;
-  if (/\b(ERROR|ERR)\b/.test(upper)) return ansi.red;
-  if (/\b(WARN|WARNING)\b/.test(upper)) return ansi.yellow;
-  if (/\b(INFO)\b/.test(upper)) return ansi.brand;
-  if (/\b(DEBUG|TRACE)\b/.test(upper)) return ansi.gray;
-  return null;
+const TOKEN_COLORS: Record<LogTokenType, ((s: string) => string) | null> = {
+  'severity-error': ansi.red,
+  'severity-warn': ansi.yellow,
+  'severity-info': ansi.brand,
+  'severity-debug': ansi.gray,
+  'http-method-safe': ansi.green,
+  'http-method-unsafe': ansi.yellow,
+  'http-status-2xx': ansi.green,
+  'http-status-3xx': ansi.brand,
+  'http-status-4xx': ansi.yellow,
+  'http-status-5xx': ansi.red,
+  'url': ansi.brand,
+  'ip-address': ansi.dim,
+  'timestamp': (s: string) => ansi.dim(ansi.gray(s)),
+  'json-key': ansi.brand,
+  'state-ok': ansi.green,
+  'state-fail': ansi.red,
+  'path': ansi.dim,
+  'number': null,
+  'plain': null,
+};
+
+function colorizeTokens(message: string): string {
+  const tokens = tokenizeLogLine(message);
+  return tokens.map(t => {
+    const colorFn = TOKEN_COLORS[t.type];
+    return colorFn ? colorFn(t.text) : t.text;
+  }).join('');
 }
 
-export function colorizeLogEntry(entry: LogEntry): string {
+export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[]): string {
   const ts = entry.timestamp ? entry.timestamp.toISOString().substring(11, 23) : '';
   const tsColored = ts ? ansi.dim(ansi.gray(ts)) + ' ' : '';
 
   if (entry.stream === 'stderr') {
-    return tsColored + ansi.red(entry.message);
+    const msg = filterMatches
+      ? highlightMatches(entry.message, filterMatches, ansi.red)
+      : ansi.red(entry.message);
+    return tsColored + msg;
   }
 
-  const levelColor = detectLogLevel(entry.message);
-  if (levelColor) {
-    return tsColored + levelColor(entry.message);
+  if (filterMatches && filterMatches.length > 0) {
+    return tsColored + highlightMatches(entry.message, filterMatches);
   }
 
-  return tsColored + entry.message;
+  return tsColored + colorizeTokens(entry.message);
+}
+
+/** Apply ANSI highlight background to matched regions within a string. */
+function highlightMatches(text: string, matches: FilterMatch[], baseFn?: (s: string) => string): string {
+  if (matches.length === 0) return baseFn ? baseFn(text) : colorizeTokens(text);
+
+  // Sort matches by start position
+  const sorted = [...matches].sort((a, b) => a.start - b.start);
+  const parts: string[] = [];
+  let pos = 0;
+
+  for (const m of sorted) {
+    if (m.start > pos) {
+      const segment = text.slice(pos, m.start);
+      parts.push(baseFn ? baseFn(segment) : segment);
+    }
+    // Blue background highlight for matches
+    parts.push(`\x1b[44;37m${text.slice(m.start, m.start + m.length)}\x1b[49;39m`);
+    pos = m.start + m.length;
+  }
+
+  if (pos < text.length) {
+    const segment = text.slice(pos);
+    parts.push(baseFn ? baseFn(segment) : segment);
+  }
+
+  return parts.join('');
 }
 
 // Detail panel colorize helpers

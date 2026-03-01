@@ -34,8 +34,11 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 ## Features
 
 - **Real-time streaming** — logs, stats, and Docker events update live as they happen
+- **Smart log highlighting** — token-level syntax coloring for HTTP methods, status codes, URLs, IPs, timestamps, JSON keys, and more
+- **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
+- **Log analytics** — severity counts, severity sparkline over time, and pattern clustering that groups similar logs into templates
 - **Vi keybindings** — navigate with `j`/`k`, jump with `g`/`G`, switch panels with `1`-`5`
-- **Sparkline charts** — CPU and memory usage rendered as inline sparklines in the terminal
+- **Sparkline charts** — CPU, memory, and log severity rendered as inline sparklines
 - **Compose support** — detect projects from container labels, run `up`/`down`/`restart` per project
 - **Interactive exec** — drop into a running container shell without leaving the dashboard
 - **Filter & search** — `/` to filter any resource list by name

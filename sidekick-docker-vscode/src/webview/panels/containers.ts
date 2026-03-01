@@ -2,10 +2,23 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline } from '../formatters';
+import { filterLine } from '../../log/LogFilter';
+import { LogTemplateEngine } from '../../log/LogTemplateEngine';
+import type { SeverityCounts } from '../../types/log';
 
 
 function findContainer(id: string, snapshot: DashboardStateSnapshot): SerializedContainerInfo | undefined {
   return snapshot.containers.find(c => c.id === id);
+}
+
+function renderSeverityBadges(counts: SeverityCounts): string {
+  const badges: string[] = [];
+  if (counts.error > 0) badges.push(`<span class="sev-badge error">E:${counts.error}</span>`);
+  if (counts.warn > 0) badges.push(`<span class="sev-badge warn">W:${counts.warn}</span>`);
+  if (counts.info > 0) badges.push(`<span class="sev-badge info">I:${counts.info}</span>`);
+  if (counts.debug > 0) badges.push(`<span class="sev-badge debug">D:${counts.debug}</span>`);
+  if (badges.length === 0) return '';
+  return `<div class="severity-counts">${badges.join('')}</div>`;
 }
 
 export const containersPanel: PanelDefinition = {
@@ -19,7 +32,45 @@ export const containersPanel: PanelDefinition = {
       render: (item: PanelItem, state: WebviewState): string => {
         const entries = state.logs.get(item.id);
         if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
-        return `<div class="log-content">${entries.map(e => colorizeLogEntry(e)).join('')}</div>`;
+
+        let html = '';
+
+        // Severity counts badges
+        const counts = state.logSeverityCounts.get(item.id);
+        if (counts && counts.total > 0) {
+          html += renderSeverityBadges(counts);
+        }
+
+        // Log filter bar
+        html += `<div class="log-filter-bar">
+          <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeHtml(state.logFilterString)}" data-container-id="${escapeHtml(item.id)}" />
+          <span class="filter-mode" id="log-filter-mode" title="Click to toggle">${state.logFilterMode}</span>`;
+
+        // Apply log content filter
+        const query = state.logFilterString;
+        const mode = state.logFilterMode;
+        let filteredHtml = '';
+        let matchCount = 0;
+
+        if (query) {
+          for (const e of entries) {
+            const result = filterLine(e.message, query, mode);
+            if (result.matched) {
+              matchCount++;
+              filteredHtml += colorizeLogEntry(e, result.matches);
+            }
+          }
+          html += `<span class="match-count">${matchCount} matches</span>`;
+        } else {
+          for (const e of entries) {
+            filteredHtml += colorizeLogEntry(e);
+          }
+        }
+
+        html += `</div>`;
+        html += `<div class="log-content">${filteredHtml || '<div style="padding:8px;color:var(--vscode-descriptionForeground)">No matching logs</div>'}</div>`;
+
+        return html;
       },
       autoScrollBottom: true,
     },
@@ -93,6 +144,34 @@ export const containersPanel: PanelDefinition = {
           pairs.push(['Compose', escapeHtml(`${c.composeProject}/${c.composeService}`)]);
         }
         return renderKvGrid(pairs);
+      },
+    },
+    {
+      label: 'Patterns',
+      render: (item: PanelItem, state: WebviewState): string => {
+        const entries = state.logs.get(item.id);
+        if (!entries || entries.length === 0) {
+          return '<div class="empty-state"><div class="empty-icon">\u{1F50D}</div><div class="empty-title">No patterns yet</div><div class="empty-subtitle">Patterns will appear as logs stream in</div></div>';
+        }
+
+        // Compute templates from current log entries
+        const engine = new LogTemplateEngine();
+        for (const e of entries) {
+          engine.push(e.message);
+        }
+        const templates = engine.getTemplates(20);
+
+        if (templates.length === 0) {
+          return '<div class="empty-state"><div class="empty-title">No patterns detected</div></div>';
+        }
+
+        let html = '<div class="patterns-list">';
+        for (const t of templates) {
+          const pattern = escapeHtml(t.pattern).replace(/&lt;\*&gt;/g, '<span class="tok-ip">&lt;*&gt;</span>');
+          html += `<div class="pattern-row"><span class="pattern-count">${t.count}</span><span class="pattern-text">${pattern}</span></div>`;
+        }
+        html += '</div>';
+        return html;
       },
     },
   ] as DetailTabDefinition[],

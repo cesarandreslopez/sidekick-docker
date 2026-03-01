@@ -46,9 +46,11 @@ The dashboard opens as a webview panel with the same layout and capabilities as 
 
 - **Full Docker dashboard in VSCode** — containers, Compose, images, volumes, networks
 - **Real-time updates** — logs and stats stream live inside the editor
+- **Smart log highlighting** — token-level syntax coloring for HTTP methods, status codes, URLs, IPs, timestamps, JSON keys, and more
+- **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
+- **Log analytics** — severity count badges and pattern clustering that groups similar logs into templates
 - **Container management** — start, stop, restart, remove containers directly
 - **Compose support** — detect and manage Compose projects
-- **Log streaming** — view stdout/stderr with color coding
 - **Stats monitoring** — live CPU and memory metrics
 
 ## Requirements

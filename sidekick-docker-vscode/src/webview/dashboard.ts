@@ -13,6 +13,7 @@ import { servicesPanel } from './panels/services';
 import { imagesPanel } from './panels/images';
 import { volumesPanel } from './panels/volumes';
 import { networksPanel } from './panels/networks';
+import { LogAnalytics } from '../log/LogAnalytics';
 
 const vscode = acquireVsCodeApi();
 
@@ -592,6 +593,23 @@ $filterInput.addEventListener('input', () => {
   renderStatusBar(items);
 });
 
+// Log filter input handler (event delegation on detail content)
+$detailContent.addEventListener('input', (e: Event) => {
+  const target = e.target as HTMLInputElement;
+  if (target.id === 'log-filter-input') {
+    state.logFilterString = target.value;
+    renderDetailContent(getFilteredItems());
+  }
+});
+
+$detailContent.addEventListener('click', (e: Event) => {
+  const target = e.target as HTMLElement;
+  if (target.id === 'log-filter-mode') {
+    state.logFilterMode = state.logFilterMode === 'exact' ? 'fuzzy' : 'exact';
+    renderDetailContent(getFilteredItems());
+  }
+});
+
 // Confirm overlay buttons
 $confirmYes.addEventListener('click', () => {
   state.confirmCallback?.();
@@ -621,6 +639,12 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 
     case 'updateLogs': {
       state.logs.set(msg.containerId, msg.entries);
+      // Recompute severity counts
+      const analytics = new LogAnalytics();
+      for (const e of msg.entries) {
+        analytics.push(e.message);
+      }
+      state.logSeverityCounts.set(msg.containerId, analytics.getCounts());
       // Only re-render if we're viewing this container's logs
       if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 0) {
         renderDetailContent(getFilteredItems());

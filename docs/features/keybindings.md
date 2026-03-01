@@ -27,6 +27,7 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | Key | Action |
 |-----|--------|
 | `x` | Open context menu (actions for selected item) |
+| `f` | Open log filter (when on Logs tab) |
 | `/` | Open filter |
 | `z` | Toggle expanded layout |
 | `?` | Show help overlay |

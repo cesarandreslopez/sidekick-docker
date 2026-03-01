@@ -19,7 +19,7 @@ Press **`z`** to toggle expanded layout, which gives the detail pane more space.
 
 | # | Panel | Description |
 |---|-------|-------------|
-| 1 | **Containers** | All containers with state, image, ports, uptime |
+| 1 | **Containers** | All containers with state, image, ports, uptime (+ Patterns tab) |
 | 2 | **Services** | Compose projects and their services |
 | 3 | **Images** | Local images with tags, size, age |
 | 4 | **Volumes** | Named volumes with driver, mount path, usage |

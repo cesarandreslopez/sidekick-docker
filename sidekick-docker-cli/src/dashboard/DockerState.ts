@@ -8,7 +8,7 @@ import type {
   ComposeFileConfig,
 } from 'sidekick-docker-shared';
 import { DockerClient, ComposeDetector, StatsCollector, ComposeFileReader } from 'sidekick-docker-shared';
-import type { LogEntry } from 'sidekick-docker-shared';
+import type { LogEntry, FilterMode, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
 
 export interface DockerDashboardMetrics {
   containers: ContainerInfo[];
@@ -22,6 +22,11 @@ export interface DockerDashboardMetrics {
   selectedComposeLogs: LogEntry[];
   lastRefresh: Date | null;
   daemonConnected: boolean;
+  logFilterString: string;
+  logFilterMode: FilterMode;
+  logSeverityCounts: SeverityCounts | null;
+  logSeverityTimeSeries: { severity: SeverityLevel; total: number }[];
+  logTemplates: LogTemplate[];
 }
 
 export class DockerState {
@@ -198,6 +203,11 @@ export class DockerState {
       selectedComposeLogs: [...this.selectedComposeLogs],
       lastRefresh: this.lastRefresh,
       daemonConnected: this.daemonConnected,
+      logFilterString: '',
+      logFilterMode: 'exact',
+      logSeverityCounts: null,
+      logSeverityTimeSeries: [],
+      logTemplates: [],
     };
   }
 }

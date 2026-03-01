@@ -45,8 +45,12 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   // Stream managers for logs and stats
   const logManager = new LogStreamManager(client, () => {
     state.setSelectedLogs(logManager.getLogs());
+    logSeverityCounts = logManager.getSeverityCounts();
     scheduleRender();
   });
+
+  // Mutable severity counts from log stream (UI state, not domain state)
+  let logSeverityCounts = logManager.getSeverityCounts();
 
   const statsManager = new StatsStreamManager(client, state.getStatsCollector(), () => {
     scheduleRender();
@@ -133,7 +137,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     instance = render(
       React.createElement(Dashboard, {
         panels,
-        metrics: state.getMetrics(),
+        metrics: getEnrichedMetrics(),
         onSelectionChange,
         execTriggerRef,
         onExecFallback,
@@ -148,7 +152,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   let instance = render(
     React.createElement(Dashboard, {
       panels,
-      metrics: state.getMetrics(),
+      metrics: getEnrichedMetrics(),
       onSelectionChange,
       execTriggerRef,
       onExecFallback,
@@ -172,6 +176,13 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Re-render bridge: throttled
   let renderTimer: ReturnType<typeof setTimeout> | null = null;
+  function getEnrichedMetrics() {
+    const m = state.getMetrics();
+    m.logSeverityCounts = logSeverityCounts;
+    m.logSeverityTimeSeries = logManager.getSeverityTimeSeries();
+    m.logTemplates = logManager.getTemplates();
+    return m;
+  }
   function scheduleRender() {
     if (renderTimer) return;
     renderTimer = setTimeout(() => {
@@ -179,7 +190,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       instance.rerender(
         React.createElement(Dashboard, {
           panels,
-          metrics: state.getMetrics(),
+          metrics: getEnrichedMetrics(),
           onSelectionChange,
           execTriggerRef,
           onExecFallback,

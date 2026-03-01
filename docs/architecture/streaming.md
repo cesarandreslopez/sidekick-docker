@@ -28,7 +28,12 @@ The dashboard uses manager classes to control when streaming starts and stops. S
 
 - Starts streaming when a container is selected on the Logs tab
 - Maintains a ring buffer of the most recent 1000 log entries
+- Feeds each log entry into three analytics processors:
+    - **LogAnalytics** — running severity counts (ERROR, WARN, INFO, DEBUG, OTHER)
+    - **LogSeverityTimeSeries** — 60-bucket ring buffer tracking severity distribution over time (1-minute buckets)
+    - **LogTemplateEngine** — Drain-like pattern clustering that groups similar lines into templates with `<*>` wildcards
 - Stops streaming when the user navigates away
+- Resets all analytics when the selected container changes
 
 ### StatsStreamManager
 

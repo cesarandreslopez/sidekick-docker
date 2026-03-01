@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-03-01
+
+### Added
+
+#### Log Analytics Engine (`sidekick-docker-shared`)
+
+- Token-level log syntax highlighting — HTTP methods, status codes, URLs, IPs, timestamps, JSON keys, state keywords, and paths each get distinct colors (replaces whole-line severity coloring)
+- Log content search and filtering with two modes: exact substring (case-insensitive) and fuzzy (AND-of-words), with match highlighting and match count display
+- Severity counting — running tallies of ERROR, WARN, INFO, DEBUG, and OTHER per log stream, displayed as colored badges in the Logs tab header
+- Structured log parsing — auto-detects JSON, logfmt, and plain text formats; extracts level, message, timestamp, and structured fields from JSON and logfmt logs
+- Severity time-series — 60-bucket ring buffer tracking per-severity counts over time (1-minute buckets), rendered as a color-coded sparkline in the Stats tab
+- Log pattern clustering — Drain-like algorithm groups similar log lines into templates with `<*>` wildcards, displayed in a new Patterns detail tab ranked by frequency
+
+#### TUI Dashboard
+
+- `f` key opens log filter overlay when viewing the Logs tab (exact/fuzzy mode toggle with `Tab`, `Esc` to clear)
+- Severity counts header row in Logs tab (`E:n W:n I:n D:n`, each colored by severity)
+- Log severity sparkline in Stats tab below CPU/Memory charts (colored by dominant severity per time bucket)
+- New **Patterns** detail tab on Containers panel showing top log templates with frequency counts
+
+#### VS Code Extension
+
+- Log filter search bar with mode toggle and match count in Logs tab
+- Severity count badges in Logs tab header
+- New **Patterns** detail tab with template frequency ranking
+- Token-level syntax highlighting CSS classes for all log token types
+
 ## [0.1.1] - 2026-02-28
 
 ### Added
@@ -107,5 +134,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0

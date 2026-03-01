@@ -15,6 +15,20 @@ export type { ComposeFileConfig, ComposeFileServiceConfig } from './compose/Comp
 // Stats
 export { StatsCollector } from './stats/StatsCollector';
 
+// Log analysis
+export { tokenizeLogLine } from './log/LogTokenizer';
+export type { LogToken, LogTokenType } from './log/LogTokenizer';
+export { exactMatch, fuzzyMatch, filterLine } from './log/LogFilter';
+export type { FilterMatch, FilterResult, FilterMode } from './log/LogFilter';
+export { LogAnalytics, detectSeverity } from './log/LogAnalytics';
+export type { SeverityLevel, SeverityCounts } from './log/LogAnalytics';
+export { detectFormat, parseLine } from './log/LogParser';
+export type { LogFormat, ParsedLogLine } from './log/LogParser';
+export { LogSeverityTimeSeries } from './log/LogSeverityTimeSeries';
+export type { SeverityBucket } from './log/LogSeverityTimeSeries';
+export { LogTemplateEngine } from './log/LogTemplateEngine';
+export type { LogTemplate } from './log/LogTemplateEngine';
+
 // Events
 export { EventWatcher } from './events/EventWatcher';
 export type { EventWatcherCallbacks } from './events/EventWatcher';

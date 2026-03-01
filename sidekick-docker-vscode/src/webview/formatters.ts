@@ -1,4 +1,6 @@
 import type { SerializedLogEntry } from '../types/messages';
+import type { LogTokenType, FilterMatch } from '../types/log';
+import { tokenizeLogLine } from '../log/LogTokenizer';
 
 // Pure formatters (duplicated from shared to avoid Node.js deps in browser bundle)
 
@@ -62,30 +64,79 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function detectLogLevel(msg: string): string | null {
-  const upper = msg.substring(0, 200).toUpperCase();
-  if (/\b(FATAL|PANIC)\b/.test(upper)) return 'log-error';
-  if (/\b(ERROR|ERR)\b/.test(upper)) return 'log-error';
-  if (/\b(WARN|WARNING)\b/.test(upper)) return 'log-warn';
-  if (/\b(INFO)\b/.test(upper)) return 'log-info';
-  if (/\b(DEBUG|TRACE)\b/.test(upper)) return 'log-debug';
-  return null;
+const TOKEN_CSS_CLASSES: Record<LogTokenType, string | null> = {
+  'severity-error': 'tok-sev-error',
+  'severity-warn': 'tok-sev-warn',
+  'severity-info': 'tok-sev-info',
+  'severity-debug': 'tok-sev-debug',
+  'http-method-safe': 'tok-http-safe',
+  'http-method-unsafe': 'tok-http-unsafe',
+  'http-status-2xx': 'tok-status-2xx',
+  'http-status-3xx': 'tok-status-3xx',
+  'http-status-4xx': 'tok-status-4xx',
+  'http-status-5xx': 'tok-status-5xx',
+  'url': 'tok-url',
+  'ip-address': 'tok-ip',
+  'timestamp': 'tok-timestamp',
+  'json-key': 'tok-json-key',
+  'state-ok': 'tok-state-ok',
+  'state-fail': 'tok-state-fail',
+  'path': 'tok-path',
+  'number': null,
+  'plain': null,
+};
+
+function colorizeTokensHtml(message: string): string {
+  const tokens = tokenizeLogLine(message);
+  return tokens.map(t => {
+    const cls = TOKEN_CSS_CLASSES[t.type];
+    const escaped = escapeHtml(t.text);
+    return cls ? `<span class="${cls}">${escaped}</span>` : escaped;
+  }).join('');
 }
 
-export function colorizeLogEntry(entry: SerializedLogEntry): string {
+function highlightMatchesHtml(message: string, matches: FilterMatch[], wrapClass?: string): string {
+  if (matches.length === 0) {
+    return wrapClass ? `<span class="${wrapClass}">${escapeHtml(message)}</span>` : colorizeTokensHtml(message);
+  }
+
+  const sorted = [...matches].sort((a, b) => a.start - b.start);
+  const parts: string[] = [];
+  let pos = 0;
+
+  for (const m of sorted) {
+    if (m.start > pos) {
+      const seg = message.slice(pos, m.start);
+      parts.push(wrapClass ? `<span class="${wrapClass}">${escapeHtml(seg)}</span>` : escapeHtml(seg));
+    }
+    parts.push(`<mark class="log-match">${escapeHtml(message.slice(m.start, m.start + m.length))}</mark>`);
+    pos = m.start + m.length;
+  }
+
+  if (pos < message.length) {
+    const seg = message.slice(pos);
+    parts.push(wrapClass ? `<span class="${wrapClass}">${escapeHtml(seg)}</span>` : escapeHtml(seg));
+  }
+
+  return parts.join('');
+}
+
+export function colorizeLogEntry(entry: SerializedLogEntry, filterMatches?: FilterMatch[]): string {
   const ts = entry.timestamp ? entry.timestamp.substring(11, 23) : '';
   const tsHtml = ts ? `<span class="log-timestamp">${escapeHtml(ts)}</span> ` : '';
 
   if (entry.stream === 'stderr') {
-    return `<span class="log-line">${tsHtml}<span class="log-stderr">${escapeHtml(entry.message)}</span></span>`;
+    const msgHtml = filterMatches && filterMatches.length > 0
+      ? highlightMatchesHtml(entry.message, filterMatches, 'log-stderr')
+      : `<span class="log-stderr">${escapeHtml(entry.message)}</span>`;
+    return `<span class="log-line">${tsHtml}${msgHtml}</span>`;
   }
 
-  const levelClass = detectLogLevel(entry.message);
-  if (levelClass) {
-    return `<span class="log-line">${tsHtml}<span class="${levelClass}">${escapeHtml(entry.message)}</span></span>`;
+  if (filterMatches && filterMatches.length > 0) {
+    return `<span class="log-line">${tsHtml}${highlightMatchesHtml(entry.message, filterMatches)}</span>`;
   }
 
-  return `<span class="log-line">${tsHtml}${escapeHtml(entry.message)}</span>`;
+  return `<span class="log-line">${tsHtml}${colorizeTokensHtml(entry.message)}</span>`;
 }
 
 // Detail panel colorize helpers

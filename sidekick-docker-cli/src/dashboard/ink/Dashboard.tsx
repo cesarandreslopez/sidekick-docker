@@ -19,8 +19,10 @@ import { ExecOverlay } from './ExecOverlay';
 import { MouseProvider } from './mouse';
 import { enableMouse, disableMouse } from './mouse';
 import type { TerminalMouseEvent } from './mouse';
+import { LogFilterOverlay } from './LogFilterOverlay';
 import { VersionOverlay } from './VersionOverlay';
 import { getRandomPhrase } from 'sidekick-docker-shared';
+import type { FilterMode } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes } from '../../formatters';
 
@@ -31,7 +33,7 @@ const MIN_SCREEN_WIDTH = 60;
 const MIN_SCREEN_HEIGHT = 15;
 
 type LayoutMode = 'normal' | 'expanded';
-type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' | 'exec' | 'version';
+type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' | 'exec' | 'version' | 'log-filter';
 type FocusTarget = 'side' | 'detail';
 
 interface ToastEntry {
@@ -57,6 +59,8 @@ interface DashboardUIState {
   execOutputLines: string[];
   execContainerId: string | null;
   execContainerName: string;
+  logFilterString: string;
+  logFilterMode: FilterMode;
 }
 
 type Action =
@@ -78,7 +82,9 @@ type Action =
   | { type: 'SET_CONFIRM'; action: (() => void) | null; message: string }
   | { type: 'EXEC_START'; containerId: string; containerName: string }
   | { type: 'EXEC_APPEND_OUTPUT'; data: string }
-  | { type: 'EXEC_END' };
+  | { type: 'EXEC_END' }
+  | { type: 'SET_LOG_FILTER'; value: string }
+  | { type: 'TOGGLE_LOG_FILTER_MODE' };
 
 function reducer(state: DashboardUIState, action: Action): DashboardUIState {
   switch (action.type) {
@@ -158,6 +164,10 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
     }
     case 'EXEC_END':
       return { ...state, overlay: null, execContainerId: null, execContainerName: '', execOutputLines: [] };
+    case 'SET_LOG_FILTER':
+      return { ...state, logFilterString: action.value };
+    case 'TOGGLE_LOG_FILTER_MODE':
+      return { ...state, logFilterMode: state.logFilterMode === 'exact' ? 'fuzzy' : 'exact' };
     default:
       return state;
   }
@@ -179,6 +189,8 @@ const initialState: DashboardUIState = {
   execOutputLines: [],
   execContainerId: null,
   execContainerName: '',
+  logFilterString: '',
+  logFilterMode: 'exact' as FilterMode,
 };
 
 interface DashboardProps {
@@ -325,9 +337,16 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   const detailTabs = panel.detailTabs;
   const tabIdx = Math.min(state.detailTabIndex, detailTabs.length - 1);
 
+  // Merge log filter UI state into metrics for panel render functions
+  const enrichedMetrics = {
+    ...metrics,
+    logFilterString: state.logFilterString,
+    logFilterMode: state.logFilterMode,
+  };
+
   let detailContent = '';
   if (selectedItem && detailTabs.length > 0 && tabIdx >= 0) {
-    detailContent = detailTabs[tabIdx].render(selectedItem, metrics);
+    detailContent = detailTabs[tabIdx].render(selectedItem, enrichedMetrics);
   } else if (!selectedItem) {
     detailContent = '(no item selected)';
   }
@@ -473,7 +492,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
       return;
     }
 
-    // Filter overlay
+    // Filter overlay (panel item filter)
     if (state.overlay === 'filter') {
       if (key.escape) {
         if (state.filterString) addToast('Filter cleared', 'info');
@@ -492,6 +511,33 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
       }
       if (input && !key.ctrl && !key.meta) {
         dispatch({ type: 'SET_FILTER', value: state.filterString + input });
+        return;
+      }
+      return;
+    }
+
+    // Log filter overlay (log content filter)
+    if (state.overlay === 'log-filter') {
+      if (key.escape) {
+        if (state.logFilterString) addToast('Log filter cleared', 'info');
+        dispatch({ type: 'SET_LOG_FILTER', value: '' });
+        dispatch({ type: 'SET_OVERLAY', overlay: null });
+        return;
+      }
+      if (key.return) {
+        dispatch({ type: 'SET_OVERLAY', overlay: null });
+        return;
+      }
+      if (key.tab) {
+        dispatch({ type: 'TOGGLE_LOG_FILTER_MODE' });
+        return;
+      }
+      if (key.backspace || key.delete) {
+        dispatch({ type: 'SET_LOG_FILTER', value: state.logFilterString.slice(0, -1) });
+        return;
+      }
+      if (input && !key.ctrl && !key.meta) {
+        dispatch({ type: 'SET_LOG_FILTER', value: state.logFilterString + input });
         return;
       }
       return;
@@ -599,6 +645,14 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
     if (input === '/') {
       dispatch({ type: 'SET_OVERLAY', overlay: 'filter' });
       return;
+    }
+
+    if (input === 'f') {
+      // Open log filter when on Logs tab of containers panel
+      if (panel.id === 'containers' && tabIdx === 0) {
+        dispatch({ type: 'SET_OVERLAY', overlay: 'log-filter' });
+        return;
+      }
     }
 
     if (input === 'x') {
@@ -803,6 +857,13 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
             matchCount={currentItems.length}
             totalCount={totalItemCount}
             panelTitle={panel.title}
+          />
+        )}
+
+        {state.overlay === 'log-filter' && (
+          <LogFilterOverlay
+            filterString={state.logFilterString}
+            filterMode={state.logFilterMode}
           />
         )}
 

@@ -458,6 +458,105 @@ export class DockerDashboardProvider implements vscode.Disposable {
     .log-info { color: var(--vscode-editorInfo-foreground, #3794ff); }
     .log-debug { color: var(--vscode-descriptionForeground); }
 
+    /* ─── Token-level log syntax highlighting ────────────────── */
+    .tok-sev-error { color: var(--vscode-errorForeground); font-weight: 600; }
+    .tok-sev-warn { color: var(--vscode-editorWarning-foreground, #cca700); font-weight: 600; }
+    .tok-sev-info { color: var(--vscode-editorInfo-foreground, #3794ff); font-weight: 600; }
+    .tok-sev-debug { color: var(--vscode-descriptionForeground); }
+    .tok-http-safe { color: var(--vscode-testing-iconPassed, #3fb950); }
+    .tok-http-unsafe { color: var(--vscode-editorWarning-foreground, #cca700); }
+    .tok-status-2xx { color: var(--vscode-testing-iconPassed, #3fb950); font-weight: 600; }
+    .tok-status-3xx { color: var(--vscode-editorInfo-foreground, #3794ff); }
+    .tok-status-4xx { color: var(--vscode-editorWarning-foreground, #cca700); font-weight: 600; }
+    .tok-status-5xx { color: var(--vscode-errorForeground); font-weight: 600; }
+    .tok-url { color: var(--vscode-textLink-foreground, #3794ff); }
+    .tok-ip { color: var(--vscode-descriptionForeground); }
+    .tok-timestamp { color: var(--vscode-descriptionForeground); opacity: 0.7; }
+    .tok-json-key { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
+    .tok-state-ok { color: var(--vscode-testing-iconPassed, #3fb950); }
+    .tok-state-fail { color: var(--vscode-errorForeground); }
+    .tok-path { color: var(--vscode-descriptionForeground); }
+
+    /* ─── Log filter match highlighting ──────────────────────── */
+    .log-match {
+      background: var(--vscode-editor-findMatchHighlightBackground, rgba(234,178,46,0.4));
+      color: inherit;
+      border-radius: 2px;
+    }
+
+    /* ─── Severity count badges ──────────────────────────────── */
+    .severity-counts {
+      display: flex;
+      gap: 8px;
+      padding: 4px 8px;
+      margin-bottom: 4px;
+      font-size: 0.85em;
+      border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
+    }
+    .sev-badge { font-weight: 600; }
+    .sev-badge.error { color: var(--vscode-errorForeground); }
+    .sev-badge.warn { color: var(--vscode-editorWarning-foreground, #cca700); }
+    .sev-badge.info { color: var(--vscode-editorInfo-foreground, #3794ff); }
+    .sev-badge.debug { color: var(--vscode-descriptionForeground); }
+
+    /* ─── Log filter search bar ──────────────────────────────── */
+    .log-filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
+    }
+    .log-filter-bar input {
+      flex: 1;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, transparent);
+      padding: 2px 6px;
+      font-family: inherit;
+      font-size: inherit;
+      border-radius: 2px;
+      outline: none;
+    }
+    .log-filter-bar input:focus {
+      border-color: var(--vscode-focusBorder);
+    }
+    .log-filter-bar .filter-mode {
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      user-select: none;
+    }
+    .log-filter-bar .match-count {
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+      white-space: nowrap;
+    }
+
+    /* ─── Log pattern clustering ─────────────────────────────── */
+    .patterns-list {
+      padding: 4px 0;
+    }
+    .pattern-row {
+      display: flex;
+      gap: 12px;
+      padding: 3px 8px;
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-size: 0.9em;
+    }
+    .pattern-row:hover {
+      background: var(--vscode-list-hoverBackground);
+    }
+    .pattern-count {
+      color: var(--vscode-editorWarning-foreground, #cca700);
+      font-weight: 600;
+      min-width: 40px;
+      text-align: right;
+    }
+    .pattern-text {
+      color: var(--vscode-foreground);
+    }
+
     /* ─── Detail panel coloring ───────────────────────────────── */
     .detail-key { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
     .detail-id { color: var(--vscode-descriptionForeground); opacity: 0.7; }

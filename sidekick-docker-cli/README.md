@@ -47,7 +47,7 @@ The dashboard has 5 panels, each mapped to a number key:
 
 | # | Panel | Shows | Detail Tabs |
 |---|-------|-------|-------------|
-| 1 | **Containers** | All containers with state, image, ports, uptime | Logs, Stats, Env, Config |
+| 1 | **Containers** | All containers with state, image, ports, uptime | Logs, Stats, Env, Config, Patterns |
 | 2 | **Services** | Compose projects and their services | Info, Logs |
 | 3 | **Images** | Local images with tags, size, age | Info |
 | 4 | **Volumes** | Named volumes with driver, mount path, usage status | Info |
@@ -80,6 +80,7 @@ The dashboard has 5 panels, each mapped to a number key:
 | Key | Action |
 |-----|--------|
 | `x` | Open context menu (actions for selected item) |
+| `f` | Open log filter (when on Logs tab) |
 | `/` | Open filter |
 | `z` | Toggle expanded layout |
 | `?` | Show help overlay |
@@ -107,8 +108,10 @@ The dashboard has 5 panels, each mapped to a number key:
 
 ## Features
 
-- **Real-time log streaming** — follows container logs with stdout/stderr coloring
-- **Live stats with sparklines** — CPU and memory usage charted as inline sparklines (60-sample history)
+- **Real-time log streaming** — follows container logs with token-level syntax highlighting (HTTP methods, status codes, URLs, IPs, timestamps, JSON keys)
+- **Log search & filter** — press `f` on the Logs tab to search within log output with exact or fuzzy matching and match highlighting
+- **Log analytics** — severity count badges, severity sparkline over time, and pattern clustering that groups similar logs into templates with `<*>` wildcards
+- **Live stats with sparklines** — CPU, memory, and log severity usage charted as inline sparklines (60-sample history)
 - **Interactive exec** — open a shell inside any running container
 - **Compose detection** — automatically discovers projects from container labels, merges with compose file config
 - **Filter** — press `/` to filter any list by name

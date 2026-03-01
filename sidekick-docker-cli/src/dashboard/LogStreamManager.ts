@@ -1,12 +1,13 @@
 import type { DockerClient } from 'sidekick-docker-shared';
-import type { LogEntry } from 'sidekick-docker-shared';
+import type { LogEntry, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
+import { LogAnalytics, LogSeverityTimeSeries, LogTemplateEngine } from 'sidekick-docker-shared';
 
 const MAX_LOG_LINES = 1000;
 
 /**
  * Manages log streaming for the currently selected container.
  * Maintains a ring buffer of log entries and starts/stops streaming
- * as the selection changes.
+ * as the selection changes. Tracks severity counts, time-series, and patterns.
  */
 export class LogStreamManager {
   private client: DockerClient;
@@ -15,6 +16,9 @@ export class LogStreamManager {
   private aborted = false;
   private streamPromise: Promise<void> | null = null;
   private onChange: () => void;
+  private analytics = new LogAnalytics();
+  private timeSeries = new LogSeverityTimeSeries();
+  private templateEngine = new LogTemplateEngine();
 
   constructor(client: DockerClient, onChange: () => void) {
     this.client = client;
@@ -30,6 +34,9 @@ export class LogStreamManager {
 
     this.currentContainerId = containerId;
     this.logs = [];
+    this.analytics.reset();
+    this.timeSeries.reset();
+    this.templateEngine.reset();
 
     if (!containerId) return;
 
@@ -47,6 +54,9 @@ export class LogStreamManager {
         if (this.aborted || this.currentContainerId !== containerId) break;
 
         this.logs.push(entry);
+        const severity = this.analytics.push(entry.message);
+        this.timeSeries.push(severity);
+        this.templateEngine.push(entry.message);
         if (this.logs.length > MAX_LOG_LINES) {
           this.logs.shift();
         }
@@ -66,6 +76,18 @@ export class LogStreamManager {
 
   getLogs(): LogEntry[] {
     return this.logs;
+  }
+
+  getSeverityCounts(): SeverityCounts {
+    return this.analytics.getCounts();
+  }
+
+  getSeverityTimeSeries(): { severity: SeverityLevel; total: number }[] {
+    return this.timeSeries.getDominantSeries();
+  }
+
+  getTemplates(limit = 20): LogTemplate[] {
+    return this.templateEngine.getTemplates(limit);
   }
 
   getCurrentContainerId(): string | null {

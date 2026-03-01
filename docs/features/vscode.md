@@ -24,9 +24,11 @@ The dashboard opens as a webview panel with the same layout as the terminal TUI.
 
 - **Full Docker dashboard** — containers, Compose, images, volumes, networks
 - **Real-time updates** — logs and stats stream live inside the editor
+- **Smart log highlighting** — token-level syntax coloring for HTTP methods, status codes, URLs, IPs, timestamps, JSON keys, and more
+- **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
+- **Log analytics** — severity count badges and pattern clustering that groups similar logs into templates
 - **Container management** — start, stop, restart, remove directly
 - **Compose support** — detect and manage projects
-- **Log streaming** — stdout/stderr with color coding
 - **Stats monitoring** — live CPU and memory metrics
 
 ## Requirements

@@ -18,7 +18,7 @@ graph TD
 
 | Package | Build Tool | Output | Module Format |
 |---------|-----------|--------|---------------|
-| `sidekick-docker-shared` | tsc | `dist/` | CommonJS + declarations |
+| `sidekick-docker-shared` | tsc | `dist/` | CommonJS + declarations (Docker API + log analytics) |
 | `sidekick-docker-cli` | esbuild | `dist/sidekick-docker.mjs` | ESM (single file) |
 | `sidekick-docker-vscode` | esbuild | `out/extension.js` + `out/webview/dashboard.js` | CJS (extension) + IIFE (webview) |
 

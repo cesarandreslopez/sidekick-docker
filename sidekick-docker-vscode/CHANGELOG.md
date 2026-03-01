@@ -5,6 +5,16 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-03-01
+
+### Added
+
+- Token-level log syntax highlighting — HTTP methods, status codes, URLs, IPs, timestamps, JSON keys, state keywords, and paths each get distinct colors
+- Log content search and filtering with exact substring and fuzzy modes, with match highlighting and match count
+- Severity count badges in Logs tab header (ERROR, WARN, INFO, DEBUG counts)
+- New **Patterns** detail tab showing log templates grouped by similarity with `<*>` wildcards and frequency counts
+- Structured log format detection (JSON, logfmt, plain text)
+
 ## [0.1.1] - 2026-02-28
 
 ### Added
@@ -40,5 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Container config detail view
 - Docker event watching for real-time state updates
 
+[0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0

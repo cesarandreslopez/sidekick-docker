@@ -1,8 +1,8 @@
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { DockerClient } from 'sidekick-docker-shared';
+import { DockerClient, filterLine } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeLogEntry, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, compactUptime, sectionHeader, coloredSparkline } from '../../formatters';
+import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeLogEntry, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, compactUptime, sectionHeader, coloredSparkline, severitySparkline } from '../../formatters';
 
 export class ContainersPanel implements SidePanel {
   readonly id = 'containers';
@@ -28,7 +28,44 @@ export class ContainersPanel implements SidePanel {
       render: (item, metrics) => {
         const logs = metrics.selectedContainerLogs;
         if (logs.length === 0) return 'No logs available. Select a container to view logs.';
-        return logs.map(l => colorizeLogEntry(l)).join('\n');
+
+        const lines: string[] = [];
+
+        // Severity counts header
+        if (metrics.logSeverityCounts && metrics.logSeverityCounts.total > 0) {
+          const c = metrics.logSeverityCounts;
+          const parts: string[] = [];
+          if (c.error > 0) parts.push(`\x1b[31mE:${c.error}\x1b[39m`);
+          if (c.warn > 0) parts.push(`\x1b[33mW:${c.warn}\x1b[39m`);
+          if (c.info > 0) parts.push(`\x1b[38;2;43;76;126mI:${c.info}\x1b[39m`);
+          if (c.debug > 0) parts.push(`\x1b[90mD:${c.debug}\x1b[39m`);
+          if (parts.length > 0) lines.push(parts.join('  '));
+        }
+
+        // Apply log content filter
+        const query = metrics.logFilterString;
+        const mode = metrics.logFilterMode;
+        if (query) {
+          let matchCount = 0;
+          for (const l of logs) {
+            const result = filterLine(l.message, query, mode);
+            if (result.matched) {
+              matchCount++;
+              lines.push(colorizeLogEntry(l, result.matches));
+            }
+          }
+          if (lines.length <= 1) {
+            lines.push(`\x1b[90mNo logs matching "${query}"\x1b[39m`);
+          } else {
+            lines.splice(1, 0, `\x1b[90m${matchCount} matches (f to filter, Tab to toggle mode)\x1b[39m`);
+          }
+        } else {
+          for (const l of logs) {
+            lines.push(colorizeLogEntry(l));
+          }
+        }
+
+        return lines.join('\n');
       },
       autoScrollBottom: true,
     },
@@ -62,6 +99,14 @@ export class ContainersPanel implements SidePanel {
           colorizeDetailKey(`Net:    \u25BC ${formatBytes(latest.networkRx)}  \u25B2 ${formatBytes(latest.networkTx)}`),
           colorizeDetailKey(`PIDs:   ${latest.pids}`),
         );
+
+        // Severity time-series sparkline
+        if (metrics.logSeverityTimeSeries.length > 1) {
+          lines.push('');
+          lines.push(sectionHeader('Log Activity'));
+          lines.push(`        ${severitySparkline(metrics.logSeverityTimeSeries)}`);
+        }
+
         return lines.join('\n');
       },
     },
@@ -97,6 +142,22 @@ export class ContainersPanel implements SidePanel {
           lines.push('', sectionHeader('Compose'));
           lines.push(colorizeDetailKey(`  Project: ${c.composeProject}`));
           lines.push(colorizeDetailKey(`  Service: ${c.composeService}`));
+        }
+        return lines.join('\n');
+      },
+    },
+    {
+      label: 'Patterns',
+      render: (_item, metrics) => {
+        const templates = metrics.logTemplates;
+        if (templates.length === 0) return 'No log patterns detected yet. Patterns will appear as logs stream in.';
+
+        const lines = [sectionHeader('Top Log Patterns'), ''];
+        for (let i = 0; i < templates.length; i++) {
+          const t = templates[i];
+          const count = `\x1b[33m${String(t.count).padStart(5)}\x1b[39m`;
+          const pattern = t.pattern.replace(/<\*>/g, '\x1b[90m<*>\x1b[39m');
+          lines.push(`${count}  ${pattern}`);
         }
         return lines.join('\n');
       },

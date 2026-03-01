@@ -3,6 +3,7 @@ import type {
   SerializedLogEntry,
   SerializedContainerStats,
 } from '../types/messages';
+import type { SeverityCounts, FilterMode } from '../types/log';
 
 export interface WebviewState {
   activePanelIndex: number;
@@ -15,6 +16,11 @@ export interface WebviewState {
   stats: Map<string, { stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[] }>;
   envVars: Map<string, string[]>;
   composeLogs: Map<string, SerializedLogEntry[]>;
+
+  // Log analysis state
+  logSeverityCounts: Map<string, SeverityCounts>;
+  logFilterString: string;
+  logFilterMode: FilterMode;
 
   phrase: string;
   toasts: { id: number; message: string; severity: 'error' | 'warning' | 'info'; timer: number }[];
@@ -39,6 +45,9 @@ export function createInitialState(): WebviewState {
     stats: new Map(),
     envVars: new Map(),
     composeLogs: new Map(),
+    logSeverityCounts: new Map(),
+    logFilterString: '',
+    logFilterMode: 'exact',
     phrase: '',
     toasts: [],
     confirmVisible: false,
