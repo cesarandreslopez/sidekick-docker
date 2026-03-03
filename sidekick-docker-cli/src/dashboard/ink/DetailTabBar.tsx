@@ -9,7 +9,11 @@ interface DetailTabBarProps {
 
 export function DetailTabBar({ tabs, activeIndex }: DetailTabBarProps): React.ReactElement {
   if (tabs.length <= 1) {
-    return <Box />;
+    return (
+      <Box>
+        {tabs.length === 1 && <Text color="gray" dimColor>{` ${tabs[0].label}`}</Text>}
+      </Box>
+    );
   }
 
   return (

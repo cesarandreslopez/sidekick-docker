@@ -38,9 +38,12 @@ export function ToastNotification({ toast }: ToastNotificationProps): React.Reac
 
   const icon = SEVERITY_ICONS[toast.severity] || '';
 
+  // Warning uses black text for contrast against yellow bg
+  const textColor = toast.severity === 'warning' ? 'black' : 'white';
+
   return (
     <Box position="absolute" marginTop={0} justifyContent="flex-end">
-      <Text backgroundColor={SEVERITY_COLORS[toast.severity] || 'white'} color="white" bold>
+      <Text backgroundColor={SEVERITY_COLORS[toast.severity] || 'white'} color={textColor} bold>
         {` ${icon} ${toast.message} `}
       </Text>
     </Box>

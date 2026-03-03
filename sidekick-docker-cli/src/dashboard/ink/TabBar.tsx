@@ -22,10 +22,17 @@ export function TabBar({ panels, activeIndex, layoutMode, phrase, panelCounts }:
         const isActive = i === activeIndex;
         const count = panelCounts?.[i];
         let countStr = '';
+        let countColor: string | undefined;
         if (count) {
           countStr = count.running !== undefined
             ? ` ${count.running}/${count.total}`
             : ` ${count.total}`;
+          // Color-code: green = all running, yellow = partial, gray = none or no running info
+          if (count.running !== undefined) {
+            if (count.running === count.total && count.total > 0) countColor = 'green';
+            else if (count.running > 0) countColor = 'yellow';
+            else countColor = undefined; // falls back to tab color
+          }
         }
         return (
           <Box key={panel.id} marginRight={1}>
@@ -38,10 +45,10 @@ export function TabBar({ panels, activeIndex, layoutMode, phrase, panelCounts }:
             </Text>
             {countStr && (
               <Text
-                color={isActive ? '#2B4C7E' : 'gray'}
+                color={isActive ? (countColor || '#2B4C7E') : (countColor || 'gray')}
                 bold={isActive}
                 inverse={isActive}
-                dimColor={!isActive}
+                dimColor={!isActive && !countColor}
               >
                 {`${countStr} `}
               </Text>

@@ -71,21 +71,20 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
         // Compute available width for left portion (prefix + icon + rest)
         // Layout: " {prefix}{icon}{rest}  {rightLabel} "
         const leftWidth = innerWidth - rightLen - (rightLen ? 1 : 0);
-        const leftText = `${prefix}${icon}${rest}`;
-        const paddedLeft = leftText.length < leftWidth
-          ? leftText + ' '.repeat(leftWidth - leftText.length)
-          : leftText.substring(0, leftWidth);
-
         if (isSelected && focused) {
-          // Inverse mode: render entire line uniformly (icon color not visible in inverse)
-          const fullLine = rightLen
-            ? ` ${paddedLeft} ${rightLabel}`
-            : ` ${paddedLeft}`;
+          // Focused selection: icon preserves its color, rest uses brand inverse
+          const restText = rest.length < leftWidth - prefix.length - 1
+            ? rest + ' '.repeat(leftWidth - prefix.length - 1 - rest.length)
+            : rest.substring(0, leftWidth - prefix.length - 1);
           return (
             <Box key={item.id}>
-              <Text color="cyan" bold inverse wrap="truncate">
-                {fullLine.padEnd(innerWidth)}
-              </Text>
+              <Text color="#2B4C7E" bold inverse wrap="truncate">{` ${prefix}`}</Text>
+              <Text color={item.iconColor || '#2B4C7E'} bold inverse>{icon}</Text>
+              <Text color="#2B4C7E" bold inverse wrap="truncate">{restText}</Text>
+              {rightLen > 0 && (
+                <Text color="#2B4C7E" bold inverse>{` ${rightLabel}`}</Text>
+              )}
+              {!rightLen && <Text color="#2B4C7E" bold inverse>{' '}</Text>}
             </Box>
           );
         }

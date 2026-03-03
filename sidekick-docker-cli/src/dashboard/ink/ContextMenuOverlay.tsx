@@ -15,10 +15,10 @@ export function ContextMenuOverlay({ actions, selectedIndex }: ContextMenuOverla
       marginLeft={2}
       flexDirection="column"
       borderStyle="single"
-      borderColor="cyan"
+      borderColor="#2B4C7E"
       paddingX={1}
     >
-      <Text bold color="cyan">{'\u2630 Actions'}</Text>
+      <Text bold color="#2B4C7E">{'\u2630 Actions'}</Text>
       {actions.map((action, i) => {
         const isSelected = i === selectedIndex;
         const isDanger = !!action.confirm;
@@ -44,7 +44,8 @@ export function ContextMenuOverlay({ actions, selectedIndex }: ContextMenuOverla
           </Box>
         );
       })}
-      <Text color="gray" dimColor>{'Esc to close'}</Text>
+      <Text>{''}</Text>
+      <Text color="gray" dimColor>{'j/k select  Enter run  Esc close'}</Text>
     </Box>
   );
 }

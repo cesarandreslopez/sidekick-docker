@@ -2,10 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { BRAND_INLINE, BRAND_TAGLINE } from 'sidekick-docker-shared';
 
+export interface ActionHint {
+  key: string;
+  label: string;
+  destructive: boolean;
+}
+
 interface StatusBarProps {
   daemonConnected: boolean;
   focusTarget: 'side' | 'detail';
-  panelActionHints: string;
+  panelActionHints: ActionHint[];
   filterString: string;
   containerCount?: number;
   runningCount?: number;
@@ -57,18 +63,29 @@ export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filt
       {/* Separator */}
       <Text color="gray" dimColor>{` ${SEP} `}</Text>
 
-      {/* Panel actions */}
-      {panelActionHints ? (
+      {/* Panel actions — destructive in red, safe in brand blue */}
+      {panelActionHints.length > 0 && (
         <>
-          <Text color="#2B4C7E">{panelActionHints}</Text>
+          {panelActionHints.map((hint, i) => (
+            <React.Fragment key={hint.key}>
+              {i > 0 && <Text>{'  '}</Text>}
+              <Text color={hint.destructive ? 'red' : '#2B4C7E'}>
+                {`${hint.key}:${hint.label}`}
+              </Text>
+            </React.Fragment>
+          ))}
           <Text color="gray" dimColor>{` ${SEP} `}</Text>
         </>
-      ) : null}
+      )}
+
+      {/* Focus indicator */}
+      <Text color={focusTarget === 'side' ? '#2B4C7E' : 'gray'} bold={focusTarget === 'side'}>{'\u25C0'}</Text>
+      <Text color="gray" dimColor>{'/'}</Text>
+      <Text color={focusTarget === 'detail' ? '#2B4C7E' : 'gray'} bold={focusTarget === 'detail'}>{'\u25B6'}</Text>
 
       {/* Navigation hints */}
       <Text color="gray" dimColor>
-        {focusTarget === 'side' ? 'j/k nav  Tab focus' : 'j/k scroll  Tab focus'}
-        {'  /filter  ?help  q quit'}
+        {'  j/k  Tab  /  ?  q'}
       </Text>
 
       {/* Active filter indicator */}

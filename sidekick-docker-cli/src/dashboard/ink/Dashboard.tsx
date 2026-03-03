@@ -349,10 +349,9 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
 
   const showNormalLayout = state.overlay !== 'help' && state.overlay !== 'exec' && state.overlay !== 'version';
 
-  // Panel action hints for status bar
+  // Panel action hints for status bar (structured for color coding)
   const panelActionHints = applicableActions
-    .map(a => `${a.key}:${a.label}`)
-    .join('  ');
+    .map(a => ({ key: a.key, label: a.label, destructive: !!a.confirm }));
 
   return (
     <MouseProvider onMouse={handleMouse}>

@@ -31,6 +31,7 @@ export function ConfirmOverlay({ message }: ConfirmOverlayProps): React.ReactEle
         <Text backgroundColor="green" color="white" bold>{' y Yes '}</Text>
         <Text>{'  '}</Text>
         <Text backgroundColor="red" color="white" bold>{' n No '}</Text>
+        <Text color="gray" dimColor>{'   or Esc to cancel'}</Text>
       </Box>
     </Box>
   );

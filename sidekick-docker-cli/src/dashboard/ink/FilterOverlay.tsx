@@ -21,6 +21,7 @@ export function FilterOverlay({ filterString, matchCount, totalCount, panelTitle
       {countInfo && (
         <Text color="gray" dimColor>{countInfo}</Text>
       )}
+      <Text color="gray" dimColor>{'  Enter: apply  Esc: clear'}</Text>
     </Box>
   );
 }
