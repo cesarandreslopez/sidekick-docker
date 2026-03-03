@@ -3,7 +3,9 @@ import type { LogEntry, SeverityCounts, SeverityLevel, LogTemplate } from 'sidek
 import { LogAnalytics, LogSeverityTimeSeries, LogTemplateEngine } from 'sidekick-docker-shared';
 
 const MAX_LOG_LINES = 1000;
-const RECONNECT_DELAY = 2000;
+const INITIAL_RECONNECT_DELAY = 2000;
+const MAX_RECONNECT_DELAY = 30_000;
+const MAX_RECONNECT_ATTEMPTS = 10;
 
 /**
  * Manages log streaming for the currently selected container.
@@ -18,6 +20,8 @@ export class LogStreamManager {
   private aborted = false;
   private streamPromise: Promise<void> | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnectAttempts = 0;
+  private reconnectDelay = INITIAL_RECONNECT_DELAY;
   private onChange: () => void;
   private analytics = new LogAnalytics();
   private timeSeries = new LogSeverityTimeSeries();
@@ -45,6 +49,8 @@ export class LogStreamManager {
 
     // Start new stream
     this.aborted = false;
+    this.reconnectAttempts = 0;
+    this.reconnectDelay = INITIAL_RECONNECT_DELAY;
     this.streamPromise = this.streamLogs(containerId);
   }
 
@@ -66,8 +72,11 @@ export class LogStreamManager {
 
         this.onChange();
       }
-    } catch {
-      // Stream ended or container stopped
+      // Stream ended normally — reset backoff
+      this.reconnectAttempts = 0;
+      this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+    } catch (err) {
+      console.debug('log stream error:', err instanceof Error ? err.message : String(err));
     }
 
     // Auto-reconnect if still selected for this container
@@ -77,13 +86,20 @@ export class LogStreamManager {
   }
 
   private scheduleReconnect(containerId: string): void {
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+      console.debug(`log stream: gave up after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts for ${containerId}`);
+      return;
+    }
+
     this.clearReconnectTimer();
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
       if (!this.aborted && this.currentContainerId === containerId) {
+        this.reconnectAttempts++;
+        this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
         this.streamPromise = this.streamLogs(containerId);
       }
-    }, RECONNECT_DELAY);
+    }, this.reconnectDelay);
   }
 
   private clearReconnectTimer(): void {

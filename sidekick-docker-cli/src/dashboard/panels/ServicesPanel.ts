@@ -5,6 +5,14 @@ import { defaultOnError } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, truncate, colorizeDetailKey, colorizeState, colorizeId, colorizeLogEntry } from '../../formatters';
 
+type ServiceItemData =
+  | { type: 'project'; project: ComposeProject }
+  | { type: 'service'; service: ComposeService };
+
+function getProjectName(d: ServiceItemData): string {
+  return d.type === 'project' ? d.project.name : d.service.projectName;
+}
+
 export class ServicesPanel implements SidePanel {
   readonly id = 'services';
   readonly title = 'Services';
@@ -27,7 +35,7 @@ export class ServicesPanel implements SidePanel {
       label: 'Info',
       render: (item) => {
         if (!item.data) return 'No compose projects detected.\n\nCompose projects are detected from container labels\n(com.docker.compose.project) or from a compose file in the CWD.';
-        const d = item.data as { type: 'project'; project: ComposeProject } | { type: 'service'; service: ComposeService };
+        const d = item.data as ServiceItemData;
         if (d.type === 'project') {
           const p = d.project;
           const lines = [
@@ -111,9 +119,8 @@ export class ServicesPanel implements SidePanel {
         key: 'u',
         label: 'Up',
         handler: (item) => {
-          const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService };
-          const projectName = d.type === 'project' ? d.project!.name : d.service!.projectName;
-          this.composeClient.up(projectName, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          const d = item.data as ServiceItemData;
+          this.composeClient.up(getProjectName(d), this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => item.data !== null,
       },
@@ -123,9 +130,8 @@ export class ServicesPanel implements SidePanel {
         confirm: true,
         confirmMessage: 'Bring down this compose project?',
         handler: (item) => {
-          const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService };
-          const projectName = d.type === 'project' ? d.project!.name : d.service!.projectName;
-          this.composeClient.down(projectName, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          const d = item.data as ServiceItemData;
+          this.composeClient.down(getProjectName(d), this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => item.data !== null,
       },
@@ -133,11 +139,11 @@ export class ServicesPanel implements SidePanel {
         key: 'r',
         label: 'Restart',
         handler: (item) => {
-          const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService };
+          const d = item.data as ServiceItemData;
           if (d.type === 'service') {
-            this.composeClient.restart(d.service!.projectName, d.service!.name, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+            this.composeClient.restart(d.service.projectName, d.service.name, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
           } else {
-            this.composeClient.restart(d.project!.name, undefined, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+            this.composeClient.restart(d.project.name, undefined, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
           }
         },
         condition: (item) => item.data !== null,
@@ -146,11 +152,11 @@ export class ServicesPanel implements SidePanel {
         key: 'S',
         label: 'Stop',
         handler: (item) => {
-          const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService };
+          const d = item.data as ServiceItemData;
           if (d.type === 'service') {
-            this.composeClient.stop(d.service!.projectName, d.service!.name, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+            this.composeClient.stop(d.service.projectName, d.service.name, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
           } else {
-            this.composeClient.stop(d.project!.name, undefined, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+            this.composeClient.stop(d.project.name, undefined, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
           }
         },
         condition: (item) => item.data !== null,
@@ -159,9 +165,9 @@ export class ServicesPanel implements SidePanel {
   }
 
   getSearchableText(item: PanelItem): string {
-    const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService } | null;
+    const d = item.data as ServiceItemData | null;
     if (!d) return '';
-    if (d.type === 'project') return d.project!.name;
-    return `${d.service!.projectName} ${d.service!.name} ${d.service!.image}`;
+    if (d.type === 'project') return d.project.name;
+    return `${d.service.projectName} ${d.service.name} ${d.service.image}`;
   }
 }

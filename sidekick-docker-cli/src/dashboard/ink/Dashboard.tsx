@@ -32,6 +32,8 @@ declare const __CLI_VERSION__: string;
 const SIDE_PANEL_WIDTH = 28;
 const MIN_SCREEN_WIDTH = 60;
 const MIN_SCREEN_HEIGHT = 15;
+const RESERVED_UI_ROWS = 5;
+const TOAST_DURATIONS = { error: 4000, warning: 3000, info: 2000 } as const;
 
 function reducer(state: DashboardUIState, action: Action): DashboardUIState {
   switch (action.type) {
@@ -229,10 +231,9 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   }, [columns, rows, state.overlay]);
 
   const addToast = useCallback((message: string, severity: 'error' | 'warning' | 'info') => {
-    const durations = { error: 4000, warning: 3000, info: 2000 };
     const id = ++toastIdRef.current;
-    dispatch({ type: 'ADD_TOAST', toast: { id, message, severity, expiresAt: Date.now() + durations[severity] } });
-    setTimeout(() => dispatch({ type: 'REMOVE_TOAST', id }), durations[severity]);
+    dispatch({ type: 'ADD_TOAST', toast: { id, message, severity, expiresAt: Date.now() + TOAST_DURATIONS[severity] } });
+    setTimeout(() => dispatch({ type: 'REMOVE_TOAST', id }), TOAST_DURATIONS[severity]);
   }, []);
 
   // Derived values
@@ -262,7 +263,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
     dispatch({ type: 'SELECT_ITEM', index: clampedSelection });
   }
 
-  const sideViewportHeight = Math.max(1, rows - 5);
+  const sideViewportHeight = Math.max(1, rows - RESERVED_UI_ROWS);
   const sideScroll = useWindowedScroll({ totalItems: currentItems.length, viewportHeight: sideViewportHeight });
 
   useEffect(() => {
@@ -295,7 +296,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   }
 
   const detailLines = detailContent.split('\n');
-  const detailViewportHeight = Math.max(1, rows - 5);
+  const detailViewportHeight = Math.max(1, rows - RESERVED_UI_ROWS);
 
   // Auto-scroll to bottom when the active tab requests it (e.g. Logs)
   const activeTab = detailTabs[tabIdx];

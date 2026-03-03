@@ -67,29 +67,33 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('sidekick-docker.startContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
+      let client: InstanceType<typeof import('sidekick-docker-shared').DockerClient> | undefined;
       try {
         const { DockerClient } = await import('sidekick-docker-shared');
-        const client = new DockerClient();
+        client = new DockerClient();
         await client.startContainer(item.container.id);
-        client.dispose();
         await watcherService?.forceRefresh();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Failed to start container: ${msg}`);
+      } finally {
+        client?.dispose();
       }
     }),
 
     vscode.commands.registerCommand('sidekick-docker.stopContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
+      let client: InstanceType<typeof import('sidekick-docker-shared').DockerClient> | undefined;
       try {
         const { DockerClient } = await import('sidekick-docker-shared');
-        const client = new DockerClient();
+        client = new DockerClient();
         await client.stopContainer(item.container.id);
-        client.dispose();
         await watcherService?.forceRefresh();
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Failed to stop container: ${msg}`);
+      } finally {
+        client?.dispose();
       }
     }),
 
@@ -106,16 +110,18 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to start' }
       );
       if (!picked) return;
+      let client: InstanceType<typeof import('sidekick-docker-shared').DockerClient> | undefined;
       try {
         const { DockerClient } = await import('sidekick-docker-shared');
-        const client = new DockerClient();
+        client = new DockerClient();
         await client.startContainer(picked.containerId);
-        client.dispose();
         await watcherService?.forceRefresh();
         vscode.window.showInformationMessage(`Started ${picked.label}`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Failed to start container: ${msg}`);
+      } finally {
+        client?.dispose();
       }
     }),
 
@@ -131,16 +137,18 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to stop' }
       );
       if (!picked) return;
+      let client: InstanceType<typeof import('sidekick-docker-shared').DockerClient> | undefined;
       try {
         const { DockerClient } = await import('sidekick-docker-shared');
-        const client = new DockerClient();
+        client = new DockerClient();
         await client.stopContainer(picked.containerId);
-        client.dispose();
         await watcherService?.forceRefresh();
         vscode.window.showInformationMessage(`Stopped ${picked.label}`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Failed to stop container: ${msg}`);
+      } finally {
+        client?.dispose();
       }
     }),
 
@@ -156,16 +164,18 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to restart' }
       );
       if (!picked) return;
+      let client: InstanceType<typeof import('sidekick-docker-shared').DockerClient> | undefined;
       try {
         const { DockerClient } = await import('sidekick-docker-shared');
-        const client = new DockerClient();
+        client = new DockerClient();
         await client.restartContainer(picked.containerId);
-        client.dispose();
         await watcherService?.forceRefresh();
         vscode.window.showInformationMessage(`Restarted ${picked.label}`);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Failed to restart container: ${msg}`);
+      } finally {
+        client?.dispose();
       }
     }),
   );

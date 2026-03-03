@@ -10,6 +10,8 @@ import type {
 import { DockerClient, ComposeDetector, StatsCollector, ComposeFileReader } from 'sidekick-docker-shared';
 import type { LogEntry, FilterMode, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
 
+const MAX_LOG_LINES = 1000;
+
 export interface DockerDashboardMetrics {
   containers: ContainerInfo[];
   images: ImageInfo[];
@@ -109,7 +111,7 @@ export class DockerState {
       case 'unpause': {
         const existing = this.containers.find(c => c.id === resourceId);
         if (existing) {
-          existing.state = type === 'unpause' ? 'running' : 'running';
+          existing.state = 'running';
           existing.status = 'Up just now';
         }
         // Trigger full refresh for accurate data
@@ -158,7 +160,7 @@ export class DockerState {
 
   appendLog(entry: LogEntry): void {
     this.selectedLogs.push(entry);
-    if (this.selectedLogs.length > 1000) {
+    if (this.selectedLogs.length > MAX_LOG_LINES) {
       this.selectedLogs.shift();
     }
   }
@@ -169,7 +171,7 @@ export class DockerState {
 
   appendComposeLog(entry: LogEntry): void {
     this.selectedComposeLogs.push(entry);
-    if (this.selectedComposeLogs.length > 1000) {
+    if (this.selectedComposeLogs.length > MAX_LOG_LINES) {
       this.selectedComposeLogs.shift();
     }
   }

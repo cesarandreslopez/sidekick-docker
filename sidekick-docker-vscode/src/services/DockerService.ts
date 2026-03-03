@@ -16,6 +16,8 @@ import type {
   ContainerStats,
   ComposeFileConfig,
 } from 'sidekick-docker-shared';
+const MAX_LOG_LINES = 1000;
+
 import type {
   DashboardStateSnapshot,
   SerializedContainerInfo,
@@ -242,7 +244,7 @@ export class DockerService {
       for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 })) {
         if (this.logAborted || this.logContainerId !== containerId) break;
         this.logs.push(entry);
-        if (this.logs.length > 1000) this.logs.shift();
+        if (this.logs.length > MAX_LOG_LINES) this.logs.shift();
         if (!this.disposed) {
           this.callbacks.onLogsChange(containerId, this.logs.map(serializeLogEntry));
         }
@@ -300,7 +302,7 @@ export class DockerService {
       for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined)) {
         if (this.composeLogAborted || this.composeLogProject !== projectName) break;
         this.composeLogs.push(entry);
-        if (this.composeLogs.length > 1000) this.composeLogs.shift();
+        if (this.composeLogs.length > MAX_LOG_LINES) this.composeLogs.shift();
         if (!this.disposed) {
           this.callbacks.onComposeLogs(projectName, serviceName, this.composeLogs.map(serializeLogEntry));
         }

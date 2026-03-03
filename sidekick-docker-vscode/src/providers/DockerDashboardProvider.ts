@@ -118,6 +118,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
     const ok = await this.service.initialize();
     if (!ok) {
+      this.service.dispose();
+      this.service = undefined;
       this._postMessage({
         type: 'toast',
         message: 'Cannot connect to Docker daemon. Is Docker running?',

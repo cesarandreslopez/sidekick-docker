@@ -114,8 +114,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       state.processEvent(event);
       scheduleRender();
     },
-    onError: () => {
-      // Non-fatal — will auto-reconnect
+    onError: (err) => {
+      console.debug('event watcher error:', err.message);
     },
   });
   watcher.start();

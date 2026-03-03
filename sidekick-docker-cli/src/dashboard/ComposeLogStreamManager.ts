@@ -2,6 +2,7 @@ import type { ComposeClient } from 'sidekick-docker-shared';
 import type { LogEntry } from 'sidekick-docker-shared';
 
 const MAX_LOG_LINES = 1000;
+const RECONNECT_DELAY = 2000;
 
 /**
  * Manages compose log streaming for the currently selected project/service.
@@ -13,6 +14,7 @@ export class ComposeLogStreamManager {
   private currentService: string | null = null;
   private logs: LogEntry[] = [];
   private aborted = false;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private onChange: () => void;
 
   constructor(composeClient: ComposeClient, onChange: () => void) {
@@ -47,8 +49,30 @@ export class ComposeLogStreamManager {
 
         this.onChange();
       }
-    } catch {
-      // Stream ended — not an error
+    } catch (err) {
+      console.debug('compose log stream error:', err instanceof Error ? err.message : String(err));
+    }
+
+    // Auto-reconnect if still selected for this project
+    if (!this.aborted && this.currentProject === project) {
+      this.scheduleReconnect(project, service);
+    }
+  }
+
+  private scheduleReconnect(project: string, service: string | null): void {
+    this.clearReconnectTimer();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.aborted && this.currentProject === project) {
+        this.streamLogs(project, service);
+      }
+    }, RECONNECT_DELAY);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
   }
 
@@ -56,6 +80,7 @@ export class ComposeLogStreamManager {
     this.aborted = true;
     this.currentProject = null;
     this.currentService = null;
+    this.clearReconnectTimer();
   }
 
   getLogs(): LogEntry[] {

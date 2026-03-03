@@ -16,6 +16,7 @@ import { networksPanel } from './panels/networks';
 import { LogAnalytics } from '../log/LogAnalytics';
 
 const vscode = acquireVsCodeApi();
+const TOAST_DURATIONS = { error: 4000, warning: 3000, info: 2000 } as const;
 
 const panels: PanelDefinition[] = [
   containersPanel,
@@ -89,7 +90,6 @@ function getSelectedIndex(items: PanelItem[]): number {
 }
 
 function addToast(message: string, severity: 'error' | 'warning' | 'info'): void {
-  const durations = { error: 4000, warning: 3000, info: 2000 };
   const id = ++toastIdCounter;
   const timer = window.setTimeout(() => {
     // Start dismiss animation
@@ -104,7 +104,7 @@ function addToast(message: string, severity: 'error' | 'warning' | 'info'): void
       state.toasts = state.toasts.filter(t => t.id !== id);
       renderToasts();
     }
-  }, durations[severity]);
+  }, TOAST_DURATIONS[severity]);
   state.toasts.push({ id, message, severity, timer });
   renderToasts();
 }
