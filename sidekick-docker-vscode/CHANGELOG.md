@@ -5,6 +5,19 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-03-03
+
+### Improved
+
+- Extract `withDockerClient` helper removing five identical command handler bodies
+- Fix DockerClient resource leaks in extension commands (try/finally)
+- Fix DockerService leak on failed initialize in DockerDashboardProvider
+- Replace `Math.random()` with `crypto.randomBytes()` for CSP nonce generation
+
+### Fixed
+
+- Status bar version now injected from package.json at build time (was hardcoded at v0.1.0)
+
 ## [0.1.2] - 2026-03-01
 
 ### Added
@@ -50,6 +63,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Container config detail view
 - Docker event watching for real-time state updates
 
+[0.1.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.3
 [0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0

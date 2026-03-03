@@ -53,7 +53,7 @@ cd sidekick-docker-shared && npx vitest run   # shared only
 cd sidekick-docker-cli && npx vitest run      # cli only
 
 # Version management
-bash scripts/bump-version.sh 0.2.0   # bumps all 3 package.json files
+bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 packages)
 ```
 
 ### Code Style

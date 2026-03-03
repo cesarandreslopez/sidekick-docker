@@ -64,3 +64,12 @@ The VS Code extension produces two bundles:
 
 - `out/extension.js` — CJS, runs in the Node.js extension host
 - `out/webview/dashboard.js` — IIFE, runs in the browser webview context
+- **Defines**: `__VERSION__` injected from `package.json` (used for status bar display)
+
+## Dashboard Decomposition
+
+The main `Dashboard` component delegates input handling to extracted hooks:
+
+- **`useKeyboardHandler`** — all keyboard input processing
+- **`useMouseHandler`** — mouse click and scroll handling
+- **`Dashboard.tsx`** — state management (`useReducer`) and render orchestration

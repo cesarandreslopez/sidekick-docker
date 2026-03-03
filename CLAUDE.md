@@ -36,7 +36,7 @@ cd sidekick-docker-shared && npx vitest run src/docker   # single directory
 cd sidekick-docker-shared && npx vitest run DockerClient  # single file by name
 
 # Version management
-bash scripts/bump-version.sh 0.2.0   # bumps all 3 package.json files
+bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 packages)
 ```
 
 ## Stack

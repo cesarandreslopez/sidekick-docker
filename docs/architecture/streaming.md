@@ -41,6 +41,20 @@ The dashboard uses manager classes to control when streaming starts and stops. S
 - Pushes samples to `StatsCollector` for time-series storage
 - Stops streaming when the user navigates away
 
+### ComposeLogStreamManager
+
+- Starts streaming logs for a Compose project's services when selected in the Services panel
+- Stops streaming when the user navigates away
+
+### Reconnection & Resilience
+
+All stream managers use `ReconnectScheduler` for fault-tolerant streaming:
+
+- **Exponential backoff** — retry delays increase on consecutive failures, preventing rapid retry storms
+- **Bounded retries** — streams give up after a maximum number of attempts on permanent failures
+- **Error logging** — all stream errors are logged for debugging (previously silent)
+- **Resource cleanup** — try/finally blocks ensure proper teardown on failure
+
 ### EventWatcher
 
 - Runs continuously while the dashboard is open

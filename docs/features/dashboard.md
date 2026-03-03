@@ -40,8 +40,15 @@ This means changes appear almost instantly without manual refreshing.
 
 Press **`x`** on any selected item to open the context menu. Available actions vary by panel — see each panel's page for details.
 
-All destructive actions (remove, prune) show a confirmation modal.
+Destructive actions (remove, prune) are color-coded red in the context menu and require a confirmation modal.
+
+## Visual Indicators
+
+- **Tab bar badges** — container count is color-coded: green when all running, yellow when partially running
+- **Status bar** — shows brand, keyboard hints, active filter, and connection status with visual separators
+- **Selection** — focused items preserve their state icon color instead of overriding with a uniform highlight
+- **Detail tab bar** — shows the tab label even for single-tab panels
 
 ## Toast Notifications
 
-Action results appear as non-blocking toast notifications at the bottom of the screen.
+Action results appear as non-blocking toast notifications at the bottom of the screen, with severity-specific icons and colored backgrounds.

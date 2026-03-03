@@ -52,3 +52,15 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `d` | Down (stop project) |
 | `r` | Restart |
 | `S` | Stop |
+
+## Overlay Keyboard Hints
+
+Interactive overlays display inline keyboard hints:
+
+| Overlay | Hints Shown |
+|---------|-------------|
+| **Context Menu** | `j`/`k` select, `Enter` run, `Esc` close |
+| **Confirmation Modal** | `y`/`n` buttons, `Esc` to cancel |
+| **Filter Overlay** | `Enter` to apply, `Esc` to cancel |
+| **Log Filter Overlay** | `Tab` to toggle mode, `Esc` to clear |
+| **Detail Tab Bar** | `[`/`]` cycle tabs |

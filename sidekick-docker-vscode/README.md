@@ -19,7 +19,8 @@ A Docker management dashboard embedded directly in VS Code, VSCodium, and compat
 cd sidekick-docker-vscode
 npm install
 npm run build
-code --install-extension sidekick-docker-vscode-0.1.0.vsix
+npx vsce package
+code --install-extension sidekick-docker-vscode-*.vsix
 ```
 
 ### Build from Source

@@ -27,7 +27,7 @@ The interface is defined in `sidekick-docker-cli/src/dashboard/panels/types.ts`.
 
 ## State Management
 
-The main `Dashboard` component uses `useReducer` for UI state (selected panel, selected item, focus area, filter text, modal state).
+The main `Dashboard` component uses `useReducer` for UI state (selected panel, selected item, focus area, filter text, modal state). Input handling is delegated to `useKeyboardHandler` and `useMouseHandler` hooks.
 
 Domain state (the actual Docker resources) lives in the `DockerState` class, which:
 

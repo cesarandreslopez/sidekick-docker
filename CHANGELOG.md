@@ -5,6 +5,60 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.3] - 2026-03-03
+
+### Improved
+
+#### Code Quality & Reliability
+
+- Extract `ReconnectScheduler` utility replacing three identical reconnect implementations across stream managers
+- Add `errorMessage()` helper eliminating 10 repeated `instanceof` checks
+- Consolidate `MAX_LOG_LINES` constant to shared package
+- Extract `withDockerClient` helper in VSCode extension removing five identical command handler bodies
+- Extract `useKeyboardHandler` and `useMouseHandler` hooks from Dashboard.tsx (887 → ~370 lines)
+- Extract shared types to reduce duplication across dashboard panels
+- Replace silent `.catch(() => {})` with descriptive debug logging across all packages
+- Wire AbortController signal through EventWatcher → DockerClient.streamEvents for proper stream teardown
+- Add 24 new tests: DockerState (13), LogStreamManager (6), StatsStreamManager (5)
+
+#### Security & Error Handling
+
+- Replace `Math.random()` with `crypto.randomBytes()` for CSP nonce generation
+- Fix redundant ternary that always evaluated to `'running'` in DockerState
+- Extract magic numbers to named constants (toast durations, log buffer limits, reserved UI rows, reconnect delays)
+- Add error logging to all stream manager catch blocks (previously silent)
+- Add bounded retries with exponential backoff to Log/StatsStreamManager
+- Add auto-reconnect to ComposeLogStreamManager (previously missing)
+- Eliminate non-null assertions in ServicesPanel via discriminated union type
+- Fix DockerClient resource leaks in VSCode extension commands (try/finally)
+- Fix DockerService leak on failed initialize in DockerDashboardProvider
+- Fix ComposeLogStreamManager missing exponential backoff (was retrying forever at fixed 2s)
+- Make EventWatcher sleep cancellable on stop()
+
+#### TUI Dashboard UX
+
+- SideList: preserve icon color in focused selection (no longer lost to uniform cyan inverse)
+- StatusBar: color-code destructive actions red, add focus indicator, condense navigation hints, visual separators between sections
+- ContextMenuOverlay: add j/k/Enter/Esc keyboard hints, destructive actions shown in red, brand color border
+- ConfirmOverlay: warning icon header, "cannot be undone" hint, colored button badges, "or Esc to cancel" hint
+- FilterOverlay: brand-blue background with search icon, Enter/Esc help text
+- LogFilterOverlay: use brand color instead of generic blue
+- DetailTabBar: show tab label for single-tab panels, clarify hint to "[/] cycle tabs"
+- TabBar: color-code container count badges (green=all running, yellow=partial)
+- TooSmallOverlay: show exactly how much wider/taller the terminal needs to be, added branding
+- ToastNotification: severity-specific icons, colored background instead of text-only, readable warning contrast
+- HelpOverlay: keyboard keys rendered as colored badges, horizontal rule dividers, danger indicators on destructive actions
+- VersionOverlay: horizontal rule dividers, brand-blue version text
+- SideList empty states: styled no-match indicator, command hints with brand-blue highlight
+
+#### VS Code Extension
+
+- Inject version from package.json at build time instead of hardcoded value
+
+### Fixed
+
+- `bump-version.sh` now includes root `package.json`
+
 ## [0.1.2] - 2026-03-01
 
 ### Added
@@ -134,6 +188,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.1.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.3
 [0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
