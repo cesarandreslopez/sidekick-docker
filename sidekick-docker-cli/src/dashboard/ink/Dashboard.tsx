@@ -1,7 +1,7 @@
 import React, { useReducer, useCallback, useEffect, useRef } from 'react';
 import { Box } from 'ink';
 import type { DockerDashboardMetrics } from '../DockerState';
-import type { SidePanel, PanelItem, PanelAction } from '../panels/types';
+import type { SidePanel, PanelItem } from '../panels/types';
 import { useTerminalSize } from './useTerminalSize';
 import { useWindowedScroll } from './useWindowedScroll';
 import { useKeyboardHandler } from './useKeyboardHandler';
@@ -23,69 +23,15 @@ import { enableMouse, disableMouse } from './mouse';
 import { LogFilterOverlay } from './LogFilterOverlay';
 import { VersionOverlay } from './VersionOverlay';
 import { getRandomPhrase } from 'sidekick-docker-shared';
-import type { FilterMode } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes } from '../../formatters';
+import type { LayoutMode, OverlayKind, FocusTarget, ToastEntry, DashboardUIState, Action } from './dashboardTypes';
 
 declare const __CLI_VERSION__: string;
 
 const SIDE_PANEL_WIDTH = 28;
 const MIN_SCREEN_WIDTH = 60;
 const MIN_SCREEN_HEIGHT = 15;
-
-type LayoutMode = 'normal' | 'expanded';
-type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' | 'exec' | 'version' | 'log-filter';
-type FocusTarget = 'side' | 'detail';
-
-interface ToastEntry {
-  id: number;
-  message: string;
-  severity: 'error' | 'warning' | 'info';
-  expiresAt: number;
-}
-
-interface DashboardUIState {
-  activePanelIndex: number;
-  selectedItemIndex: number;
-  detailTabIndex: number;
-  layoutMode: LayoutMode;
-  focusTarget: FocusTarget;
-  overlay: OverlayKind;
-  filterString: string;
-  detailScrollOffset: number;
-  toasts: ToastEntry[];
-  contextMenuIndex: number;
-  confirmAction: (() => void) | null;
-  confirmMessage: string;
-  execOutputLines: string[];
-  execContainerId: string | null;
-  execContainerName: string;
-  logFilterString: string;
-  logFilterMode: FilterMode;
-}
-
-type Action =
-  | { type: 'SWITCH_PANEL'; index: number }
-  | { type: 'SELECT_ITEM'; index: number }
-  | { type: 'SET_DETAIL_TAB'; index: number }
-  | { type: 'CYCLE_DETAIL_TAB'; direction: 1 | -1; tabCount: number }
-  | { type: 'CYCLE_LAYOUT' }
-  | { type: 'TOGGLE_FOCUS' }
-  | { type: 'SET_FOCUS'; target: FocusTarget }
-  | { type: 'SET_OVERLAY'; overlay: OverlayKind }
-  | { type: 'SET_FILTER'; value: string }
-  | { type: 'SCROLL_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number }
-  | { type: 'SCROLL_DETAIL'; offset: number }
-  | { type: 'ADD_TOAST'; toast: ToastEntry }
-  | { type: 'REMOVE_TOAST'; id: number }
-  | { type: 'CONTEXT_MENU_NAV'; delta: number; itemCount: number }
-  | { type: 'SCROLL_SIDE'; delta: number; itemCount: number }
-  | { type: 'SET_CONFIRM'; action: (() => void) | null; message: string }
-  | { type: 'EXEC_START'; containerId: string; containerName: string }
-  | { type: 'EXEC_APPEND_OUTPUT'; data: string }
-  | { type: 'EXEC_END' }
-  | { type: 'SET_LOG_FILTER'; value: string }
-  | { type: 'TOGGLE_LOG_FILTER_MODE' };
 
 function reducer(state: DashboardUIState, action: Action): DashboardUIState {
   switch (action.type) {
@@ -189,7 +135,7 @@ const initialState: DashboardUIState = {
   execContainerId: null,
   execContainerName: '',
   logFilterString: '',
-  logFilterMode: 'exact' as FilterMode,
+  logFilterMode: 'exact',
 };
 
 interface DashboardProps {
@@ -294,9 +240,12 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   const tooSmall = columns < MIN_SCREEN_WIDTH || rows < MIN_SCREEN_HEIGHT;
   const sideWidth = state.layoutMode === 'expanded' ? 0 : SIDE_PANEL_WIDTH;
 
-  // Get items with filter
-  const getFilteredItems = useCallback((): PanelItem[] => {
-    let items = panel.getItems(metrics);
+  // Get all items for active panel (once), then filter
+  const allItems = panel.getItems(metrics);
+  const totalItemCount = allItems.length;
+
+  const currentItems = (() => {
+    let items = allItems;
     if (state.filterString) {
       const f = state.filterString.toLowerCase();
       items = items.filter(it => {
@@ -306,9 +255,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
     }
     items.sort((a, b) => a.sortKey - b.sortKey);
     return items;
-  }, [panel, metrics, state.filterString]);
-
-  const currentItems = getFilteredItems();
+  })();
   const clampedSelection = Math.min(state.selectedItemIndex, Math.max(0, currentItems.length - 1));
 
   if (clampedSelection !== state.selectedItemIndex && currentItems.length > 0) {
@@ -359,28 +306,25 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
     }
   }, [shouldAutoScroll, detailLines.length, detailViewportHeight]);
 
-  // Context menu
-  const getContextActions = useCallback((): PanelAction[] => {
-    if (!selectedItem) return [];
-    return panel.getActions().filter(a => !a.condition || a.condition(selectedItem));
-  }, [panel, selectedItem]);
-
-  const contextActions = state.overlay === 'context-menu' ? getContextActions() : [];
+  // Panel actions — computed once, used by context menu, keyboard handler, and status bar
+  const panelActions = panel.getActions();
+  const applicableActions = selectedItem
+    ? panelActions.filter(a => !a.condition || a.condition(selectedItem))
+    : [];
+  const contextActions = state.overlay === 'context-menu' ? applicableActions : [];
 
   // Compute per-panel item counts for TabBar badges
+  const runningCount = metrics.containers.filter(c => c.state === 'running').length;
   const panelCounts = panels.map((p) => {
-    const items = p.getItems(metrics);
     if (p.id === 'containers') {
-      const running = items.filter(it => {
-        const d = it.data as { state?: string } | null;
-        return d?.state === 'running';
-      }).length;
-      return { total: items.length, running };
+      return { total: metrics.containers.length, running: runningCount };
     }
     if (p.id === 'services') {
-      const meaningful = items.filter(it => it.data !== null).length;
+      const meaningful = metrics.composeProjects.reduce((sum, proj) => sum + proj.services.length, 0);
       return { total: meaningful };
     }
+    // For the active panel we already have allItems; for others call getItems
+    const items = p === panel ? allItems : p.getItems(metrics);
     return { total: items.length };
   });
 
@@ -394,7 +338,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   useKeyboardHandler({
     state, dispatch, panels, panel, selectedItem, contextActions,
     clampedSelection, currentItems, detailLines, detailViewportHeight,
-    detailTabs, tabIdx, sideScroll, addToast, rotatePhrase,
+    detailTabs, tabIdx, panelActions, sideScroll, addToast, rotatePhrase,
   });
 
   // Render
@@ -402,20 +346,12 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
     return <TooSmallOverlay columns={columns} rows={rows} />;
   }
 
-  const runningCount = metrics.containers.filter(c => c.state === 'running').length;
   const showNormalLayout = state.overlay !== 'help' && state.overlay !== 'exec' && state.overlay !== 'version';
 
-  // Compute unfiltered total count for filter display
-  const allItems = panel.getItems(metrics);
-  const totalItemCount = allItems.length;
-
   // Panel action hints for status bar
-  const panelActionHints = selectedItem
-    ? panel.getActions()
-        .filter(a => !a.condition || a.condition(selectedItem))
-        .map(a => `${a.key}:${a.label}`)
-        .join('  ')
-    : '';
+  const panelActionHints = applicableActions
+    .map(a => `${a.key}:${a.label}`)
+    .join('  ');
 
   return (
     <MouseProvider onMouse={handleMouse}>
@@ -472,7 +408,6 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
           <StatusBar
             daemonConnected={metrics.daemonConnected}
             focusTarget={state.focusTarget}
-            panelHints=""
             panelActionHints={panelActionHints}
             filterString={state.filterString}
             containerCount={metrics.containers.length}

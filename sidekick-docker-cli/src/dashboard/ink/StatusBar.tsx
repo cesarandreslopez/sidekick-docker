@@ -5,7 +5,6 @@ import { BRAND_INLINE, BRAND_TAGLINE } from 'sidekick-docker-shared';
 interface StatusBarProps {
   daemonConnected: boolean;
   focusTarget: 'side' | 'detail';
-  panelHints: string;
   panelActionHints: string;
   filterString: string;
   containerCount?: number;

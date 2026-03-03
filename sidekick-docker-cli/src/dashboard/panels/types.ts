@@ -24,6 +24,9 @@ export interface PanelAction {
   confirmMessage?: string;
 }
 
+/** Default error handler for panel actions — logs to debug console. */
+export const defaultOnError = (msg: string): void => { console.debug(msg); };
+
 /** A keybinding declared by a panel or globally. */
 export interface KeyBinding {
   keys: string[];

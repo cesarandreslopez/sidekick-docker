@@ -1,6 +1,7 @@
 import type { ContainerInfo } from 'sidekick-docker-shared';
 import { DockerClient, filterLine } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
+import { defaultOnError } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeLogEntry, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, compactUptime, sectionHeader, coloredSparkline, severitySparkline } from '../../formatters';
 
@@ -17,7 +18,7 @@ export class ContainersPanel implements SidePanel {
   constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
     this.client = client;
     this.onAction = onAction;
-    this.onError = onError ?? ((msg) => console.debug(msg));
+    this.onError = onError ?? defaultOnError;
   }
 
   setOnExec(handler: (containerId: string) => void): void {

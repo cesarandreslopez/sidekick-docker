@@ -1,27 +1,11 @@
 import { useCallback } from 'react';
 import type { SidePanel, PanelItem, DetailTab } from '../panels/types';
 import type { TerminalMouseEvent } from './mouse';
-
-type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' | 'exec' | 'version' | 'log-filter';
-
-interface MouseState {
-  overlay: OverlayKind;
-  activePanelIndex: number;
-}
-
-// Subset of Action used by mouse handler
-type MouseAction =
-  | { type: 'SWITCH_PANEL'; index: number }
-  | { type: 'SELECT_ITEM'; index: number }
-  | { type: 'SET_DETAIL_TAB'; index: number }
-  | { type: 'SET_FOCUS'; target: 'side' | 'detail' }
-  | { type: 'SET_OVERLAY'; overlay: OverlayKind }
-  | { type: 'SCROLL_SIDE'; delta: number; itemCount: number }
-  | { type: 'SCROLL_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number };
+import type { DashboardUIState, Action } from './dashboardTypes';
 
 interface MouseContext {
-  state: MouseState;
-  dispatch: (action: MouseAction) => void;
+  state: DashboardUIState;
+  dispatch: (action: Action) => void;
   panels: SidePanel[];
   panelCounts: { total: number; running?: number }[];
   currentItems: PanelItem[];

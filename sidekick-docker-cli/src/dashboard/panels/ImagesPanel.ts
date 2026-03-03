@@ -1,6 +1,7 @@
 import type { ImageInfo } from 'sidekick-docker-shared';
 import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
+import { defaultOnError } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { formatBytes, truncate, colorizeDetailKey, colorizeId, colorizeBool } from '../../formatters';
 
@@ -16,7 +17,7 @@ export class ImagesPanel implements SidePanel {
   constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
     this.client = client;
     this.onAction = onAction;
-    this.onError = onError ?? ((msg) => console.debug(msg));
+    this.onError = onError ?? defaultOnError;
   }
 
   readonly detailTabs: DetailTab[] = [

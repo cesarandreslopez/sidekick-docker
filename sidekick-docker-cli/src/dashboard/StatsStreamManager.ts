@@ -105,6 +105,5 @@ export class StatsStreamManager {
 
   dispose(): void {
     this.stop();
-    this.clearLoadingInterval();
   }
 }

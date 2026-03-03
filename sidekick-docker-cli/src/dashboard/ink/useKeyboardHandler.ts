@@ -1,25 +1,10 @@
 import { useInput, useApp } from 'ink';
 import type { SidePanel, PanelItem, PanelAction } from '../panels/types';
-import type { FilterMode } from 'sidekick-docker-shared';
-
-type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' | 'exec' | 'version' | 'log-filter';
-type FocusTarget = 'side' | 'detail';
-
-interface KeyboardState {
-  overlay: OverlayKind;
-  filterString: string;
-  logFilterString: string;
-  logFilterMode: FilterMode;
-  focusTarget: FocusTarget;
-  confirmAction: (() => void) | null;
-  contextMenuIndex: number;
-  activePanelIndex: number;
-  layoutMode: 'normal' | 'expanded';
-}
+import type { DashboardUIState, Action } from './dashboardTypes';
 
 interface KeyboardContext {
-  state: KeyboardState;
-  dispatch: (action: KeyboardAction) => void;
+  state: DashboardUIState;
+  dispatch: (action: Action) => void;
   panels: SidePanel[];
   panel: SidePanel;
   selectedItem: PanelItem | undefined;
@@ -30,6 +15,7 @@ interface KeyboardContext {
   detailViewportHeight: number;
   detailTabs: { label: string }[];
   tabIdx: number;
+  panelActions: PanelAction[];
   sideScroll: {
     selectNext(): void;
     selectPrev(): void;
@@ -40,27 +26,62 @@ interface KeyboardContext {
   rotatePhrase: () => void;
 }
 
-// Matches the Action type from Dashboard — only the subset used by keyboard
-type KeyboardAction =
-  | { type: 'SWITCH_PANEL'; index: number }
-  | { type: 'SELECT_ITEM'; index: number }
-  | { type: 'SET_DETAIL_TAB'; index: number }
-  | { type: 'CYCLE_DETAIL_TAB'; direction: 1 | -1; tabCount: number }
-  | { type: 'CYCLE_LAYOUT' }
-  | { type: 'TOGGLE_FOCUS' }
-  | { type: 'SET_FOCUS'; target: FocusTarget }
-  | { type: 'SET_OVERLAY'; overlay: OverlayKind }
-  | { type: 'SET_FILTER'; value: string }
-  | { type: 'SCROLL_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number }
-  | { type: 'SCROLL_DETAIL'; offset: number }
-  | { type: 'CONTEXT_MENU_NAV'; delta: number; itemCount: number }
-  | { type: 'SET_CONFIRM'; action: (() => void) | null; message: string }
-  | { type: 'SET_LOG_FILTER'; value: string }
-  | { type: 'TOGGLE_LOG_FILTER_MODE' };
+/** Execute a panel action, routing through the confirm overlay if needed. */
+function executeAction(
+  action: PanelAction,
+  item: PanelItem,
+  dispatch: (action: Action) => void,
+  addToast: (message: string, severity: 'error' | 'warning' | 'info') => void,
+): void {
+  if (action.confirm) {
+    dispatch({ type: 'SET_CONFIRM', action: () => { action.handler(item); addToast(action.label, 'info'); }, message: action.confirmMessage || 'Are you sure?' });
+  } else {
+    action.handler(item);
+    addToast(action.label, 'info');
+  }
+}
+
+/** Handle keyboard input for a text filter overlay (panel filter or log filter). */
+function handleFilterInput(
+  input: string,
+  key: { escape: boolean; return: boolean; backspace: boolean; delete: boolean; tab: boolean; ctrl: boolean; meta: boolean },
+  opts: {
+    currentValue: string;
+    setAction: string;
+    clearToast?: string;
+    dispatch: (action: Action) => void;
+    addToast: (message: string, severity: 'error' | 'warning' | 'info') => void;
+    onTab?: () => void;
+  },
+): void {
+  const { currentValue, setAction, clearToast, dispatch, addToast, onTab } = opts;
+  if (key.escape) {
+    if (currentValue && clearToast) addToast(clearToast, 'info');
+    dispatch({ type: setAction, value: '' } as Action);
+    dispatch({ type: 'SET_OVERLAY', overlay: null });
+    return;
+  }
+  if (key.return) {
+    if (setAction === 'SET_FILTER' && currentValue) addToast(`Filter: "${currentValue}"`, 'info');
+    dispatch({ type: 'SET_OVERLAY', overlay: null });
+    return;
+  }
+  if (key.tab && onTab) {
+    onTab();
+    return;
+  }
+  if (key.backspace || key.delete) {
+    dispatch({ type: setAction, value: currentValue.slice(0, -1) } as Action);
+    return;
+  }
+  if (input && !key.ctrl && !key.meta) {
+    dispatch({ type: setAction, value: currentValue + input } as Action);
+  }
+}
 
 export function useKeyboardHandler(ctx: KeyboardContext): void {
   const { exit } = useApp();
-  const { state, dispatch, panels, panel, selectedItem, contextActions, clampedSelection, currentItems, detailLines, detailViewportHeight, detailTabs, tabIdx, sideScroll, addToast, rotatePhrase } = ctx;
+  const { state, dispatch, panels, panel, selectedItem, contextActions, clampedSelection, currentItems, detailLines, detailViewportHeight, detailTabs, tabIdx, panelActions, sideScroll, addToast, rotatePhrase } = ctx;
 
   useInput((input, key) => {
     if (state.overlay === 'exec') return;
@@ -92,52 +113,20 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
 
     // Filter overlay (panel item filter)
     if (state.overlay === 'filter') {
-      if (key.escape) {
-        if (state.filterString) addToast('Filter cleared', 'info');
-        dispatch({ type: 'SET_FILTER', value: '' });
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (key.return) {
-        if (state.filterString) addToast(`Filter: "${state.filterString}"`, 'info');
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (key.backspace || key.delete) {
-        dispatch({ type: 'SET_FILTER', value: state.filterString.slice(0, -1) });
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        dispatch({ type: 'SET_FILTER', value: state.filterString + input });
-        return;
-      }
+      handleFilterInput(input, key, {
+        currentValue: state.filterString, setAction: 'SET_FILTER',
+        clearToast: 'Filter cleared', dispatch, addToast,
+      });
       return;
     }
 
     // Log filter overlay
     if (state.overlay === 'log-filter') {
-      if (key.escape) {
-        if (state.logFilterString) addToast('Log filter cleared', 'info');
-        dispatch({ type: 'SET_LOG_FILTER', value: '' });
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (key.return) {
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (key.tab) {
-        dispatch({ type: 'TOGGLE_LOG_FILTER_MODE' });
-        return;
-      }
-      if (key.backspace || key.delete) {
-        dispatch({ type: 'SET_LOG_FILTER', value: state.logFilterString.slice(0, -1) });
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        dispatch({ type: 'SET_LOG_FILTER', value: state.logFilterString + input });
-        return;
-      }
+      handleFilterInput(input, key, {
+        currentValue: state.logFilterString, setAction: 'SET_LOG_FILTER',
+        clearToast: 'Log filter cleared', dispatch, addToast,
+        onTab: () => dispatch({ type: 'TOGGLE_LOG_FILTER_MODE' }),
+      });
       return;
     }
 
@@ -158,24 +147,14 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
       if (key.return) {
         const action = contextActions[state.contextMenuIndex];
         if (action && selectedItem) {
-          if (action.confirm) {
-            dispatch({ type: 'SET_CONFIRM', action: () => { action.handler(selectedItem); addToast(action.label, 'info'); }, message: action.confirmMessage || 'Are you sure?' });
-          } else {
-            action.handler(selectedItem);
-            addToast(action.label, 'info');
-          }
+          executeAction(action, selectedItem, dispatch, addToast);
           dispatch({ type: 'SET_OVERLAY', overlay: null });
         }
         return;
       }
       const match = contextActions.find(a => a.key === input);
       if (match && selectedItem) {
-        if (match.confirm) {
-          dispatch({ type: 'SET_CONFIRM', action: () => { match.handler(selectedItem); addToast(match.label, 'info'); }, message: match.confirmMessage || 'Are you sure?' });
-        } else {
-          match.handler(selectedItem);
-          addToast(match.label, 'info');
-        }
+        executeAction(match, selectedItem, dispatch, addToast);
         dispatch({ type: 'SET_OVERLAY', overlay: null });
       }
       return;
@@ -253,7 +232,7 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
     }
 
     if (input === 'x') {
-      if (selectedItem && panel.getActions().length > 0) {
+      if (selectedItem && panelActions.length > 0) {
         dispatch({ type: 'SET_OVERLAY', overlay: 'context-menu' });
       }
       return;
@@ -325,15 +304,9 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
 
     // Panel action shortcuts
     if (selectedItem) {
-      const actions = panel.getActions();
-      const actionMatch = actions.find(a => a.key === input && (!a.condition || a.condition(selectedItem)));
+      const actionMatch = panelActions.find(a => a.key === input && (!a.condition || a.condition(selectedItem)));
       if (actionMatch) {
-        if (actionMatch.confirm) {
-          dispatch({ type: 'SET_CONFIRM', action: () => { actionMatch.handler(selectedItem); addToast(actionMatch.label, 'info'); }, message: actionMatch.confirmMessage || 'Are you sure?' });
-        } else {
-          actionMatch.handler(selectedItem);
-          addToast(actionMatch.label, 'info');
-        }
+        executeAction(actionMatch, selectedItem, dispatch, addToast);
       }
     }
   });

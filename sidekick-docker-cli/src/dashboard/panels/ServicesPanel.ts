@@ -1,6 +1,7 @@
 import type { ComposeService, ComposeProject } from 'sidekick-docker-shared';
 import { ComposeClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
+import { defaultOnError } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, truncate, colorizeDetailKey, colorizeState, colorizeId, colorizeLogEntry } from '../../formatters';
 
@@ -17,7 +18,7 @@ export class ServicesPanel implements SidePanel {
   constructor(composeClient: ComposeClient, onAction: () => void, cwd?: string, onError?: (msg: string) => void) {
     this.composeClient = composeClient;
     this.onAction = onAction;
-    this.onError = onError ?? ((msg) => console.debug(msg));
+    this.onError = onError ?? defaultOnError;
     this.cwd = cwd;
   }
 
