@@ -21,6 +21,7 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 PACKAGES=(
+  "package.json"
   "sidekick-docker-shared/package.json"
   "sidekick-docker-cli/package.json"
   "sidekick-docker-vscode/package.json"

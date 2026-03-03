@@ -3,6 +3,7 @@ declare function acquireVsCodeApi(): {
   getState(): unknown;
   setState(state: unknown): void;
 };
+declare const __VERSION__: string;
 
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
@@ -303,7 +304,7 @@ function renderStatusBar(items: PanelItem[]): void {
   }
 
   $statusBar.innerHTML = `
-    <span class="brand">\u26A1 SIDEKICK Docker v0.1.0</span>
+    <span class="brand">\u26A1 SIDEKICK Docker v${__VERSION__}</span>
     <span class="hints">${escapeHtml(hints)}${hints ? '  ' : ''}/ filter  x actions  1-5 panels</span>
     ${filterHtml}
     <span class="connection">${connDot}<span class="conn-text">${connText}</span></span>
