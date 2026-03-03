@@ -29,7 +29,7 @@ export function DetailTabBar({ tabs, activeIndex }: DetailTabBarProps): React.Re
         );
       })}
       <Box flexGrow={1} />
-      <Text color="gray">{'[ ] switch'}</Text>
+      <Text color="gray" dimColor>{'[/] cycle tabs'}</Text>
     </Box>
   );
 }

@@ -24,7 +24,9 @@ function formatAgo(date: Date): { text: string; stale: boolean } {
   return { text: `${mins}m ago`, stale: mins >= 1 };
 }
 
-export function StatusBar({ daemonConnected, focusTarget, panelHints, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh }: StatusBarProps): React.ReactElement {
+const SEP = '\u2502'; // │ vertical bar separator
+
+export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh }: StatusBarProps): React.ReactElement {
   // Re-render periodically to keep "ago" text fresh
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -36,26 +38,43 @@ export function StatusBar({ daemonConnected, focusTarget, panelHints, panelActio
 
   return (
     <Box>
-      <Text bold color="magenta">{` ${BRAND_INLINE}`}</Text>
-      <Text color="gray">{` ${BRAND_TAGLINE} v${version}`}</Text>
-      <Text color="gray">{'  '}</Text>
+      {/* Brand + version */}
+      <Text bold color="magenta">{` \u26A1 ${BRAND_INLINE}`}</Text>
+      <Text color="gray" dimColor>{` ${BRAND_TAGLINE} v${version}`}</Text>
+
+      {/* Separator */}
+      <Text color="gray" dimColor>{` ${SEP} `}</Text>
+
+      {/* Daemon status */}
       <Text color={daemonConnected ? 'green' : 'red'}>
         {daemonConnected ? `\u25CF ${runningCount ?? 0}/${containerCount ?? 0}` : '\u25CB disconnected'}
       </Text>
       {ago && (
-        <Text color={ago.stale ? 'yellow' : 'gray'}>
-          {`  \u21BB ${ago.text}`}
+        <Text color={ago.stale ? 'yellow' : 'gray'} dimColor={!ago.stale}>
+          {` \u21BB ${ago.text}`}
         </Text>
       )}
-      <Text color="gray">{'  '}</Text>
-      {panelActionHints ? <Text color="gray">{`${panelActionHints}  `}</Text> : null}
-      <Text color="gray">
-        {panelHints}
-        {focusTarget === 'side' ? 'j/k nav  Tab focus  ' : 'j/k scroll  Tab focus  '}
-        {'/ filter  ? help  q quit'}
+
+      {/* Separator */}
+      <Text color="gray" dimColor>{` ${SEP} `}</Text>
+
+      {/* Panel actions */}
+      {panelActionHints ? (
+        <>
+          <Text color="#2B4C7E">{panelActionHints}</Text>
+          <Text color="gray" dimColor>{` ${SEP} `}</Text>
+        </>
+      ) : null}
+
+      {/* Navigation hints */}
+      <Text color="gray" dimColor>
+        {focusTarget === 'side' ? 'j/k nav  Tab focus' : 'j/k scroll  Tab focus'}
+        {'  /filter  ?help  q quit'}
       </Text>
+
+      {/* Active filter indicator */}
       {filterString ? (
-        <Text color="yellow">{`  Filter: "${filterString}"${matchCount !== undefined && totalCount !== undefined ? ` (${matchCount} of ${totalCount})` : ''}`}</Text>
+        <Text color="yellow" bold>{`  \u25C9 "${filterString}"${matchCount !== undefined && totalCount !== undefined ? ` ${matchCount}/${totalCount}` : ''}`}</Text>
       ) : null}
     </Box>
   );

@@ -15,11 +15,11 @@ export function FilterOverlay({ filterString, matchCount, totalCount, panelTitle
 
   return (
     <Box position="absolute" marginTop={1} marginLeft={1}>
-      <Text backgroundColor="gray" color="white">
-        {` / ${filterString}\u2588 `}
+      <Text backgroundColor="#2B4C7E" color="white" bold>
+        {` \u2315 ${filterString}\u2588 `}
       </Text>
       {countInfo && (
-        <Text color="gray">{countInfo}</Text>
+        <Text color="gray" dimColor>{countInfo}</Text>
       )}
     </Box>
   );

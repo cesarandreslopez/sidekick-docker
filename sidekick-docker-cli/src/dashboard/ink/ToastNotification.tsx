@@ -30,12 +30,18 @@ export function ToastNotification({ toast }: ToastNotificationProps): React.Reac
     return () => clearInterval(timer);
   }, [toast.id, toast.severity]);
 
-  const spinner = toast.severity === 'info' ? `${SPINNER_FRAMES[frame]} ` : '';
+  const SEVERITY_ICONS: Record<string, string> = {
+    error: '\u2717',    // ✗
+    warning: '\u26A0',  // ⚠
+    info: SPINNER_FRAMES[frame],
+  };
+
+  const icon = SEVERITY_ICONS[toast.severity] || '';
 
   return (
     <Box position="absolute" marginTop={0} justifyContent="flex-end">
-      <Text color={SEVERITY_COLORS[toast.severity] || 'white'}>
-        {` ${spinner}${toast.message} `}
+      <Text backgroundColor={SEVERITY_COLORS[toast.severity] || 'white'} color="white" bold>
+        {` ${icon} ${toast.message} `}
       </Text>
     </Box>
   );

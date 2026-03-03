@@ -18,22 +18,33 @@ export function ContextMenuOverlay({ actions, selectedIndex }: ContextMenuOverla
       borderColor="cyan"
       paddingX={1}
     >
-      <Text bold color="cyan">{'Actions'}</Text>
+      <Text bold color="cyan">{'\u2630 Actions'}</Text>
       {actions.map((action, i) => {
         const isSelected = i === selectedIndex;
+        const isDanger = !!action.confirm;
+        // Unselected: danger actions in red, normal in white
+        // Selected: inverse highlight
+        const color = isSelected ? (isDanger ? 'red' : '#2B4C7E') : (isDanger ? 'red' : 'white');
         return (
           <Box key={action.key}>
             <Text
-              color={isSelected ? '#2B4C7E' : 'white'}
+              color={color}
               bold={isSelected}
               inverse={isSelected}
             >
-              {` ${action.key} ${action.label} `}
+              {` ${action.key} `}
+            </Text>
+            <Text
+              color={color}
+              bold={isSelected}
+              inverse={isSelected}
+            >
+              {`${action.label}${isDanger ? ' \u26A0' : ''} `}
             </Text>
           </Box>
         );
       })}
-      <Text color="gray">{'Esc to close'}</Text>
+      <Text color="gray" dimColor>{'Esc to close'}</Text>
     </Box>
   );
 }

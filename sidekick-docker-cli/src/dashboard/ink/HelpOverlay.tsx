@@ -12,16 +12,22 @@ interface HelpOverlayProps {
 const GLOBAL_BINDINGS = [
   { key: '1-5', label: 'Switch panel' },
   { key: 'j/k', label: 'Navigate / scroll' },
-  { key: 'g/G', label: 'First / last item' },
-  { key: 'Tab', label: 'Toggle focus (side/detail)' },
-  { key: '[/]', label: 'Prev / next detail tab' },
-  { key: 'z', label: 'Cycle layout mode' },
+  { key: 'g/G', label: 'Jump to first / last' },
+  { key: 'Tab', label: 'Toggle focus' },
+  { key: '[/]', label: 'Cycle detail tabs' },
+  { key: 'z', label: 'Toggle expanded layout' },
   { key: '/', label: 'Filter items' },
-  { key: 'x', label: 'Context menu (actions)' },
+  { key: 'x', label: 'Actions menu' },
   { key: 'V', label: 'Version info' },
-  { key: '?', label: 'Toggle help' },
+  { key: '?', label: 'This help' },
   { key: 'q', label: 'Quit' },
 ];
+
+function KeyBadge({ k }: { k: string }): React.ReactElement {
+  return (
+    <Text color="white" backgroundColor="#2B4C7E" bold>{` ${k} `}</Text>
+  );
+}
 
 export function HelpOverlay({ panels, activePanelIndex, version }: HelpOverlayProps): React.ReactElement {
   const panel = panels[activePanelIndex];
@@ -30,35 +36,49 @@ export function HelpOverlay({ panels, activePanelIndex, version }: HelpOverlayPr
   return (
     <Box flexDirection="column" flexGrow={1} padding={1}>
       <Box>
-        <Text bold color="magenta">{`${BRAND_INLINE} ${BRAND_TAGLINE}`}</Text>
-        <Text color="gray">{` v${version}`}</Text>
+        <Text bold color="magenta">{`\u26A1 ${BRAND_INLINE} ${BRAND_TAGLINE}`}</Text>
+        <Text color="gray" dimColor>{` v${version}`}</Text>
       </Box>
       <Text>{''}</Text>
 
-      <Text bold color="yellow">{'Navigation'}</Text>
+      {/* Navigation Section */}
+      <Box>
+        <Text bold color="yellow">{'\u2500\u2500 Navigation '}</Text>
+        <Text color="gray" dimColor>{'\u2500'.repeat(30)}</Text>
+      </Box>
+      <Text>{''}</Text>
       {GLOBAL_BINDINGS.map(b => (
-        <Text key={b.key}>
-          <Text color="#2B4C7E">{`  ${b.key.padEnd(8)}`}</Text>
-          <Text>{b.label}</Text>
-        </Text>
+        <Box key={b.key}>
+          <Box width={10} justifyContent="flex-end" marginRight={1}>
+            <KeyBadge k={b.key} />
+          </Box>
+          <Text color="gray">{b.label}</Text>
+        </Box>
       ))}
 
+      {/* Panel Actions Section */}
       {actions.length > 0 && (
         <>
           <Text>{''}</Text>
-          <Text bold color="yellow">{`${panel.title} Actions`}</Text>
+          <Box>
+            <Text bold color="yellow">{`\u2500\u2500 ${panel.title} Actions `}</Text>
+            <Text color="gray" dimColor>{'\u2500'.repeat(24)}</Text>
+          </Box>
+          <Text>{''}</Text>
           {actions.map(a => (
-            <Text key={a.key}>
-              <Text color="#2B4C7E">{`  ${a.key.padEnd(8)}`}</Text>
-              <Text>{a.label}</Text>
-              {a.confirm && <Text color="red">{' (requires confirmation)'}</Text>}
-            </Text>
+            <Box key={a.key}>
+              <Box width={10} justifyContent="flex-end" marginRight={1}>
+                <KeyBadge k={a.key} />
+              </Box>
+              <Text color={a.confirm ? 'red' : 'gray'}>{a.label}</Text>
+              {a.confirm && <Text color="red" dimColor>{' \u26A0'}</Text>}
+            </Box>
           ))}
         </>
       )}
 
       <Text>{''}</Text>
-      <Text color="gray">{'Press ? or Esc to close'}</Text>
+      <Text color="gray" dimColor>{'Press ? or Esc to close'}</Text>
     </Box>
   );
 }

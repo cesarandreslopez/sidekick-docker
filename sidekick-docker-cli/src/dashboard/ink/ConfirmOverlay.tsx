@@ -16,17 +16,22 @@ export function ConfirmOverlay({ message }: ConfirmOverlayProps): React.ReactEle
       flexDirection="column"
       borderStyle="double"
       borderColor="red"
-      paddingX={1}
+      paddingX={2}
+      paddingY={1}
     >
-      <Text bold color="red">{' Confirm '}</Text>
-      <Text>{` ${message}`}</Text>
+      <Box>
+        <Text color="red" bold>{'\u26A0 '}</Text>
+        <Text bold color="red">{'Confirm Action'}</Text>
+      </Box>
       <Text>{''}</Text>
-      <Text>
-        <Text color="green">{' y '}</Text>
-        <Text>{'Yes  '}</Text>
-        <Text color="red">{' n '}</Text>
-        <Text>{'No'}</Text>
-      </Text>
+      <Text>{` ${message}`}</Text>
+      <Text color="gray" dimColor>{'  This cannot be undone.'}</Text>
+      <Text>{''}</Text>
+      <Box>
+        <Text backgroundColor="green" color="white" bold>{' y Yes '}</Text>
+        <Text>{'  '}</Text>
+        <Text backgroundColor="red" color="white" bold>{' n No '}</Text>
+      </Box>
     </Box>
   );
 }

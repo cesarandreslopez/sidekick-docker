@@ -119,17 +119,21 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
         <Text color="gray">{` \u25BC (${belowCount} more)`}</Text>
       )}
       {items.length === 0 && filterString && (
-        <Box flexDirection="column">
-          <Text color="gray">{` No matches for "${filterString}"`}</Text>
-          <Text color="gray">{' Press Esc to clear'}</Text>
+        <Box flexDirection="column" paddingTop={1}>
+          <Text color="yellow">{` \u2717 No matches for "${filterString}"`}</Text>
+          <Text color="gray" dimColor>{' Press Esc to clear filter'}</Text>
         </Box>
       )}
       {items.length === 0 && !filterString && (
-        <Box flexDirection="column">
-          <Text color="gray">{` No ${panelTitle.toLowerCase()} found`}</Text>
-          {panelId && EMPTY_HINTS[panelId]?.map((hint, i) => (
-            <Text key={i} color="gray">{` ${hint}`}</Text>
-          ))}
+        <Box flexDirection="column" paddingTop={1}>
+          <Text color="gray">{` \u2500 No ${panelTitle.toLowerCase()} found`}</Text>
+          {panelId && EMPTY_HINTS[panelId] && (
+            <>
+              <Text>{''}</Text>
+              <Text color="gray" dimColor>{` ${EMPTY_HINTS[panelId][0]}`}</Text>
+              <Text color="#2B4C7E" bold>{` ${EMPTY_HINTS[panelId][1]}`}</Text>
+            </>
+          )}
         </Box>
       )}
     </Box>
