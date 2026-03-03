@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getRandomPhrase } from 'sidekick-docker-shared';
+import { getRandomPhrase, errorMessage } from 'sidekick-docker-shared';
 import { getNonce } from '../utils/nonce';
 import { DockerService } from '../services/DockerService';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
@@ -203,8 +203,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
       this._postMessage({ type: 'toast', message: `${actionType} completed`, severity: 'info' });
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this._postMessage({ type: 'toast', message: `${actionType} failed: ${msg}`, severity: 'error' });
+      this._postMessage({ type: 'toast', message: `${actionType} failed: ${errorMessage(err)}`, severity: 'error' });
     }
   }
 

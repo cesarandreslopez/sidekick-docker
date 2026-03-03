@@ -7,10 +7,8 @@ import type {
   DockerEvent,
   ComposeFileConfig,
 } from 'sidekick-docker-shared';
-import { DockerClient, ComposeDetector, StatsCollector, ComposeFileReader } from 'sidekick-docker-shared';
+import { DockerClient, ComposeDetector, StatsCollector, ComposeFileReader, MAX_LOG_LINES } from 'sidekick-docker-shared';
 import type { LogEntry, FilterMode, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
-
-const MAX_LOG_LINES = 1000;
 
 export interface DockerDashboardMetrics {
   containers: ContainerInfo[];

@@ -44,6 +44,15 @@ export {
   stateColor,
 } from './formatters';
 
+// Reconnect
+export { ReconnectScheduler, INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY, MAX_RECONNECT_ATTEMPTS } from './reconnect';
+
+// Errors
+export { errorMessage } from './errors';
+
+// Constants
+export const MAX_LOG_LINES = 1000;
+
 // Branding & phrases
 export { BRAND_INLINE, BRAND_TAGLINE, BRAND_COLOR_HEX, BRAND_COLOR_ANSI, BRAND_COLOR_ANSI_RESET } from './branding';
 export { getRandomPhrase } from './phrases';

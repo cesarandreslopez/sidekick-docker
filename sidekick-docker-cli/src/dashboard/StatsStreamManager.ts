@@ -1,9 +1,5 @@
 import type { DockerClient } from 'sidekick-docker-shared';
-import { StatsCollector } from 'sidekick-docker-shared';
-
-const INITIAL_RECONNECT_DELAY = 2000;
-const MAX_RECONNECT_DELAY = 30_000;
-const MAX_RECONNECT_ATTEMPTS = 10;
+import { StatsCollector, ReconnectScheduler, errorMessage } from 'sidekick-docker-shared';
 
 /**
  * Manages stats streaming for the currently selected container.
@@ -17,9 +13,7 @@ export class StatsStreamManager {
   private currentContainerId: string | null = null;
   private aborted = false;
   private streamPromise: Promise<void> | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private reconnectAttempts = 0;
-  private reconnectDelay = INITIAL_RECONNECT_DELAY;
+  private reconnect = new ReconnectScheduler();
   private onChange: () => void;
   private loadingInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -39,8 +33,7 @@ export class StatsStreamManager {
     if (!containerId) return;
 
     this.aborted = false;
-    this.reconnectAttempts = 0;
-    this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+    this.reconnect.reset();
 
     // Drive rerenders during the loading gap so the spinner animates
     this.loadingInterval = setInterval(() => this.onChange(), 200);
@@ -65,48 +58,30 @@ export class StatsStreamManager {
         this.onChange();
       }
       // Stream ended normally — reset backoff
-      this.reconnectAttempts = 0;
-      this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+      this.reconnect.reset();
     } catch (err) {
-      console.debug('stats stream error:', err instanceof Error ? err.message : String(err));
+      console.debug('stats stream error:', errorMessage(err));
     }
 
     // Auto-reconnect if still selected for this container
     if (!this.aborted && this.currentContainerId === containerId) {
-      this.scheduleReconnect(containerId);
-    }
-  }
-
-  private scheduleReconnect(containerId: string): void {
-    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.debug(`stats stream: gave up after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts for ${containerId}`);
-      return;
-    }
-
-    this.clearReconnectTimer();
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (!this.aborted && this.currentContainerId === containerId) {
-        this.reconnectAttempts++;
-        this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
-        // Re-start loading spinner for the reconnect gap
-        this.loadingInterval = setInterval(() => this.onChange(), 200);
-        this.streamPromise = this.streamStats(containerId);
+      const scheduled = this.reconnect.schedule(() => {
+        if (!this.aborted && this.currentContainerId === containerId) {
+          // Re-start loading spinner for the reconnect gap
+          this.loadingInterval = setInterval(() => this.onChange(), 200);
+          this.streamPromise = this.streamStats(containerId);
+        }
+      });
+      if (!scheduled) {
+        console.debug(`stats stream: gave up reconnecting for ${containerId}`);
       }
-    }, this.reconnectDelay);
-  }
-
-  private clearReconnectTimer(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
     }
   }
 
   stop(): void {
     this.aborted = true;
     this.clearLoadingInterval();
-    this.clearReconnectTimer();
+    this.reconnect.clear();
     this.currentContainerId = null;
     this.streamPromise = null;
   }

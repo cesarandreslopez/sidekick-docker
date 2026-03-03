@@ -1,4 +1,4 @@
-import { DockerClient } from 'sidekick-docker-shared';
+import { DockerClient, errorMessage } from 'sidekick-docker-shared';
 
 export async function logsAction(container: string, opts: { follow?: boolean; tail?: string }): Promise<void> {
   const client = new DockerClient();
@@ -20,7 +20,7 @@ export async function logsAction(container: string, opts: { follow?: boolean; ta
       console.log(`${prefix}${ts} ${entry.message}${reset}`);
     }
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     if (msg.includes('no such container') || msg.includes('No such container')) {
       console.error(`Error: Container "${container}" not found.`);
     } else {

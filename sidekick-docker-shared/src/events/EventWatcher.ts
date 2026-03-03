@@ -1,8 +1,6 @@
 import type { DockerClient } from '../docker/DockerClient';
 import type { DockerEvent } from '../types/events';
-
-const INITIAL_RECONNECT_DELAY = 1000;
-const MAX_RECONNECT_DELAY = 30_000;
+import { INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY } from '../reconnect';
 
 export interface EventWatcherCallbacks {
   onEvent: (event: DockerEvent) => void;
@@ -20,7 +18,6 @@ export class EventWatcher {
   private running = false;
   private abortController: AbortController | null = null;
   private reconnectDelay = INITIAL_RECONNECT_DELAY;
-  private maxReconnectDelay = MAX_RECONNECT_DELAY;
 
   constructor(client: DockerClient, callbacks: EventWatcherCallbacks) {
     this.client = client;
@@ -61,14 +58,22 @@ export class EventWatcher {
 
       if (!this.running) break;
 
-      // Exponential backoff reconnect
+      // Exponential backoff reconnect (cancellable via abort)
       this.callbacks.onReconnect?.();
-      await sleep(this.reconnectDelay);
-      this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
+      await this.cancellableSleep(this.reconnectDelay);
+      this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
     }
   }
-}
 
-function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  /** Sleep that resolves early when stop() is called. */
+  private cancellableSleep(ms: number): Promise<void> {
+    return new Promise(resolve => {
+      const timer = setTimeout(resolve, ms);
+      // Listen for abort to cancel the sleep
+      this.abortController?.signal.addEventListener('abort', () => {
+        clearTimeout(timer);
+        resolve();
+      }, { once: true });
+    });
+  }
 }

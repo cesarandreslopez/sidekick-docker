@@ -5,6 +5,7 @@ import {
   ComposeFileReader,
   EventWatcher,
   StatsCollector,
+  MAX_LOG_LINES,
 } from 'sidekick-docker-shared';
 import type {
   ContainerInfo,
@@ -16,7 +17,6 @@ import type {
   ContainerStats,
   ComposeFileConfig,
 } from 'sidekick-docker-shared';
-const MAX_LOG_LINES = 1000;
 
 import type {
   DashboardStateSnapshot,

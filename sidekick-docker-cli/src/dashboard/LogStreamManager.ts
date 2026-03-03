@@ -1,11 +1,6 @@
 import type { DockerClient } from 'sidekick-docker-shared';
 import type { LogEntry, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
-import { LogAnalytics, LogSeverityTimeSeries, LogTemplateEngine } from 'sidekick-docker-shared';
-
-const MAX_LOG_LINES = 1000;
-const INITIAL_RECONNECT_DELAY = 2000;
-const MAX_RECONNECT_DELAY = 30_000;
-const MAX_RECONNECT_ATTEMPTS = 10;
+import { LogAnalytics, LogSeverityTimeSeries, LogTemplateEngine, ReconnectScheduler, MAX_LOG_LINES, errorMessage } from 'sidekick-docker-shared';
 
 /**
  * Manages log streaming for the currently selected container.
@@ -19,9 +14,7 @@ export class LogStreamManager {
   private logs: LogEntry[] = [];
   private aborted = false;
   private streamPromise: Promise<void> | null = null;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private reconnectAttempts = 0;
-  private reconnectDelay = INITIAL_RECONNECT_DELAY;
+  private reconnect = new ReconnectScheduler();
   private onChange: () => void;
   private analytics = new LogAnalytics();
   private timeSeries = new LogSeverityTimeSeries();
@@ -49,8 +42,7 @@ export class LogStreamManager {
 
     // Start new stream
     this.aborted = false;
-    this.reconnectAttempts = 0;
-    this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+    this.reconnect.reset();
     this.streamPromise = this.streamLogs(containerId);
   }
 
@@ -73,39 +65,21 @@ export class LogStreamManager {
         this.onChange();
       }
       // Stream ended normally — reset backoff
-      this.reconnectAttempts = 0;
-      this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+      this.reconnect.reset();
     } catch (err) {
-      console.debug('log stream error:', err instanceof Error ? err.message : String(err));
+      console.debug('log stream error:', errorMessage(err));
     }
 
     // Auto-reconnect if still selected for this container
     if (!this.aborted && this.currentContainerId === containerId) {
-      this.scheduleReconnect(containerId);
-    }
-  }
-
-  private scheduleReconnect(containerId: string): void {
-    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.debug(`log stream: gave up after ${MAX_RECONNECT_ATTEMPTS} reconnect attempts for ${containerId}`);
-      return;
-    }
-
-    this.clearReconnectTimer();
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (!this.aborted && this.currentContainerId === containerId) {
-        this.reconnectAttempts++;
-        this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
-        this.streamPromise = this.streamLogs(containerId);
+      const scheduled = this.reconnect.schedule(() => {
+        if (!this.aborted && this.currentContainerId === containerId) {
+          this.streamPromise = this.streamLogs(containerId);
+        }
+      });
+      if (!scheduled) {
+        console.debug(`log stream: gave up reconnecting for ${containerId}`);
       }
-    }, this.reconnectDelay);
-  }
-
-  private clearReconnectTimer(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
     }
   }
 
@@ -113,7 +87,7 @@ export class LogStreamManager {
     this.aborted = true;
     this.currentContainerId = null;
     this.streamPromise = null;
-    this.clearReconnectTimer();
+    this.reconnect.clear();
   }
 
   getLogs(): LogEntry[] {

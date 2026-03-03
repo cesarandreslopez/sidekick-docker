@@ -1,12 +1,11 @@
 import type { ComposeClient } from 'sidekick-docker-shared';
 import type { LogEntry } from 'sidekick-docker-shared';
-
-const MAX_LOG_LINES = 1000;
-const RECONNECT_DELAY = 2000;
+import { ReconnectScheduler, MAX_LOG_LINES, errorMessage } from 'sidekick-docker-shared';
 
 /**
  * Manages compose log streaming for the currently selected project/service.
  * Selection-driven: starts stream when selected, stops when deselected.
+ * Auto-reconnects with exponential backoff when a stream ends.
  */
 export class ComposeLogStreamManager {
   private composeClient: ComposeClient;
@@ -14,7 +13,7 @@ export class ComposeLogStreamManager {
   private currentService: string | null = null;
   private logs: LogEntry[] = [];
   private aborted = false;
-  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private reconnect = new ReconnectScheduler();
   private onChange: () => void;
 
   constructor(composeClient: ComposeClient, onChange: () => void) {
@@ -34,6 +33,7 @@ export class ComposeLogStreamManager {
     if (!project) return;
 
     this.aborted = false;
+    this.reconnect.reset();
     this.streamLogs(project, service);
   }
 
@@ -49,30 +49,22 @@ export class ComposeLogStreamManager {
 
         this.onChange();
       }
+      // Stream ended normally — reset backoff
+      this.reconnect.reset();
     } catch (err) {
-      console.debug('compose log stream error:', err instanceof Error ? err.message : String(err));
+      console.debug('compose log stream error:', errorMessage(err));
     }
 
     // Auto-reconnect if still selected for this project
     if (!this.aborted && this.currentProject === project) {
-      this.scheduleReconnect(project, service);
-    }
-  }
-
-  private scheduleReconnect(project: string, service: string | null): void {
-    this.clearReconnectTimer();
-    this.reconnectTimer = setTimeout(() => {
-      this.reconnectTimer = null;
-      if (!this.aborted && this.currentProject === project) {
-        this.streamLogs(project, service);
+      const scheduled = this.reconnect.schedule(() => {
+        if (!this.aborted && this.currentProject === project) {
+          this.streamLogs(project, service);
+        }
+      });
+      if (!scheduled) {
+        console.debug(`compose log stream: gave up reconnecting for ${project}`);
       }
-    }, RECONNECT_DELAY);
-  }
-
-  private clearReconnectTimer(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
     }
   }
 
@@ -80,7 +72,7 @@ export class ComposeLogStreamManager {
     this.aborted = true;
     this.currentProject = null;
     this.currentService = null;
-    this.clearReconnectTimer();
+    this.reconnect.clear();
   }
 
   getLogs(): LogEntry[] {
