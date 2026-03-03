@@ -95,7 +95,7 @@ export class DockerState {
       case 'network':
         // For non-container resources, trigger a full refresh
         // These events are less frequent, so the overhead is acceptable
-        this.refresh().catch(() => {});
+        this.refresh().catch(e => console.debug('refresh failed:', e));
         break;
     }
   }
@@ -113,7 +113,7 @@ export class DockerState {
           existing.status = 'Up just now';
         }
         // Trigger full refresh for accurate data
-        this.refresh().catch(() => {});
+        this.refresh().catch(e => console.debug('refresh failed:', e));
         break;
       }
       case 'stop':
@@ -138,12 +138,12 @@ export class DockerState {
         break;
       case 'create':
         // New container — refresh to get full info
-        this.refresh().catch(() => {});
+        this.refresh().catch(e => console.debug('refresh failed:', e));
         break;
       default:
         // rename, update, etc. — refresh
         if (name) {
-          this.refresh().catch(() => {});
+          this.refresh().catch(e => console.debug('refresh failed:', e));
         }
         break;
     }

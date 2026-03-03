@@ -11,11 +11,13 @@ export class ContainersPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
+  private onError: (msg: string) => void;
   private onExec?: (containerId: string) => void;
 
-  constructor(client: DockerClient, onAction: () => void) {
+  constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
     this.client = client;
     this.onAction = onAction;
+    this.onError = onError ?? ((msg) => console.debug(msg));
   }
 
   setOnExec(handler: (containerId: string) => void): void {
@@ -193,7 +195,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Start',
         handler: (item) => {
           const c = item.data as ContainerInfo;
-          this.client.startContainer(c.id).then(() => this.onAction()).catch(() => {});
+          this.client.startContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => (item.data as ContainerInfo).state !== 'running',
       },
@@ -202,7 +204,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Stop',
         handler: (item) => {
           const c = item.data as ContainerInfo;
-          this.client.stopContainer(c.id).then(() => this.onAction()).catch(() => {});
+          this.client.stopContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => (item.data as ContainerInfo).state === 'running',
       },
@@ -211,7 +213,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Restart',
         handler: (item) => {
           const c = item.data as ContainerInfo;
-          this.client.restartContainer(c.id).then(() => this.onAction()).catch(() => {});
+          this.client.restartContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => (item.data as ContainerInfo).state === 'running',
       },
@@ -222,7 +224,7 @@ export class ContainersPanel implements SidePanel {
         confirmMessage: 'Remove this container?',
         handler: (item) => {
           const c = item.data as ContainerInfo;
-          this.client.removeContainer(c.id, true).then(() => this.onAction()).catch(() => {});
+          this.client.removeContainer(c.id, true).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
       },
       {

@@ -11,10 +11,12 @@ export class ImagesPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
+  private onError: (msg: string) => void;
 
-  constructor(client: DockerClient, onAction: () => void) {
+  constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
     this.client = client;
     this.onAction = onAction;
+    this.onError = onError ?? ((msg) => console.debug(msg));
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -58,7 +60,7 @@ export class ImagesPanel implements SidePanel {
         confirmMessage: 'Remove this image?',
         handler: (item) => {
           const img = item.data as ImageInfo;
-          this.client.removeImage(img.id).then(() => this.onAction()).catch(() => {});
+          this.client.removeImage(img.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
       },
       {
@@ -67,7 +69,7 @@ export class ImagesPanel implements SidePanel {
         confirm: true,
         confirmMessage: 'Prune all dangling images?',
         handler: () => {
-          this.client.pruneImages().then(() => this.onAction()).catch(() => {});
+          this.client.pruneImages().then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
       },
     ];

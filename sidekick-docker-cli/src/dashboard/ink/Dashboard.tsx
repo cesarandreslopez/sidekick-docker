@@ -1,9 +1,11 @@
 import React, { useReducer, useCallback, useEffect, useRef } from 'react';
-import { Box, useInput, useApp } from 'ink';
+import { Box } from 'ink';
 import type { DockerDashboardMetrics } from '../DockerState';
 import type { SidePanel, PanelItem, PanelAction } from '../panels/types';
 import { useTerminalSize } from './useTerminalSize';
 import { useWindowedScroll } from './useWindowedScroll';
+import { useKeyboardHandler } from './useKeyboardHandler';
+import { useMouseHandler } from './useMouseHandler';
 import { TabBar } from './TabBar';
 import { SideList } from './SideList';
 import { DetailTabBar } from './DetailTabBar';
@@ -18,7 +20,6 @@ import { TooSmallOverlay } from './TooSmallOverlay';
 import { ExecOverlay } from './ExecOverlay';
 import { MouseProvider } from './mouse';
 import { enableMouse, disableMouse } from './mouse';
-import type { TerminalMouseEvent } from './mouse';
 import { LogFilterOverlay } from './LogFilterOverlay';
 import { VersionOverlay } from './VersionOverlay';
 import { getRandomPhrase } from 'sidekick-docker-shared';
@@ -150,13 +151,11 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
       const MAX_EXEC_LINES = 5000;
       const parts = action.data.split('\n');
       const lines = [...state.execOutputLines];
-      // Append first part to current (last) line — PTY data is streamed character-by-character
       if (lines.length > 0) {
         lines[lines.length - 1] += parts[0];
       } else {
         lines.push(parts[0]);
       }
-      // Remaining parts after \n are new lines
       for (let i = 1; i < parts.length; i++) {
         lines.push(parts[i]);
       }
@@ -203,7 +202,6 @@ interface DashboardProps {
 
 export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, onExecFallback }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const { exit } = useApp();
   const { columns, rows } = useTerminalSize();
   const toastIdRef = useRef(0);
   const execManagerRef = useRef<ExecManager | null>(null);
@@ -248,7 +246,6 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
         },
       }).then((started) => {
         if (!started) {
-          // node-pty unavailable — fall back to spawnSync teardown
           execManagerRef.current = null;
           enableMouse();
           dispatch({ type: 'EXEC_END' });
@@ -263,7 +260,6 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   useEffect(() => {
     if (state.overlay !== 'exec') return;
     const handler = (data: Buffer) => {
-      // Ctrl+] (0x1d) = detach from exec
       if (data.length === 1 && data[0] === 0x1d) {
         execManagerRef.current?.dispose();
         execManagerRef.current = null;
@@ -371,383 +367,6 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
 
   const contextActions = state.overlay === 'context-menu' ? getContextActions() : [];
 
-  // Mouse input
-  const handleMouse = useCallback((event: TerminalMouseEvent) => {
-    rotatePhrase();
-    // Filter overlay: ignore all mouse events (raw escape bytes leak into filter string)
-    if (state.overlay === 'filter') return;
-    // Overlays: click anywhere dismisses
-    if (state.overlay) {
-      if (event.type === 'click') {
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-      }
-      return;
-    }
-
-    const { x, y } = event;
-
-    // Scroll wheel
-    if (event.type === 'scroll') {
-      if (x < sideWidth && sideWidth > 0) {
-        const delta = event.scrollDirection === 'down' ? 3 : -3;
-        dispatch({ type: 'SCROLL_SIDE', delta, itemCount: currentItems.length });
-        const newIdx = Math.max(0, Math.min(clampedSelection + delta, currentItems.length - 1));
-        sideScroll.setSelected(newIdx);
-      } else {
-        const delta = event.scrollDirection === 'down' ? 3 : -3;
-        dispatch({ type: 'SCROLL_DETAIL_DELTA', delta, totalLines: detailLines.length, viewportHeight: detailViewportHeight });
-      }
-      return;
-    }
-
-    if (event.type !== 'click' || event.button !== 'left') return;
-
-    // Row 0: TabBar
-    if (y === 0) {
-      let col = 0;
-      for (let i = 0; i < panels.length; i++) {
-        // Each tab renders as " N Title" + count + " " + marginRight=1
-        const count = panelCounts[i];
-        let countLen = 0;
-        if (count) {
-          countLen = count.running !== undefined
-            ? ` ${count.running}/${count.total}`.length
-            : ` ${count.total}`.length;
-        }
-        const tabWidth = String(panels[i].shortcutKey).length + panels[i].title.length + 3 + countLen + 1;
-        if (x >= col && x < col + tabWidth) {
-          panels[state.activePanelIndex]?.onDeactivate?.();
-          dispatch({ type: 'SWITCH_PANEL', index: i });
-          panels[i]?.onActivate?.();
-          return;
-        }
-        col += tabWidth;
-      }
-      return;
-    }
-
-    // Last row: StatusBar (no action)
-    if (y >= rows - 1) return;
-
-    // Main content area
-    if (x < sideWidth && sideWidth > 0) {
-      // Click in side list
-      dispatch({ type: 'SET_FOCUS', target: 'side' });
-      // Row 0 = tab bar, row 1 = border/panel title row
-      // When scrolled down, a "▲" indicator takes an extra row
-      const hasScrollUp = sideScroll.scrollOffset > 0;
-      const itemRow = y - 2 - (hasScrollUp ? 1 : 0);
-      const itemIndex = sideScroll.scrollOffset + itemRow;
-      if (itemIndex >= 0 && itemIndex < currentItems.length) {
-        dispatch({ type: 'SELECT_ITEM', index: itemIndex });
-        sideScroll.setSelected(itemIndex);
-      }
-    } else {
-      // Click in detail area
-      dispatch({ type: 'SET_FOCUS', target: 'detail' });
-
-      // Row 1 = DetailTabBar — check for tab click
-      if (y === 1 && detailTabs.length > 1) {
-        let col = sideWidth;
-        for (let i = 0; i < detailTabs.length; i++) {
-          // "▸ Label" or "  Label" + marginRight=1
-          const tabWidth = detailTabs[i].label.length + 3;
-          if (x >= col && x < col + tabWidth) {
-            dispatch({ type: 'SET_DETAIL_TAB', index: i });
-            return;
-          }
-          col += tabWidth;
-        }
-      }
-    }
-  }, [state.overlay, state.activePanelIndex, sideWidth, currentItems.length, clampedSelection, sideScroll, detailLines.length, detailViewportHeight, panels, detailTabs, rows, rotatePhrase]);
-
-  // Keyboard input
-  useInput((input, key) => {
-    // Exec overlay: all input handled via raw stdin handler, ignore here
-    if (state.overlay === 'exec') return;
-    rotatePhrase();
-
-    // Quit
-    if (input === 'q' || (key.ctrl && input === 'c')) {
-      if (state.overlay) {
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      exit();
-      return;
-    }
-
-    // Confirm overlay
-    if (state.overlay === 'confirm') {
-      if (input === 'y' || input === 'Y') {
-        state.confirmAction?.();
-        dispatch({ type: 'SET_CONFIRM', action: null, message: '' });
-        return;
-      }
-      if (input === 'n' || input === 'N' || key.escape) {
-        dispatch({ type: 'SET_CONFIRM', action: null, message: '' });
-        return;
-      }
-      return;
-    }
-
-    // Filter overlay (panel item filter)
-    if (state.overlay === 'filter') {
-      if (key.escape) {
-        if (state.filterString) addToast('Filter cleared', 'info');
-        dispatch({ type: 'SET_FILTER', value: '' });
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (key.return) {
-        if (state.filterString) addToast(`Filter: "${state.filterString}"`, 'info');
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (key.backspace || key.delete) {
-        dispatch({ type: 'SET_FILTER', value: state.filterString.slice(0, -1) });
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        dispatch({ type: 'SET_FILTER', value: state.filterString + input });
-        return;
-      }
-      return;
-    }
-
-    // Log filter overlay (log content filter)
-    if (state.overlay === 'log-filter') {
-      if (key.escape) {
-        if (state.logFilterString) addToast('Log filter cleared', 'info');
-        dispatch({ type: 'SET_LOG_FILTER', value: '' });
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (key.return) {
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (key.tab) {
-        dispatch({ type: 'TOGGLE_LOG_FILTER_MODE' });
-        return;
-      }
-      if (key.backspace || key.delete) {
-        dispatch({ type: 'SET_LOG_FILTER', value: state.logFilterString.slice(0, -1) });
-        return;
-      }
-      if (input && !key.ctrl && !key.meta) {
-        dispatch({ type: 'SET_LOG_FILTER', value: state.logFilterString + input });
-        return;
-      }
-      return;
-    }
-
-    // Context menu
-    if (state.overlay === 'context-menu') {
-      if (key.escape) {
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-        return;
-      }
-      if (input === 'j' || key.downArrow) {
-        dispatch({ type: 'CONTEXT_MENU_NAV', delta: 1, itemCount: contextActions.length });
-        return;
-      }
-      if (input === 'k' || key.upArrow) {
-        dispatch({ type: 'CONTEXT_MENU_NAV', delta: -1, itemCount: contextActions.length });
-        return;
-      }
-      if (key.return) {
-        const action = contextActions[state.contextMenuIndex];
-        if (action && selectedItem) {
-          if (action.confirm) {
-            dispatch({ type: 'SET_CONFIRM', action: () => { action.handler(selectedItem); addToast(action.label, 'info'); }, message: action.confirmMessage || 'Are you sure?' });
-          } else {
-            action.handler(selectedItem);
-            addToast(action.label, 'info');
-          }
-          dispatch({ type: 'SET_OVERLAY', overlay: null });
-        }
-        return;
-      }
-      const match = contextActions.find(a => a.key === input);
-      if (match && selectedItem) {
-        if (match.confirm) {
-          dispatch({ type: 'SET_CONFIRM', action: () => { match.handler(selectedItem); addToast(match.label, 'info'); }, message: match.confirmMessage || 'Are you sure?' });
-        } else {
-          match.handler(selectedItem);
-          addToast(match.label, 'info');
-        }
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-      }
-      return;
-    }
-
-    // Help overlay
-    if (state.overlay === 'help') {
-      if (key.escape || input === '?') {
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-      }
-      return;
-    }
-
-    // Version overlay
-    if (state.overlay === 'version') {
-      if (key.escape || input === 'V') {
-        dispatch({ type: 'SET_OVERLAY', overlay: null });
-      }
-      return;
-    }
-
-    // Global keys
-    if (key.escape) {
-      if (state.filterString) {
-        dispatch({ type: 'SET_FILTER', value: '' });
-        return;
-      }
-      if (state.focusTarget === 'detail') {
-        dispatch({ type: 'SET_FOCUS', target: 'side' });
-        return;
-      }
-      return;
-    }
-
-    if (input === '?') {
-      dispatch({ type: 'SET_OVERLAY', overlay: 'help' });
-      return;
-    }
-
-    if (input === 'V') {
-      dispatch({ type: 'SET_OVERLAY', overlay: 'version' });
-      return;
-    }
-
-    // Panel switching
-    const num = parseInt(input, 10);
-    if (num >= 1 && num <= panels.length) {
-      panels[state.activePanelIndex]?.onDeactivate?.();
-      dispatch({ type: 'SWITCH_PANEL', index: num - 1 });
-      panels[num - 1]?.onActivate?.();
-      return;
-    }
-
-    if (key.tab) {
-      dispatch({ type: 'TOGGLE_FOCUS' });
-      return;
-    }
-
-    if (input === 'z') {
-      dispatch({ type: 'CYCLE_LAYOUT' });
-      addToast(`Layout: ${state.layoutMode === 'normal' ? 'Expanded' : 'Normal'}`, 'info');
-      return;
-    }
-
-    if (input === '/') {
-      dispatch({ type: 'SET_OVERLAY', overlay: 'filter' });
-      return;
-    }
-
-    if (input === 'f') {
-      // Open log filter when on Logs tab of containers panel
-      if (panel.id === 'containers' && tabIdx === 0) {
-        dispatch({ type: 'SET_OVERLAY', overlay: 'log-filter' });
-        return;
-      }
-    }
-
-    if (input === 'x') {
-      if (selectedItem && panel.getActions().length > 0) {
-        dispatch({ type: 'SET_OVERLAY', overlay: 'context-menu' });
-      }
-      return;
-    }
-
-    if (input === '[') {
-      dispatch({ type: 'CYCLE_DETAIL_TAB', direction: -1, tabCount: detailTabs.length });
-      return;
-    }
-    if (input === ']') {
-      dispatch({ type: 'CYCLE_DETAIL_TAB', direction: 1, tabCount: detailTabs.length });
-      return;
-    }
-
-    // Navigation
-    if (state.focusTarget === 'side') {
-      if (input === 'j' || key.downArrow) {
-        if (clampedSelection < currentItems.length - 1) {
-          dispatch({ type: 'SELECT_ITEM', index: clampedSelection + 1 });
-          sideScroll.selectNext();
-        }
-        return;
-      }
-      if (input === 'k' || key.upArrow) {
-        if (clampedSelection > 0) {
-          dispatch({ type: 'SELECT_ITEM', index: clampedSelection - 1 });
-          sideScroll.selectPrev();
-        }
-        return;
-      }
-      if (input === 'g') {
-        dispatch({ type: 'SELECT_ITEM', index: 0 });
-        sideScroll.selectFirst();
-        return;
-      }
-      if (input === 'G') {
-        dispatch({ type: 'SELECT_ITEM', index: Math.max(0, currentItems.length - 1) });
-        sideScroll.selectLast();
-        return;
-      }
-      if (key.return) {
-        dispatch({ type: 'SET_FOCUS', target: 'detail' });
-        return;
-      }
-    }
-
-    if (state.focusTarget === 'detail') {
-      if (input === 'j' || key.downArrow) {
-        dispatch({ type: 'SCROLL_DETAIL_DELTA', delta: 1, totalLines: detailLines.length, viewportHeight: detailViewportHeight });
-        return;
-      }
-      if (input === 'k' || key.upArrow) {
-        dispatch({ type: 'SCROLL_DETAIL_DELTA', delta: -1, totalLines: detailLines.length, viewportHeight: detailViewportHeight });
-        return;
-      }
-      if (input === 'h' || key.leftArrow) {
-        dispatch({ type: 'SET_FOCUS', target: 'side' });
-        return;
-      }
-      if (input === 'g') {
-        dispatch({ type: 'SCROLL_DETAIL', offset: 0 });
-        return;
-      }
-      if (input === 'G') {
-        dispatch({ type: 'SCROLL_DETAIL', offset: Math.max(0, detailLines.length - detailViewportHeight) });
-        return;
-      }
-    }
-
-    // Panel action shortcuts
-    if (selectedItem) {
-      const actions = panel.getActions();
-      const actionMatch = actions.find(a => a.key === input && (!a.condition || a.condition(selectedItem)));
-      if (actionMatch) {
-        if (actionMatch.confirm) {
-          dispatch({ type: 'SET_CONFIRM', action: () => { actionMatch.handler(selectedItem); addToast(actionMatch.label, 'info'); }, message: actionMatch.confirmMessage || 'Are you sure?' });
-        } else {
-          actionMatch.handler(selectedItem);
-          addToast(actionMatch.label, 'info');
-        }
-      }
-    }
-  });
-
-  // Render
-  if (tooSmall) {
-    return <TooSmallOverlay columns={columns} rows={rows} />;
-  }
-
-  const runningCount = metrics.containers.filter(c => c.state === 'running').length;
-
   // Compute per-panel item counts for TabBar badges
   const panelCounts = panels.map((p) => {
     const items = p.getItems(metrics);
@@ -759,13 +378,31 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
       return { total: items.length, running };
     }
     if (p.id === 'services') {
-      // Services panel includes project headers + services; count only meaningful items
       const meaningful = items.filter(it => it.data !== null).length;
       return { total: meaningful };
     }
     return { total: items.length };
   });
 
+  // Mouse input (extracted hook)
+  const handleMouse = useMouseHandler({
+    state, dispatch, panels, panelCounts, currentItems, clampedSelection,
+    sideWidth, sideScroll, detailLines, detailViewportHeight, detailTabs, rows, rotatePhrase,
+  });
+
+  // Keyboard input (extracted hook)
+  useKeyboardHandler({
+    state, dispatch, panels, panel, selectedItem, contextActions,
+    clampedSelection, currentItems, detailLines, detailViewportHeight,
+    detailTabs, tabIdx, sideScroll, addToast, rotatePhrase,
+  });
+
+  // Render
+  if (tooSmall) {
+    return <TooSmallOverlay columns={columns} rows={rows} />;
+  }
+
+  const runningCount = metrics.containers.filter(c => c.state === 'running').length;
   const showNormalLayout = state.overlay !== 'help' && state.overlay !== 'exec' && state.overlay !== 'version';
 
   // Compute unfiltered total count for filter display

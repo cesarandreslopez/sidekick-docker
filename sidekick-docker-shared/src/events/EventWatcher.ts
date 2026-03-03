@@ -45,7 +45,7 @@ export class EventWatcher {
     while (this.running) {
       try {
         this.abortController = new AbortController();
-        for await (const event of this.client.streamEvents()) {
+        for await (const event of this.client.streamEvents(undefined, this.abortController.signal)) {
           if (!this.running) break;
           this.callbacks.onEvent(event);
         }

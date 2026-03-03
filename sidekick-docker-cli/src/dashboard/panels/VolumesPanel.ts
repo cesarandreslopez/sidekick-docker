@@ -11,10 +11,12 @@ export class VolumesPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
+  private onError: (msg: string) => void;
 
-  constructor(client: DockerClient, onAction: () => void) {
+  constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
     this.client = client;
     this.onAction = onAction;
+    this.onError = onError ?? ((msg) => console.debug(msg));
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -57,7 +59,7 @@ export class VolumesPanel implements SidePanel {
         confirmMessage: 'Remove this volume?',
         handler: (item) => {
           const vol = item.data as VolumeInfo;
-          this.client.removeVolume(vol.name).then(() => this.onAction()).catch(() => {});
+          this.client.removeVolume(vol.name).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => !(item.data as VolumeInfo).isInUse,
       },
@@ -67,7 +69,7 @@ export class VolumesPanel implements SidePanel {
         confirm: true,
         confirmMessage: 'Prune all unused volumes?',
         handler: () => {
-          this.client.pruneVolumes().then(() => this.onAction()).catch(() => {});
+          this.client.pruneVolumes().then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
       },
     ];

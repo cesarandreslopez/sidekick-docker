@@ -324,10 +324,17 @@ export class DockerClient {
     return { networksDeleted: result.NetworksDeleted || [] };
   }
 
-  async *streamEvents(filters?: Record<string, string[]>): AsyncIterable<DockerEvent> {
+  async *streamEvents(filters?: Record<string, string[]>, signal?: AbortSignal): AsyncIterable<DockerEvent> {
     const stream = await this.docker.getEvents({ filters });
 
+    // Wire up AbortSignal to destroy the underlying stream
+    if (signal) {
+      const onAbort = () => (stream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
+
     for await (const chunk of stream as AsyncIterable<Buffer>) {
+      if (signal?.aborted) break;
       const lines = chunk.toString('utf8').split('\n').filter(Boolean);
       for (const line of lines) {
         let raw: Record<string, unknown>;

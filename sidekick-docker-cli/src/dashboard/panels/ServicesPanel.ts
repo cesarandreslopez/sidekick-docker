@@ -11,11 +11,13 @@ export class ServicesPanel implements SidePanel {
 
   private composeClient: ComposeClient;
   private onAction: () => void;
+  private onError: (msg: string) => void;
   private cwd: string | undefined;
 
-  constructor(composeClient: ComposeClient, onAction: () => void, cwd?: string) {
+  constructor(composeClient: ComposeClient, onAction: () => void, cwd?: string, onError?: (msg: string) => void) {
     this.composeClient = composeClient;
     this.onAction = onAction;
+    this.onError = onError ?? ((msg) => console.debug(msg));
     this.cwd = cwd;
   }
 
@@ -110,7 +112,7 @@ export class ServicesPanel implements SidePanel {
         handler: (item) => {
           const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService };
           const projectName = d.type === 'project' ? d.project!.name : d.service!.projectName;
-          this.composeClient.up(projectName, this.cwd).then(() => this.onAction()).catch(() => {});
+          this.composeClient.up(projectName, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => item.data !== null,
       },
@@ -122,7 +124,7 @@ export class ServicesPanel implements SidePanel {
         handler: (item) => {
           const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService };
           const projectName = d.type === 'project' ? d.project!.name : d.service!.projectName;
-          this.composeClient.down(projectName, this.cwd).then(() => this.onAction()).catch(() => {});
+          this.composeClient.down(projectName, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => item.data !== null,
       },
@@ -132,9 +134,9 @@ export class ServicesPanel implements SidePanel {
         handler: (item) => {
           const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService };
           if (d.type === 'service') {
-            this.composeClient.restart(d.service!.projectName, d.service!.name, this.cwd).then(() => this.onAction()).catch(() => {});
+            this.composeClient.restart(d.service!.projectName, d.service!.name, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
           } else {
-            this.composeClient.restart(d.project!.name, undefined, this.cwd).then(() => this.onAction()).catch(() => {});
+            this.composeClient.restart(d.project!.name, undefined, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
           }
         },
         condition: (item) => item.data !== null,
@@ -145,9 +147,9 @@ export class ServicesPanel implements SidePanel {
         handler: (item) => {
           const d = item.data as { type: string; project?: ComposeProject; service?: ComposeService };
           if (d.type === 'service') {
-            this.composeClient.stop(d.service!.projectName, d.service!.name, this.cwd).then(() => this.onAction()).catch(() => {});
+            this.composeClient.stop(d.service!.projectName, d.service!.name, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
           } else {
-            this.composeClient.stop(d.project!.name, undefined, this.cwd).then(() => this.onAction()).catch(() => {});
+            this.composeClient.stop(d.project!.name, undefined, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
           }
         },
         condition: (item) => item.data !== null,

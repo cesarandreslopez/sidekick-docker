@@ -11,10 +11,12 @@ export class NetworksPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
+  private onError: (msg: string) => void;
 
-  constructor(client: DockerClient, onAction: () => void) {
+  constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
     this.client = client;
     this.onAction = onAction;
+    this.onError = onError ?? ((msg) => console.debug(msg));
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -67,7 +69,7 @@ export class NetworksPanel implements SidePanel {
         confirmMessage: 'Remove this network?',
         handler: (item) => {
           const net = item.data as NetworkInfo;
-          this.client.removeNetwork(net.id).then(() => this.onAction()).catch(() => {});
+          this.client.removeNetwork(net.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => {
           const net = item.data as NetworkInfo;
@@ -80,7 +82,7 @@ export class NetworksPanel implements SidePanel {
         confirm: true,
         confirmMessage: 'Prune all unused networks?',
         handler: () => {
-          this.client.pruneNetworks().then(() => this.onAction()).catch(() => {});
+          this.client.pruneNetworks().then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
       },
     ];

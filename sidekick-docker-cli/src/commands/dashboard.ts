@@ -39,7 +39,12 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Action callback — refresh state after any mutation
   const onAction = () => {
-    state.refresh().then(() => scheduleRender()).catch(() => {});
+    state.refresh().then(() => scheduleRender()).catch(e => console.debug('refresh failed:', e));
+  };
+
+  // Error callback — panels report action failures
+  const onError = (msg: string) => {
+    console.debug('panel action failed:', msg);
   };
 
   // Stream managers for logs and stats
@@ -75,7 +80,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
         client.inspectContainer(itemId).then(info => {
           state.setInspectedEnv(itemId, info.Config.Env || []);
           scheduleRender();
-        }).catch(() => {});
+        }).catch(e => console.debug('inspectContainer failed:', e));
       }
     } else if (panelId === 'services' && itemId) {
       logManager.select(null);
@@ -96,11 +101,11 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Create panels (onExec wired below after render is available)
   const panels: SidePanel[] = [
-    new ContainersPanel(client, onAction),
-    new ServicesPanel(composeClient, onAction, cwd),
-    new ImagesPanel(client, onAction),
-    new VolumesPanel(client, onAction),
-    new NetworksPanel(client, onAction),
+    new ContainersPanel(client, onAction, onError),
+    new ServicesPanel(composeClient, onAction, cwd, onError),
+    new ImagesPanel(client, onAction, onError),
+    new VolumesPanel(client, onAction, onError),
+    new NetworksPanel(client, onAction, onError),
   ];
 
   // Start event watcher for real-time updates
@@ -117,7 +122,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Periodic refresh fallback (30s)
   const refreshInterval = setInterval(() => {
-    state.refresh().then(() => scheduleRender()).catch(() => {});
+    state.refresh().then(() => scheduleRender()).catch(e => console.debug('periodic refresh failed:', e));
   }, 30_000);
 
   // Exec trigger ref: Dashboard populates this with a function to start exec overlay

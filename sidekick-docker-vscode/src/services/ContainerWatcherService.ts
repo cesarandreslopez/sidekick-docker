@@ -64,7 +64,7 @@ export class ContainerWatcherService {
 
       // 30s fallback refresh
       this.refreshInterval = setInterval(() => {
-        this.refresh().catch(() => {});
+        this.refresh().catch(e => console.debug('watcher refresh failed:', e));
       }, 30_000);
 
       this.stopReconnectPolling();
@@ -126,7 +126,7 @@ export class ContainerWatcherService {
     if (this.debounceTimer || this.disposed) return;
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
-      this.refresh().catch(() => {});
+      this.refresh().catch(e => console.debug('debounced refresh failed:', e));
     }, 100);
   }
 

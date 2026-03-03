@@ -1,10 +1,13 @@
-import type { DockerClient, ContainerStats } from 'sidekick-docker-shared';
+import type { DockerClient } from 'sidekick-docker-shared';
 import { StatsCollector } from 'sidekick-docker-shared';
+
+const RECONNECT_DELAY = 2000;
 
 /**
  * Manages stats streaming for the currently selected container.
  * Only streams stats for one container at a time (expensive operation).
  * Feeds data into StatsCollector for history/charting.
+ * Auto-reconnects when a stream ends (e.g. container restart).
  */
 export class StatsStreamManager {
   private client: DockerClient;
@@ -12,6 +15,7 @@ export class StatsStreamManager {
   private currentContainerId: string | null = null;
   private aborted = false;
   private streamPromise: Promise<void> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private onChange: () => void;
   private loadingInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -57,11 +61,36 @@ export class StatsStreamManager {
     } catch {
       // Stream ended — container stopped or removed
     }
+
+    // Auto-reconnect if still selected for this container
+    if (!this.aborted && this.currentContainerId === containerId) {
+      this.scheduleReconnect(containerId);
+    }
+  }
+
+  private scheduleReconnect(containerId: string): void {
+    this.clearReconnectTimer();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.aborted && this.currentContainerId === containerId) {
+        // Re-start loading spinner for the reconnect gap
+        this.loadingInterval = setInterval(() => this.onChange(), 200);
+        this.streamPromise = this.streamStats(containerId);
+      }
+    }, RECONNECT_DELAY);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
   }
 
   stop(): void {
     this.aborted = true;
     this.clearLoadingInterval();
+    this.clearReconnectTimer();
     this.currentContainerId = null;
     this.streamPromise = null;
   }

@@ -3,11 +3,13 @@ import type { LogEntry, SeverityCounts, SeverityLevel, LogTemplate } from 'sidek
 import { LogAnalytics, LogSeverityTimeSeries, LogTemplateEngine } from 'sidekick-docker-shared';
 
 const MAX_LOG_LINES = 1000;
+const RECONNECT_DELAY = 2000;
 
 /**
  * Manages log streaming for the currently selected container.
  * Maintains a ring buffer of log entries and starts/stops streaming
  * as the selection changes. Tracks severity counts, time-series, and patterns.
+ * Auto-reconnects when a stream ends (e.g. container restart).
  */
 export class LogStreamManager {
   private client: DockerClient;
@@ -15,6 +17,7 @@ export class LogStreamManager {
   private logs: LogEntry[] = [];
   private aborted = false;
   private streamPromise: Promise<void> | null = null;
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private onChange: () => void;
   private analytics = new LogAnalytics();
   private timeSeries = new LogSeverityTimeSeries();
@@ -64,7 +67,29 @@ export class LogStreamManager {
         this.onChange();
       }
     } catch {
-      // Stream ended or container stopped — not an error
+      // Stream ended or container stopped
+    }
+
+    // Auto-reconnect if still selected for this container
+    if (!this.aborted && this.currentContainerId === containerId) {
+      this.scheduleReconnect(containerId);
+    }
+  }
+
+  private scheduleReconnect(containerId: string): void {
+    this.clearReconnectTimer();
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null;
+      if (!this.aborted && this.currentContainerId === containerId) {
+        this.streamPromise = this.streamLogs(containerId);
+      }
+    }, RECONNECT_DELAY);
+  }
+
+  private clearReconnectTimer(): void {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
     }
   }
 
@@ -72,6 +97,7 @@ export class LogStreamManager {
     this.aborted = true;
     this.currentContainerId = null;
     this.streamPromise = null;
+    this.clearReconnectTimer();
   }
 
   getLogs(): LogEntry[] {

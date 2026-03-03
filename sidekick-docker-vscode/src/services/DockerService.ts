@@ -93,12 +93,12 @@ export class DockerService {
         this.processEvent(event);
         this.scheduleStateUpdate();
       },
-      onError: () => {},
+      onError: (err) => console.debug('event watcher error:', err),
     });
     this.watcher.start();
 
     this.refreshInterval = setInterval(() => {
-      this.refresh().then(() => this.scheduleStateUpdate()).catch(() => {});
+      this.refresh().then(() => this.scheduleStateUpdate()).catch(e => console.debug('periodic refresh failed:', e));
     }, 30_000);
 
     return true;
@@ -133,7 +133,7 @@ export class DockerService {
         this.handleContainerEvent(event);
         break;
       default:
-        this.refresh().catch(() => {});
+        this.refresh().catch(e => console.debug('refresh failed:', e));
         break;
     }
   }
@@ -147,7 +147,7 @@ export class DockerService {
           existing.state = 'running';
           existing.status = 'Up just now';
         }
-        this.refresh().catch(() => {});
+        this.refresh().catch(e => console.debug('refresh failed:', e));
         break;
       }
       case 'stop':
@@ -169,7 +169,7 @@ export class DockerService {
         this.statsCollector.remove(event.resourceId);
         break;
       default:
-        this.refresh().catch(() => {});
+        this.refresh().catch(e => console.debug('refresh failed:', e));
         break;
     }
     this.composeProjects = this.composeDetector.detect(this.containers, this.cachedFileConfig);
