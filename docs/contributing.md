@@ -32,19 +32,22 @@ npm run build:shared       # Shared library only
 npm run build:cli          # CLI only
 npm run build:vscode       # VS Code extension only
 npm test                   # Run all tests
+npm run lint               # Lint all packages (ESLint 9)
+npm run lint:fix           # Lint + auto-fix
 ```
 
 ## Code Style
 
 - TypeScript strict mode everywhere
 - Vitest for testing, co-located `.test.ts` files
+- ESLint 9 (flat config) for code quality — run `npm run lint` before submitting PRs
 - [Conventional Commits](https://www.conventionalcommits.org/) for commit messages
 
 ## Making Changes
 
 1. Create a feature branch from `main`
 2. Make your changes with clear commits
-3. Ensure all tests pass (`npm test`)
+3. Ensure linting and tests pass (`npm run lint && npm test`)
 4. Update documentation if needed
 5. Submit a PR with a clear description
 

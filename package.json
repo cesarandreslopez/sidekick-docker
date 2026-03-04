@@ -18,7 +18,15 @@
     "build:vscode": "cd sidekick-docker-vscode && npm run build",
     "build": "npm run build:shared && npm run build:cli && npm run build:vscode",
     "clean": "cd sidekick-docker-shared && npm run clean; cd ../sidekick-docker-cli && npm run clean; cd ../sidekick-docker-vscode && npm run clean",
-    "test": "cd sidekick-docker-shared && npm test; cd ../sidekick-docker-cli && npm test"
+    "test": "cd sidekick-docker-shared && npm test; cd ../sidekick-docker-cli && npm test",
+    "lint": "eslint sidekick-docker-shared/src sidekick-docker-cli/src sidekick-docker-vscode/src",
+    "lint:fix": "eslint --fix sidekick-docker-shared/src sidekick-docker-cli/src sidekick-docker-vscode/src"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.3",
+    "eslint": "^9.39.3",
+    "eslint-plugin-react-hooks": "^7.0.1",
+    "typescript-eslint": "^8.56.1"
+  }
 }

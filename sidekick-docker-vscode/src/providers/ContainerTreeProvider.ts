@@ -59,6 +59,7 @@ export class ContainerTreeItem extends vscode.TreeItem {
 }
 
 export class ContainerTreeProvider implements vscode.TreeDataProvider<TreeElement> {
+  // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
   private _onDidChangeTreeData = new vscode.EventEmitter<TreeElement | undefined | null | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 

@@ -30,6 +30,7 @@ export class ComposeFileReader {
       const services: ComposeFileServiceConfig[] = [];
       const svcMap = config.services || {};
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       for (const [name, def] of Object.entries<any>(svcMap)) {
         const ports: string[] = [];
         if (def.ports) {

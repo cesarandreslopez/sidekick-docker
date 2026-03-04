@@ -27,7 +27,7 @@ const panels: PanelDefinition[] = [
   networksPanel,
 ];
 
-let state: WebviewState = createInitialState();
+const state: WebviewState = createInitialState();
 let toastIdCounter = 0;
 
 // ─── Local phrase rotation ──────────────────────────────────────────

@@ -52,6 +52,11 @@ npm test                         # runs shared + cli tests
 cd sidekick-docker-shared && npx vitest run   # shared only
 cd sidekick-docker-cli && npx vitest run      # cli only
 
+# Linting (ESLint 9, flat config)
+npm run lint                     # lint all packages
+npm run lint:fix                 # lint + auto-fix
+bash scripts/lint-all.sh         # alternative: also accepts extra args (e.g. --fix)
+
 # Version management
 bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 packages)
 ```
@@ -60,7 +65,7 @@ bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 
 
 - TypeScript strict mode everywhere
 - Tests use Vitest, co-located as `.test.ts` files alongside source
-- No ESLint configured yet — contributions to add linting are welcome
+- ESLint 9 (flat config) enforces code quality — run `npm run lint` before submitting PRs
 
 ### Running Tests
 
@@ -122,7 +127,7 @@ Guidelines:
 
 1. Create a feature branch from `main`
 2. Make your changes with clear commits
-3. Ensure all tests pass (`npm test`)
+3. Ensure linting and tests pass (`npm run lint && npm test`)
 4. Update documentation if needed
 5. Submit a PR with a clear description
 

@@ -1,7 +1,7 @@
 import React, { useReducer, useCallback, useEffect, useRef } from 'react';
 import { Box } from 'ink';
 import type { DockerDashboardMetrics } from '../DockerState';
-import type { SidePanel, PanelItem } from '../panels/types';
+import type { SidePanel } from '../panels/types';
 import { useTerminalSize } from './useTerminalSize';
 import { useWindowedScroll } from './useWindowedScroll';
 import { useKeyboardHandler } from './useKeyboardHandler';
@@ -25,7 +25,7 @@ import { VersionOverlay } from './VersionOverlay';
 import { getRandomPhrase } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes } from '../../formatters';
-import type { LayoutMode, OverlayKind, FocusTarget, ToastEntry, DashboardUIState, Action } from './dashboardTypes';
+import type { LayoutMode, DashboardUIState, Action } from './dashboardTypes';
 
 declare const __CLI_VERSION__: string;
 
@@ -157,15 +157,17 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   // Rotating phrase in tab bar (7-second interval + on any interaction)
   const [phrase, setPhrase] = React.useState(() => getRandomPhrase());
   const phraseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rotatePhrase = useCallback(() => {
+  const rotatePhraseRef = useRef<() => void>(undefined);
+  rotatePhraseRef.current = () => {
     setPhrase(getRandomPhrase());
     if (phraseTimerRef.current) clearTimeout(phraseTimerRef.current);
-    phraseTimerRef.current = setTimeout(rotatePhrase, 7000);
-  }, []);
+    phraseTimerRef.current = setTimeout(() => rotatePhraseRef.current?.(), 7000);
+  };
+  const rotatePhrase = useCallback(() => rotatePhraseRef.current?.(), []);
   useEffect(() => {
-    phraseTimerRef.current = setTimeout(rotatePhrase, 7000);
+    phraseTimerRef.current = setTimeout(() => rotatePhraseRef.current?.(), 7000);
     return () => { if (phraseTimerRef.current) clearTimeout(phraseTimerRef.current); };
-  }, [rotatePhrase]);
+  }, []);
 
   // Populate exec trigger ref so external code can start exec sessions
   useEffect(() => {
@@ -270,12 +272,14 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
     if (sideScroll.selectedIndex !== state.selectedItemIndex) {
       sideScroll.setSelected(state.selectedItemIndex);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.selectedItemIndex]);
 
   const selectedItem = currentItems[clampedSelection];
 
   useEffect(() => {
     onSelectionChange?.(panel.id, selectedItem?.id ?? null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel.id, selectedItem?.id]);
 
   const detailTabs = panel.detailTabs;
