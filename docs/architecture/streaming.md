@@ -68,7 +68,11 @@ A per-container ring buffer (default 60 samples) that stores stats history:
 
 - `push(id, stats)` — add a new sample
 - `getCpuSeries(id)` — returns array of CPU percentages for sparkline rendering
-- `getMemorySeries(id)` — returns array of memory usage values
+- `getMemorySeries(id)` — returns array of memory usage percentages
 - `getLatest(id)` — returns the most recent stats sample
+- `getNetworkRxRateSeries(id)` / `getNetworkTxRateSeries(id)` — compute network bytes/sec from consecutive cumulative sample deltas
+- `getBlockReadRateSeries(id)` / `getBlockWriteRateSeries(id)` — compute block I/O bytes/sec from consecutive cumulative sample deltas
+
+The rate series methods derive per-second rates from Docker's cumulative counters by computing the delta between consecutive samples and dividing by elapsed time.
 
 The 60-sample buffer at ~1 sample/second gives roughly 1 minute of history for the sparkline charts.

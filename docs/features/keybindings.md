@@ -29,6 +29,9 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `x` | Open context menu (actions for selected item) |
 | `f` | Open log filter (when on Logs tab) |
 | `/` | Open filter |
+| `a` | Toggle all/running containers (Containers panel) |
+| `o` | Open sort menu (Containers panel) |
+| `R` | Reverse sort direction (Containers panel) |
 | `z` | Cycle layout (Normal/Wide/Expanded) |
 | `?` | Show help overlay |
 | `V` | Show version |
@@ -41,7 +44,9 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `s` | Start |
 | `S` | Stop |
 | `r` | Restart |
-| `R` | Remove (with confirmation) |
+| `p` | Pause |
+| `u` | Unpause |
+| `d` | Remove (with confirmation) |
 | `e` | Exec into container |
 | `c` | Copy logs to clipboard |
 
@@ -61,6 +66,7 @@ Interactive overlays display inline keyboard hints:
 | Overlay | Hints Shown |
 |---------|-------------|
 | **Context Menu** | `j`/`k` select, `Enter` run, `Esc` close |
+| **Sort Menu** | `j`/`k` select, `Enter` apply, `R` reverse, `Esc` close |
 | **Confirmation Modal** | `y`/`n` buttons, `Esc` to cancel |
 | **Filter Overlay** | `Enter` to apply, `Esc` to cancel |
 | **Log Filter Overlay** | `Tab` to toggle mode, `Esc` to clear |

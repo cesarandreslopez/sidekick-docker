@@ -146,6 +146,13 @@ export function colorizeState(state: string): string {
   return `<span style="color:${stateColor(state)}">${escapeHtml(state)}</span>`;
 }
 
+export function colorizeHealth(status: 'healthy' | 'unhealthy' | 'starting'): string {
+  const color = status === 'healthy' ? 'var(--vscode-testing-iconPassed, #3fb950)'
+    : status === 'unhealthy' ? 'var(--vscode-errorForeground, #f85149)'
+    : 'var(--vscode-editorWarning-foreground, #cca700)';
+  return `<span style="color:${color}">${escapeHtml(status)}</span>`;
+}
+
 export function colorizeBool(value: boolean): string {
   return value ? '<span class="detail-bool-yes">Yes</span>' : '<span class="detail-bool-no">No</span>';
 }

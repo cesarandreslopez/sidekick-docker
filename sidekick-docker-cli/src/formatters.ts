@@ -184,6 +184,14 @@ export function colorizeDetailKey(line: string): string {
   return ansi.brand(match[1]) + line.substring(match[1].length);
 }
 
+export function colorizeHealth(status: 'healthy' | 'unhealthy' | 'starting'): string {
+  switch (status) {
+    case 'healthy': return ansi.green(status);
+    case 'unhealthy': return ansi.red(status);
+    case 'starting': return ansi.yellow(status);
+  }
+}
+
 export function colorizeState(state: string): string {
   switch (state) {
     case 'running': return ansi.green(state);

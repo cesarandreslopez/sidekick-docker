@@ -9,6 +9,7 @@ export interface SerializedContainerInfo {
   created: string;
   composeProject?: string;
   composeService?: string;
+  healthStatus?: 'healthy' | 'unhealthy' | 'starting';
 }
 
 export interface SerializedImageInfo {
@@ -59,6 +60,8 @@ export interface SerializedContainerStats {
   memoryPercent: number;
   networkRx: number;
   networkTx: number;
+  blockRead: number;
+  blockWrite: number;
   pids: number;
 }
 

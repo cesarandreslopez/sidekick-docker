@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { StatsCollector } from './StatsCollector';
 import type { ContainerStats } from '../types/container';
 
-function makeStats(cpuPercent: number, memoryPercent: number): ContainerStats {
+function makeStats(cpuPercent: number, memoryPercent: number, overrides?: Partial<ContainerStats>): ContainerStats {
   return {
     cpuPercent,
     memoryUsage: memoryPercent * 1024 * 1024,
@@ -10,8 +10,11 @@ function makeStats(cpuPercent: number, memoryPercent: number): ContainerStats {
     memoryPercent,
     networkRx: 0,
     networkTx: 0,
+    blockRead: 0,
+    blockWrite: 0,
     pids: 1,
     timestamp: new Date(),
+    ...overrides,
   };
 }
 
@@ -62,6 +65,38 @@ describe('StatsCollector', () => {
     expect(collector.getHistory('unknown')).toBeUndefined();
     expect(collector.getLatest('unknown')).toBeUndefined();
     expect(collector.getCpuSeries('unknown')).toEqual([]);
+  });
+
+  it('computes network rate series from cumulative values', () => {
+    const collector = new StatsCollector();
+    const t0 = new Date('2024-01-01T00:00:00Z');
+    const t1 = new Date('2024-01-01T00:00:01Z');
+    const t2 = new Date('2024-01-01T00:00:02Z');
+
+    collector.push('c1', makeStats(10, 20, { networkRx: 1000, networkTx: 500, timestamp: t0 }));
+    collector.push('c1', makeStats(10, 20, { networkRx: 2000, networkTx: 1500, timestamp: t1 }));
+    collector.push('c1', makeStats(10, 20, { networkRx: 2500, networkTx: 2000, timestamp: t2 }));
+
+    expect(collector.getNetworkRxRateSeries('c1')).toEqual([1000, 500]);
+    expect(collector.getNetworkTxRateSeries('c1')).toEqual([1000, 500]);
+  });
+
+  it('computes block I/O rate series', () => {
+    const collector = new StatsCollector();
+    const t0 = new Date('2024-01-01T00:00:00Z');
+    const t1 = new Date('2024-01-01T00:00:02Z');
+
+    collector.push('c1', makeStats(10, 20, { blockRead: 0, blockWrite: 0, timestamp: t0 }));
+    collector.push('c1', makeStats(10, 20, { blockRead: 4000, blockWrite: 2000, timestamp: t1 }));
+
+    expect(collector.getBlockReadRateSeries('c1')).toEqual([2000]);
+    expect(collector.getBlockWriteRateSeries('c1')).toEqual([1000]);
+  });
+
+  it('returns empty rate series for unknown container', () => {
+    const collector = new StatsCollector();
+    expect(collector.getNetworkRxRateSeries('unknown')).toEqual([]);
+    expect(collector.getBlockReadRateSeries('unknown')).toEqual([]);
   });
 
   it('can remove and clear', () => {

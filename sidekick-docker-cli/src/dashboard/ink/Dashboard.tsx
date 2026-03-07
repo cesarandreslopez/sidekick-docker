@@ -22,10 +22,13 @@ import { MouseProvider } from './mouse';
 import { enableMouse, disableMouse } from './mouse';
 import { LogFilterOverlay } from './LogFilterOverlay';
 import { VersionOverlay } from './VersionOverlay';
+import { SortOverlay } from './SortOverlay';
 import { getRandomPhrase } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes } from '../../formatters';
-import type { LayoutMode, DashboardUIState, Action } from './dashboardTypes';
+import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
+
+const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
 
 declare const __CLI_VERSION__: string;
 
@@ -116,6 +119,16 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
       return { ...state, logFilterString: action.value };
     case 'TOGGLE_LOG_FILTER_MODE':
       return { ...state, logFilterMode: state.logFilterMode === 'exact' ? 'fuzzy' : 'exact' };
+    case 'TOGGLE_SHOW_ALL':
+      return { ...state, showAllContainers: !state.showAllContainers, selectedItemIndex: 0 };
+    case 'SET_SORT_FIELD':
+      return { ...state, sortField: action.field, overlay: null };
+    case 'TOGGLE_SORT_REVERSE':
+      return { ...state, sortReversed: !state.sortReversed };
+    case 'SORT_MENU_NAV': {
+      const next = (state.sortMenuIndex + action.delta + SORT_FIELDS.length) % SORT_FIELDS.length;
+      return { ...state, sortMenuIndex: next };
+    }
     default:
       return state;
   }
@@ -139,6 +152,10 @@ const initialState: DashboardUIState = {
   execContainerName: '',
   logFilterString: '',
   logFilterMode: 'exact',
+  showAllContainers: true,
+  sortField: 'state' as SortField,
+  sortReversed: false,
+  sortMenuIndex: 0,
 };
 
 interface DashboardProps {
@@ -252,6 +269,13 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
 
   const currentItems = (() => {
     let items = allItems;
+    // Show all / running-only toggle (containers panel)
+    if (panel.id === 'containers' && !state.showAllContainers) {
+      items = items.filter(it => {
+        const c = it.data as import('sidekick-docker-shared').ContainerInfo;
+        return c.state === 'running' || c.state === 'paused';
+      });
+    }
     if (state.filterString) {
       const f = state.filterString.toLowerCase();
       items = items.filter(it => {
@@ -259,7 +283,46 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
         return text.toLowerCase().includes(f);
       });
     }
-    items.sort((a, b) => a.sortKey - b.sortKey);
+    // Sort: use sortField for containers panel, default sortKey otherwise
+    if (panel.id === 'containers' && state.sortField !== 'state') {
+      const dir = state.sortReversed ? -1 : 1;
+      items.sort((a, b) => {
+        const ca = a.data as import('sidekick-docker-shared').ContainerInfo;
+        const cb = b.data as import('sidekick-docker-shared').ContainerInfo;
+        switch (state.sortField) {
+          case 'name': return dir * ca.name.localeCompare(cb.name);
+          case 'cpu': {
+            const sa = metrics.statsCollector.getLatest(ca.id)?.cpuPercent ?? 0;
+            const sb = metrics.statsCollector.getLatest(cb.id)?.cpuPercent ?? 0;
+            return dir * (sb - sa);
+          }
+          case 'mem': {
+            const sa = metrics.statsCollector.getLatest(ca.id)?.memoryPercent ?? 0;
+            const sb = metrics.statsCollector.getLatest(cb.id)?.memoryPercent ?? 0;
+            return dir * (sb - sa);
+          }
+          case 'net': {
+            const sa = metrics.statsCollector.getLatest(ca.id);
+            const sb = metrics.statsCollector.getLatest(cb.id);
+            return dir * (((sb?.networkRx ?? 0) + (sb?.networkTx ?? 0)) - ((sa?.networkRx ?? 0) + (sa?.networkTx ?? 0)));
+          }
+          case 'io': {
+            const sa = metrics.statsCollector.getLatest(ca.id);
+            const sb = metrics.statsCollector.getLatest(cb.id);
+            return dir * (((sb?.blockRead ?? 0) + (sb?.blockWrite ?? 0)) - ((sa?.blockRead ?? 0) + (sa?.blockWrite ?? 0)));
+          }
+          case 'pids': {
+            const sa = metrics.statsCollector.getLatest(ca.id)?.pids ?? 0;
+            const sb = metrics.statsCollector.getLatest(cb.id)?.pids ?? 0;
+            return dir * (sb - sa);
+          }
+          default: return a.sortKey - b.sortKey;
+        }
+      });
+    } else {
+      const dir = state.sortReversed ? -1 : 1;
+      items.sort((a, b) => dir * (a.sortKey - b.sortKey));
+    }
     return items;
   })();
   const clampedSelection = Math.min(state.selectedItemIndex, Math.max(0, currentItems.length - 1));
@@ -444,6 +507,10 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
             filterString={state.logFilterString}
             filterMode={state.logFilterMode}
           />
+        )}
+
+        {state.overlay === 'sort' && (
+          <SortOverlay selectedIndex={state.sortMenuIndex} currentField={state.sortField} reversed={state.sortReversed} />
         )}
 
         {state.overlay === 'confirm' && (

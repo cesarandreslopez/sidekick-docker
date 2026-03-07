@@ -3,7 +3,7 @@ import { DockerClient, filterLine } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { defaultOnError } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeLogEntry, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, compactUptime, sectionHeader, coloredSparkline, severitySparkline } from '../../formatters';
+import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeLogEntry, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, coloredSparkline, severitySparkline } from '../../formatters';
 
 export class ContainersPanel implements SidePanel {
   readonly id = 'containers';
@@ -106,6 +106,21 @@ export class ContainersPanel implements SidePanel {
         }
         lines.push(
           colorizeDetailKey(`Net:    \u25BC ${formatBytes(latest.networkRx)}  \u25B2 ${formatBytes(latest.networkTx)}`),
+        );
+        const rxRates = metrics.statsCollector.getNetworkRxRateSeries(c.id);
+        const txRates = metrics.statsCollector.getNetworkTxRateSeries(c.id);
+        if (rxRates.length > 1) {
+          lines.push(`        \u25BC ${coloredSparkline(rxRates, 'cpu')}  \u25B2 ${coloredSparkline(txRates, 'memory')}`);
+        }
+        lines.push(
+          colorizeDetailKey(`IO:     R ${formatBytes(latest.blockRead)}  W ${formatBytes(latest.blockWrite)}`),
+        );
+        const brRates = metrics.statsCollector.getBlockReadRateSeries(c.id);
+        const bwRates = metrics.statsCollector.getBlockWriteRateSeries(c.id);
+        if (brRates.length > 1) {
+          lines.push(`        R ${coloredSparkline(brRates, 'cpu')}  W ${coloredSparkline(bwRates, 'memory')}`);
+        }
+        lines.push(
           colorizeDetailKey(`PIDs:   ${latest.pids}`),
         );
 
@@ -142,6 +157,7 @@ export class ContainersPanel implements SidePanel {
           sectionHeader('Status'),
           colorizeDetailKey(`  State:   ${colorizeState(c.state)}`),
           colorizeDetailKey(`  Status:  ${c.status}`),
+          ...(c.healthStatus ? [colorizeDetailKey(`  Health:  ${colorizeHealth(c.healthStatus)}`)] : []),
           colorizeDetailKey(`  Created: ${c.created.toLocaleString()}`),
           '',
           sectionHeader('Network'),
@@ -181,12 +197,13 @@ export class ContainersPanel implements SidePanel {
       const portHint = c.state === 'running' && c.ports.length > 0
         ? `:${c.ports[0].hostPort || c.ports[0].containerPort}`
         : '';
+      const healthBadge = c.healthStatus ? ` ${colorizeHealth(c.healthStatus)}` : '';
       const namePart = portHint
         ? `${truncate(c.name, 34)} ${portHint}`
         : truncate(c.name, 38);
       return {
         id: c.id,
-        label: `${stateIcon(c.state)} ${namePart}`,
+        label: `${stateIcon(c.state)} ${namePart}${healthBadge}`,
         sortKey: c.state === 'running' ? 0 : 1,
         data: c,
         iconColor: stateColor(c.state),
@@ -224,6 +241,24 @@ export class ContainersPanel implements SidePanel {
           this.client.restartContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => (item.data as ContainerInfo).state === 'running',
+      },
+      {
+        key: 'p',
+        label: 'Pause',
+        handler: (item) => {
+          const c = item.data as ContainerInfo;
+          this.client.pauseContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+        },
+        condition: (item) => (item.data as ContainerInfo).state === 'running',
+      },
+      {
+        key: 'u',
+        label: 'Unpause',
+        handler: (item) => {
+          const c = item.data as ContainerInfo;
+          this.client.unpauseContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+        },
+        condition: (item) => (item.data as ContainerInfo).state === 'paused',
       },
       {
         key: 'd',

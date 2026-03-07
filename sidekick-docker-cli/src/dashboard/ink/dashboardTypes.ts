@@ -1,7 +1,9 @@
 import type { FilterMode } from 'sidekick-docker-shared';
 
 export type LayoutMode = 'normal' | 'wide' | 'expanded';
-export type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' | 'exec' | 'version' | 'log-filter';
+export type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' | 'exec' | 'version' | 'log-filter' | 'sort';
+
+export type SortField = 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids';
 export type FocusTarget = 'side' | 'detail';
 
 export interface ToastEntry {
@@ -29,6 +31,10 @@ export interface DashboardUIState {
   execContainerName: string;
   logFilterString: string;
   logFilterMode: FilterMode;
+  showAllContainers: boolean;
+  sortField: SortField;
+  sortReversed: boolean;
+  sortMenuIndex: number;
 }
 
 export type Action =
@@ -52,4 +58,8 @@ export type Action =
   | { type: 'EXEC_APPEND_OUTPUT'; data: string }
   | { type: 'EXEC_END' }
   | { type: 'SET_LOG_FILTER'; value: string }
-  | { type: 'TOGGLE_LOG_FILTER_MODE' };
+  | { type: 'TOGGLE_LOG_FILTER_MODE' }
+  | { type: 'TOGGLE_SHOW_ALL' }
+  | { type: 'SET_SORT_FIELD'; field: SortField }
+  | { type: 'TOGGLE_SORT_REVERSE' }
+  | { type: 'SORT_MENU_NAV'; delta: number };

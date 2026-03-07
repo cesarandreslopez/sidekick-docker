@@ -5,6 +5,14 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-03-08
+
+### Added
+
+- Pause (`p`) and Unpause (`u`) container actions in context menu
+- Health status display in Config detail tab — shows colored health indicator (green=healthy, red=unhealthy, yellow=starting) when container has a health check configured
+- Block I/O stats row in Stats detail tab — shows cumulative read/write bytes alongside existing network I/O
+
 ## [0.1.4] - 2026-03-07
 
 ### Added
@@ -70,6 +78,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Container config detail view
 - Docker event watching for real-time state updates
 
+[0.1.5]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.5
 [0.1.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.4
 [0.1.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.3
 [0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2

@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline } from '../formatters';
+import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline } from '../formatters';
 import { filterLine } from '../../log/LogFilter';
 import { LogTemplateEngine } from '../../log/LogTemplateEngine';
 import type { SeverityCounts } from '../../types/log';
@@ -113,6 +113,10 @@ export const containersPanel: PanelDefinition = {
     <div class="stat-row-label"><span class="stat-label">Network I/O</span></div>
     <div class="stat-net"><span class="stat-net-rx">\u25BC ${escapeHtml(formatBytes(s.networkRx))}</span><span class="stat-net-tx">\u25B2 ${escapeHtml(formatBytes(s.networkTx))}</span></div>
   </div>
+  <div class="stat-row">
+    <div class="stat-row-label"><span class="stat-label">Block I/O</span></div>
+    <div class="stat-net"><span class="stat-net-rx">R ${escapeHtml(formatBytes(s.blockRead))}</span><span class="stat-net-tx">W ${escapeHtml(formatBytes(s.blockWrite))}</span></div>
+  </div>
   <div class="stat-pids">PIDs: ${escapeHtml(String(s.pids))}</div>
 </div>`;
       },
@@ -138,6 +142,7 @@ export const containersPanel: PanelDefinition = {
           ['Image', escapeHtml(c.image)],
           ['State', colorizeState(c.state)],
           ['Status', escapeHtml(c.status)],
+          ...(c.healthStatus ? [['Health', colorizeHealth(c.healthStatus)] as [string, string]] : []),
           ['Created', escapeHtml(new Date(c.created).toLocaleString())],
           ['Ports', escapeHtml(formatPorts(c.ports))],
         ];
@@ -201,6 +206,10 @@ export const containersPanel: PanelDefinition = {
     if (c.state === 'running') {
       actions.push({ key: 'S', label: 'Stop', actionType: 'stop' });
       actions.push({ key: 'r', label: 'Restart', actionType: 'restart' });
+      actions.push({ key: 'p', label: 'Pause', actionType: 'pause' });
+    }
+    if (c.state === 'paused') {
+      actions.push({ key: 'u', label: 'Unpause', actionType: 'unpause' });
     }
     actions.push({ key: 'c', label: 'Copy Logs', actionType: 'copyLogs' });
     actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: 'Remove this container?' });

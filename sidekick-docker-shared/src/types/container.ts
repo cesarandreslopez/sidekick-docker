@@ -15,6 +15,7 @@ export interface ContainerInfo {
   created: Date;
   composeProject?: string;
   composeService?: string;
+  healthStatus?: 'healthy' | 'unhealthy' | 'starting';
 }
 
 export interface ContainerStats {
@@ -24,6 +25,8 @@ export interface ContainerStats {
   memoryPercent: number;
   networkRx: number;
   networkTx: number;
+  blockRead: number;
+  blockWrite: number;
   pids: number;
   timestamp: Date;
 }

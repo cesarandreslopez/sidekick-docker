@@ -156,6 +156,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
             case 'start': await this.service.startContainer(itemId); break;
             case 'stop': await this.service.stopContainer(itemId); break;
             case 'restart': await this.service.restartContainer(itemId); break;
+            case 'pause': await this.service.pauseContainer(itemId); break;
+            case 'unpause': await this.service.unpauseContainer(itemId); break;
             case 'remove': await this.service.removeContainer(itemId); break;
           }
           break;

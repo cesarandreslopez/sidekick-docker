@@ -337,6 +337,18 @@ export class DockerService {
     this.scheduleStateUpdate();
   }
 
+  async pauseContainer(id: string): Promise<void> {
+    await this.client.pauseContainer(id);
+    await this.refresh();
+    this.scheduleStateUpdate();
+  }
+
+  async unpauseContainer(id: string): Promise<void> {
+    await this.client.unpauseContainer(id);
+    await this.refresh();
+    this.scheduleStateUpdate();
+  }
+
   async removeContainer(id: string): Promise<void> {
     await this.client.removeContainer(id, true);
     await this.refresh();
@@ -458,6 +470,8 @@ function serializeStats(s: ContainerStats): SerializedContainerStats {
     memoryPercent: s.memoryPercent,
     networkRx: s.networkRx,
     networkTx: s.networkTx,
+    blockRead: s.blockRead,
+    blockWrite: s.blockWrite,
     pids: s.pids,
   };
 }

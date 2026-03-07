@@ -35,6 +35,11 @@ A full-featured Docker management dashboard that runs in your terminal and in VS
 - **Smart log highlighting** — token-level syntax coloring for HTTP methods, status codes, URLs, IPs, timestamps, JSON keys, and more
 - **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
 - **Log analytics** — severity counts, severity sparkline over time, and pattern clustering that groups similar logs into templates
+- **Health status tracking** — shows healthy/unhealthy/starting badges for containers with health checks
+- **Full container lifecycle** — start, stop, restart, pause, unpause, remove, exec
+- **Container sorting** — sort by state, name, CPU, memory, network I/O, block I/O, or PIDs with reverse toggle
+- **Show all / running toggle** — filter container list to running-only with a single keypress
+- **Network & block I/O sparklines** — rate-based sparklines for network and disk activity
 - **Vi keybindings** — `j`/`k` navigation, `g`/`G` jump, `1`-`5` panel switching
 - **Compose support** — automatic project detection, per-project actions
 - **Interactive exec** — shell into running containers without leaving the dashboard

@@ -1,6 +1,8 @@
 import { useInput, useApp } from 'ink';
 import type { SidePanel, PanelItem, PanelAction } from '../panels/types';
-import type { DashboardUIState, Action } from './dashboardTypes';
+import type { DashboardUIState, Action, SortField } from './dashboardTypes';
+
+const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
 
 interface KeyboardContext {
   state: DashboardUIState;
@@ -176,6 +178,34 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
       return;
     }
 
+    // Sort overlay
+    if (state.overlay === 'sort') {
+      if (key.escape) {
+        dispatch({ type: 'SET_OVERLAY', overlay: null });
+        return;
+      }
+      if (input === 'j' || key.downArrow) {
+        dispatch({ type: 'SORT_MENU_NAV', delta: 1 });
+        return;
+      }
+      if (input === 'k' || key.upArrow) {
+        dispatch({ type: 'SORT_MENU_NAV', delta: -1 });
+        return;
+      }
+      if (input === 'R') {
+        dispatch({ type: 'TOGGLE_SORT_REVERSE' });
+        addToast(`Sort: ${state.sortReversed ? 'ascending' : 'descending'}`, 'info');
+        return;
+      }
+      if (key.return) {
+        const field = SORT_FIELDS[state.sortMenuIndex];
+        dispatch({ type: 'SET_SORT_FIELD', field });
+        addToast(`Sort: ${field}`, 'info');
+        return;
+      }
+      return;
+    }
+
     // Global keys
     if (key.escape) {
       if (state.filterString) {
@@ -230,6 +260,23 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
         dispatch({ type: 'SET_OVERLAY', overlay: 'log-filter' });
         return;
       }
+    }
+
+    if (input === 'a' && panel.id === 'containers') {
+      dispatch({ type: 'TOGGLE_SHOW_ALL' });
+      addToast(state.showAllContainers ? 'Running only' : 'Show all', 'info');
+      return;
+    }
+
+    if (input === 'o' && panel.id === 'containers') {
+      dispatch({ type: 'SET_OVERLAY', overlay: 'sort' });
+      return;
+    }
+
+    if (input === 'R' && panel.id === 'containers') {
+      dispatch({ type: 'TOGGLE_SORT_REVERSE' });
+      addToast(`Sort: ${state.sortReversed ? 'ascending' : 'descending'}`, 'info');
+      return;
     }
 
     if (input === 'x') {

@@ -49,6 +49,40 @@ export class StatsCollector {
     return history.samples[history.samples.length - 1];
   }
 
+  getNetworkRxRateSeries(containerId: string): number[] {
+    return this.computeRateSeries(containerId, s => s.networkRx);
+  }
+
+  getNetworkTxRateSeries(containerId: string): number[] {
+    return this.computeRateSeries(containerId, s => s.networkTx);
+  }
+
+  getBlockReadRateSeries(containerId: string): number[] {
+    return this.computeRateSeries(containerId, s => s.blockRead);
+  }
+
+  getBlockWriteRateSeries(containerId: string): number[] {
+    return this.computeRateSeries(containerId, s => s.blockWrite);
+  }
+
+  private computeRateSeries(containerId: string, extractor: (s: ContainerStats) => number): number[] {
+    const history = this.histories.get(containerId);
+    if (!history || history.samples.length < 2) return [];
+    const rates: number[] = [];
+    for (let i = 1; i < history.samples.length; i++) {
+      const prev = history.samples[i - 1];
+      const curr = history.samples[i];
+      const dt = (curr.timestamp.getTime() - prev.timestamp.getTime()) / 1000;
+      if (dt > 0) {
+        const delta = extractor(curr) - extractor(prev);
+        rates.push(Math.max(0, delta / dt));
+      } else {
+        rates.push(0);
+      }
+    }
+    return rates;
+  }
+
   remove(containerId: string): void {
     this.histories.delete(containerId);
   }

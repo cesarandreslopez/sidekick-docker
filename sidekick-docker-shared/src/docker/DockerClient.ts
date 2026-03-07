@@ -44,22 +44,30 @@ export class DockerClient {
 
   async listContainers(all = true): Promise<ContainerInfo[]> {
     const containers = await this.docker.listContainers({ all });
-    return containers.map((c): ContainerInfo => ({
-      id: c.Id,
-      name: (c.Names[0] || '').replace(/^\//, ''),
-      image: c.Image,
-      state: c.State as ContainerInfo['state'],
-      status: c.Status,
-      ports: (c.Ports || []).map((p): PortBinding => ({
-        hostIp: p.IP || '0.0.0.0',
-        hostPort: p.PublicPort || 0,
-        containerPort: p.PrivatePort,
-        protocol: (p.Type || 'tcp') as 'tcp' | 'udp',
-      })),
-      created: new Date(c.Created * 1000),
-      composeProject: c.Labels?.['com.docker.compose.project'],
-      composeService: c.Labels?.['com.docker.compose.service'],
-    }));
+    return containers.map((c): ContainerInfo => {
+      let healthStatus: ContainerInfo['healthStatus'];
+      if (/\(healthy\)/.test(c.Status)) healthStatus = 'healthy';
+      else if (/\(unhealthy\)/.test(c.Status)) healthStatus = 'unhealthy';
+      else if (/\(health: starting\)/.test(c.Status)) healthStatus = 'starting';
+
+      return {
+        id: c.Id,
+        name: (c.Names[0] || '').replace(/^\//, ''),
+        image: c.Image,
+        state: c.State as ContainerInfo['state'],
+        status: c.Status,
+        ports: (c.Ports || []).map((p): PortBinding => ({
+          hostIp: p.IP || '0.0.0.0',
+          hostPort: p.PublicPort || 0,
+          containerPort: p.PrivatePort,
+          protocol: (p.Type || 'tcp') as 'tcp' | 'udp',
+        })),
+        created: new Date(c.Created * 1000),
+        composeProject: c.Labels?.['com.docker.compose.project'],
+        composeService: c.Labels?.['com.docker.compose.service'],
+        healthStatus,
+      };
+    });
   }
 
   async startContainer(id: string): Promise<void> {
@@ -72,6 +80,14 @@ export class DockerClient {
 
   async restartContainer(id: string): Promise<void> {
     await this.docker.getContainer(id).restart();
+  }
+
+  async pauseContainer(id: string): Promise<void> {
+    await this.docker.getContainer(id).pause();
+  }
+
+  async unpauseContainer(id: string): Promise<void> {
+    await this.docker.getContainer(id).unpause();
   }
 
   async removeContainer(id: string, force = false): Promise<void> {
@@ -158,6 +174,7 @@ export class DockerClient {
     const memStats = raw.memory_stats as Record<string, unknown> | undefined;
     const netStats = raw.networks as Record<string, Record<string, number>> | undefined;
     const pidsStats = raw.pids_stats as Record<string, number> | undefined;
+    const blkioStats = raw.blkio_stats as Record<string, unknown> | undefined;
 
     // CPU calculation
     const cpuUsage = (cpuStats?.cpu_usage as Record<string, number>)?.total_usage ?? 0;
@@ -186,6 +203,18 @@ export class DockerClient {
       }
     }
 
+    // Block I/O
+    let blockRead = 0;
+    let blockWrite = 0;
+    const ioServiceBytes = blkioStats?.io_service_bytes_recursive as Array<{ op: string; value: number }> | null | undefined;
+    if (ioServiceBytes) {
+      for (const entry of ioServiceBytes) {
+        const op = (entry.op || '').toLowerCase();
+        if (op === 'read') blockRead += entry.value ?? 0;
+        else if (op === 'write') blockWrite += entry.value ?? 0;
+      }
+    }
+
     return {
       stats: {
         cpuPercent: Math.round(cpuPercent * 100) / 100,
@@ -194,6 +223,8 @@ export class DockerClient {
         memoryPercent: Math.round(memPercent * 100) / 100,
         networkRx: netRx,
         networkTx: netTx,
+        blockRead,
+        blockWrite,
         pids: pidsStats?.current ?? 0,
         timestamp: new Date(),
       },

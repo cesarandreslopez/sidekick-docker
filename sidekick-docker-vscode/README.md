@@ -50,9 +50,10 @@ The dashboard opens as a webview panel with the same layout and capabilities as 
 - **Smart log highlighting** — token-level syntax coloring for HTTP methods, status codes, URLs, IPs, timestamps, JSON keys, and more
 - **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
 - **Log analytics** — severity count badges and pattern clustering that groups similar logs into templates
-- **Container management** — start, stop, restart, remove containers directly
+- **Container management** — start, stop, restart, pause, unpause, remove containers directly
+- **Health status** — shows healthy/unhealthy/starting indicators for containers with health checks
 - **Compose support** — detect and manage Compose projects
-- **Stats monitoring** — live CPU and memory metrics
+- **Stats monitoring** — live CPU, memory, network I/O, and block I/O metrics
 
 ## Requirements
 

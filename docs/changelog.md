@@ -6,6 +6,39 @@ All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.5] - 2026-03-08
+
+### Added
+
+#### Docker API Layer (`sidekick-docker-shared`)
+
+- `DockerClient.pauseContainer(id)` and `DockerClient.unpauseContainer(id)` methods
+- Health status parsing from Docker `Status` string — extracts `healthy`, `unhealthy`, or `starting` from status text (e.g., "Up 5 minutes (healthy)")
+- `healthStatus` field on `ContainerInfo` type
+- Block I/O stats extraction — `blockRead` and `blockWrite` fields on `ContainerStats`, parsed from `blkio_stats.io_service_bytes_recursive`
+- `StatsCollector.getNetworkRxRateSeries()` / `getNetworkTxRateSeries()` — compute bytes/sec from consecutive cumulative sample deltas
+- `StatsCollector.getBlockReadRateSeries()` / `getBlockWriteRateSeries()` — compute block I/O bytes/sec rates
+- 3 new unit tests for rate series computation (network and block I/O)
+
+#### TUI Dashboard
+
+- Pause (`p`) and Unpause (`u`) container actions in the Containers panel
+- Show all / running-only toggle (`a` key) — filters container list to show only running/paused containers when toggled off
+- Health status indicator in container list items — colored badge (green=healthy, red=unhealthy, yellow=starting) appended to container name
+- Health status in Config detail tab
+- Network I/O sparklines — RX/TX rate sparklines (bytes/sec) below the Net line in the Stats tab
+- Block I/O stats line in Stats tab showing cumulative read/write bytes with rate sparklines
+- Container sorting (`o` key opens sort overlay) — sort by state, name, CPU%, memory%, network I/O, block I/O, or PIDs
+- Reverse sort toggle (`R` key) — reverses current sort direction
+- Sort overlay with j/k navigation, Enter to apply, R to reverse within overlay
+- New keybindings added to Help overlay: `a`, `o`, `R`
+
+#### VS Code Extension
+
+- Pause and Unpause container actions in context menu and action handler
+- Health status display in Config detail tab (colored: green/red/yellow)
+- Block I/O stats row in Stats detail tab (read/write bytes)
+
 ## [0.1.4] - 2026-03-07
 
 ### Added

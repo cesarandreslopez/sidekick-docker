@@ -1,6 +1,6 @@
 # Containers Panel
 
-The Containers panel (press `1`) shows all Docker containers — running and stopped.
+The Containers panel (press `1`) shows all Docker containers — running and stopped. Press `a` to toggle between showing all containers and only running/paused containers.
 
 ## List Columns
 
@@ -8,8 +8,8 @@ Each container row displays:
 
 - State icon (color-coded: green for running, red for stopped, yellow for other)
 - Container name
-- Image
-- Port mappings
+- Port mappings (first exposed port)
+- Health status badge (green=healthy, red=unhealthy, yellow=starting) when the container has a health check configured
 - Uptime / exit status
 
 ## Detail Tabs
@@ -35,7 +35,13 @@ Matched text is highlighted and a match count is displayed. Press `Esc` to clear
 
 Real-time CPU and memory usage rendered as sparkline charts. The stats collector maintains a 60-sample ring buffer, giving you a rolling view of resource usage.
 
-A **log severity sparkline** appears below the CPU/Memory charts, showing the distribution of log severity over time. Each position is colored by the dominant severity in that time bucket (red for errors, yellow for warnings, blue for info).
+**Network I/O** — cumulative RX/TX bytes with rate sparklines (bytes/sec) showing transfer activity over time.
+
+**Block I/O** — cumulative read/write bytes with rate sparklines showing disk activity.
+
+**PIDs** — current process count inside the container.
+
+A **log severity sparkline** appears below the resource charts, showing the distribution of log severity over time. Each position is colored by the dominant severity in that time bucket (red for errors, yellow for warnings, blue for info).
 
 Stats are also selection-driven to avoid unnecessary API overhead.
 
@@ -45,13 +51,27 @@ Environment variables set in the container, displayed as key-value pairs.
 
 ### Config
 
-Container configuration details from `docker inspect` — image, command, entry point, network settings, mounts, and labels.
+Container configuration details — ID, name, image, state, status, health status (when available), creation time, ports, and Compose project info.
 
 ### Patterns
 
 Groups similar log lines into templates by replacing variable parts (IDs, IPs, timestamps) with `<*>` wildcards. Templates are ranked by frequency, helping you quickly identify the most common log patterns and spot anomalies.
 
 For example, three lines like `User alice logged in from 192.168.1.1`, `User bob logged in from 10.0.0.1`, and `User charlie logged in from 172.16.0.1` would be grouped into: `User <*> logged in from <*>` (3 occurrences).
+
+## Sorting
+
+Press `o` to open the sort overlay. Sort containers by:
+
+- **State** (default) — running first, then stopped
+- **Name** — alphabetical
+- **CPU %** — highest CPU usage first
+- **Memory %** — highest memory usage first
+- **Network I/O** — highest total network bytes first
+- **Block I/O** — highest total disk bytes first
+- **PIDs** — highest process count first
+
+Use `j`/`k` to navigate, `Enter` to apply, `R` to reverse sort direction. You can also press `R` globally to toggle reverse sort.
 
 ## Actions
 
@@ -62,8 +82,11 @@ Press `x` to open the context menu:
 | `s` | Start | Start a stopped container |
 | `S` | Stop | Stop a running container |
 | `r` | Restart | Restart a container |
-| `R` | Remove | Remove a container (confirmation required) |
+| `p` | Pause | Pause a running container |
+| `u` | Unpause | Unpause a paused container |
+| `d` | Remove | Remove a container (confirmation required) |
 | `e` | Exec | Open an interactive shell inside the container |
+| `c` | Copy Logs | Copy buffered log text to clipboard |
 
 ### Interactive Exec
 
