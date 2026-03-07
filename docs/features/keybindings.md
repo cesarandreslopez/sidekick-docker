@@ -29,7 +29,7 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `x` | Open context menu (actions for selected item) |
 | `f` | Open log filter (when on Logs tab) |
 | `/` | Open filter |
-| `z` | Toggle expanded layout |
+| `z` | Cycle layout (Normal/Wide/Expanded) |
 | `?` | Show help overlay |
 | `V` | Show version |
 | `q` / `Ctrl+C` | Quit |
@@ -43,6 +43,7 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `r` | Restart |
 | `R` | Remove (with confirmation) |
 | `e` | Exec into container |
+| `c` | Copy logs to clipboard |
 
 ## Compose Actions (via context menu)
 

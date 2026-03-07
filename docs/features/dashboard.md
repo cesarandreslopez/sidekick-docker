@@ -13,7 +13,7 @@ The dashboard uses a split layout:
 - **Left pane** — resource list (containers, images, etc.)
 - **Right pane** — detail tabs for the selected item (logs, stats, configuration)
 
-Press **`z`** to toggle expanded layout, which gives the detail pane more space.
+Press **`z`** to cycle layout modes: **Normal** (28-col side panel) → **Wide** (42-col side panel, showing full names) → **Expanded** (side panel hidden, detail pane only).
 
 ## Panels
 
