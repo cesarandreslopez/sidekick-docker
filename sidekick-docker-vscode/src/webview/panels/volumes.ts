@@ -38,6 +38,7 @@ export const volumesPanel: PanelDefinition = {
       iconColor: vol.isInUse ? 'var(--vscode-foreground)' : 'var(--vscode-descriptionForeground)',
       sortKey: vol.isInUse ? 0 : 1,
       badge: vol.driver,
+      tooltip: vol.name,
     }));
   },
 

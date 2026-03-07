@@ -2,6 +2,7 @@ import React from 'react';
 import { spawnSync } from 'child_process';
 import type { Command } from 'commander';
 import { DockerClient, ComposeClient, EventWatcher } from 'sidekick-docker-shared';
+import { copyToClipboard } from '../utils/clipboard';
 import { DockerState } from '../dashboard/DockerState';
 import { ContainersPanel } from '../dashboard/panels/ContainersPanel';
 import { ServicesPanel } from '../dashboard/panels/ServicesPanel';
@@ -177,6 +178,15 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       // Ref not populated yet — direct fallback
       onExecFallback(containerId);
     }
+  });
+
+  // Wire copy logs handler
+  containersPanel.setOnCopyLogs((text: string) => {
+    // addToast not available here — use scheduleRender to show toast via rerender
+    // Instead, we'll let the keyboard handler's addToast handle feedback
+    // since executeAction already calls addToast with the action label.
+    // Just do the clipboard operation here.
+    copyToClipboard(text);
   });
 
   // Re-render bridge: throttled

@@ -42,7 +42,7 @@ export class ImagesPanel implements SidePanel {
       const icon = img.isDangling ? '\u25CB' : '\u25CF'; // ○ vs ●
       return {
         id: img.id,
-        label: `${icon} ${truncate(tag, 20)}`,
+        label: `${icon} ${truncate(tag, 38)}`,
         sortKey: img.isDangling ? 1 : 0,
         data: img,
         iconColor: img.isDangling ? 'gray' : '#2B4C7E',

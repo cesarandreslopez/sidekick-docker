@@ -102,4 +102,5 @@ export type WebviewMessage =
   | { type: 'filterChange'; filter: string }
   | { type: 'execContainer'; containerId: string }
   | { type: 'requestRefresh' }
-  | { type: 'selectComposeService'; projectName: string; serviceName: string | null };
+  | { type: 'selectComposeService'; projectName: string; serviceName: string | null }
+  | { type: 'copyLogs'; text: string };

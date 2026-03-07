@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-03-07
+
+### Added
+
+#### TUI Dashboard
+
+- 3-state layout cycle (`z` key): Normal → Wide → Expanded → Normal. Wide mode uses a 42-column side panel so full container/resource names are visible without truncation
+- Copy logs to clipboard (`c` key on Containers panel) — copies buffered log text to system clipboard, respects active log filter. Uses platform-native clipboard (pbcopy, xclip, xsel, wl-copy)
+
+#### VS Code Extension
+
+- Tooltip on hover for side list items — shows full untruncated name for containers, images, volumes, networks, and services via HTML `title` attribute
+- Copy logs to clipboard (`c` key or Copy button in log filter bar) — copies buffered log text to clipboard via `vscode.env.clipboard`, respects active log filter
+
+### Changed
+
+- Side panel truncation limits increased across all CLI panels to accommodate Wide layout mode (SideList already clips to available width in Normal mode)
+
 ## [0.1.3] - 2026-03-03
 
 ### Improved
@@ -188,6 +206,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.1.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.4
 [0.1.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.3
 [0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1

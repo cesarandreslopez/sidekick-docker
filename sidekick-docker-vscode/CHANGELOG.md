@@ -5,6 +5,13 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-03-07
+
+### Added
+
+- Tooltip on hover for all side list items — shows full untruncated resource name (containers, images, volumes, networks, services) via native HTML `title` attribute
+- Copy logs to clipboard (`c` key or Copy button in log filter bar) — copies buffered log text to clipboard via `vscode.env.clipboard`, respects active log filter and mode
+
 ## [0.1.3] - 2026-03-03
 
 ### Improved
@@ -63,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Container config detail view
 - Docker event watching for real-time state updates
 
+[0.1.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.4
 [0.1.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.3
 [0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1

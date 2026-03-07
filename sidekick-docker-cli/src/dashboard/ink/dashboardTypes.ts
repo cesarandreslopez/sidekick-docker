@@ -1,6 +1,6 @@
 import type { FilterMode } from 'sidekick-docker-shared';
 
-export type LayoutMode = 'normal' | 'expanded';
+export type LayoutMode = 'normal' | 'wide' | 'expanded';
 export type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' | 'exec' | 'version' | 'log-filter';
 export type FocusTarget = 'side' | 'detail';
 

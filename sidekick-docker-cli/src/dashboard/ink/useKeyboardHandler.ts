@@ -215,7 +215,8 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
 
     if (input === 'z') {
       dispatch({ type: 'CYCLE_LAYOUT' });
-      addToast(`Layout: ${state.layoutMode === 'normal' ? 'Expanded' : 'Normal'}`, 'info');
+      const nextMode = state.layoutMode === 'normal' ? 'Wide' : state.layoutMode === 'wide' ? 'Expanded' : 'Normal';
+      addToast(`Layout: ${nextMode}`, 'info');
       return;
     }
 

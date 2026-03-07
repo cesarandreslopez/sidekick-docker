@@ -68,8 +68,8 @@ export function TabBar({ panels, activeIndex, layoutMode, phrase, panelCounts }:
       <Box flexGrow={1} marginLeft={1}>
         {phrase && <Text color="gray" wrap="truncate">{phrase}</Text>}
       </Box>
-      <Text color={layoutMode === 'expanded' ? '#2B4C7E' : 'gray'}>
-        {`z: ${layoutMode === 'expanded' ? 'Expanded' : 'Normal'} \u25B8`}
+      <Text color={layoutMode !== 'normal' ? '#2B4C7E' : 'gray'}>
+        {`z: ${layoutMode === 'expanded' ? 'Expanded' : layoutMode === 'wide' ? 'Wide' : 'Normal'} \u25B8`}
       </Text>
     </Box>
   );

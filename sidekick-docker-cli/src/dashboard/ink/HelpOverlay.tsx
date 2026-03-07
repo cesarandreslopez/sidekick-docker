@@ -15,7 +15,7 @@ const GLOBAL_BINDINGS = [
   { key: 'g/G', label: 'Jump to first / last' },
   { key: 'Tab', label: 'Toggle focus' },
   { key: '[/]', label: 'Cycle detail tabs' },
-  { key: 'z', label: 'Toggle expanded layout' },
+  { key: 'z', label: 'Cycle layout (Normal/Wide/Expanded)' },
   { key: '/', label: 'Filter items' },
   { key: 'x', label: 'Actions menu' },
   { key: 'V', label: 'Version info' },

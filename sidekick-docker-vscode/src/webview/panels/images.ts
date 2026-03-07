@@ -40,6 +40,7 @@ export const imagesPanel: PanelDefinition = {
         iconColor: img.isDangling ? 'var(--vscode-descriptionForeground)' : 'var(--vscode-foreground)',
         sortKey: img.isDangling ? 1 : 0,
         badge: formatBytes(img.size),
+        tooltip: tag,
       };
     });
   },

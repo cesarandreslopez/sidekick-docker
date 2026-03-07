@@ -83,6 +83,7 @@ export const servicesPanel: PanelDefinition = {
         icon: statusIcon,
         iconColor: project.status === 'running' ? stateColor('running') : stateColor('exited'),
         sortKey: sortKey++,
+        tooltip: project.name,
       });
 
       for (const service of project.services) {
@@ -92,6 +93,7 @@ export const servicesPanel: PanelDefinition = {
           icon: stateIcon(service.state),
           iconColor: stateColor(service.state),
           sortKey: sortKey++,
+          tooltip: `${project.name}/${service.name}`,
         });
       }
     }

@@ -14,6 +14,8 @@ export class ContainersPanel implements SidePanel {
   private onAction: () => void;
   private onError: (msg: string) => void;
   private onExec?: (containerId: string) => void;
+  private onCopyLogs?: (text: string) => void;
+  private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
     this.client = client;
@@ -23,6 +25,10 @@ export class ContainersPanel implements SidePanel {
 
   setOnExec(handler: (containerId: string) => void): void {
     this.onExec = handler;
+  }
+
+  setOnCopyLogs(handler: (text: string) => void): void {
+    this.onCopyLogs = handler;
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -168,6 +174,7 @@ export class ContainersPanel implements SidePanel {
   ];
 
   getItems(metrics: DockerDashboardMetrics): PanelItem[] {
+    this.lastMetrics = metrics;
     return metrics.containers.map((c): PanelItem => {
       const uptime = compactUptime(c.status);
       // Show first exposed port as a hint
@@ -175,8 +182,8 @@ export class ContainersPanel implements SidePanel {
         ? `:${c.ports[0].hostPort || c.ports[0].containerPort}`
         : '';
       const namePart = portHint
-        ? `${truncate(c.name, 16)} ${portHint}`
-        : truncate(c.name, 20);
+        ? `${truncate(c.name, 34)} ${portHint}`
+        : truncate(c.name, 38);
       return {
         id: c.id,
         label: `${stateIcon(c.state)} ${namePart}`,
@@ -236,6 +243,25 @@ export class ContainersPanel implements SidePanel {
           this.onExec?.(c.id);
         },
         condition: (item) => (item.data as ContainerInfo).state === 'running',
+      },
+      {
+        key: 'c',
+        label: 'Copy Logs',
+        handler: () => {
+          if (!this.lastMetrics || !this.onCopyLogs) return;
+          const logs = this.lastMetrics.selectedContainerLogs;
+          const query = this.lastMetrics.logFilterString;
+          const mode = this.lastMetrics.logFilterMode;
+          let lines: string[];
+          if (query) {
+            lines = logs
+              .filter(l => filterLine(l.message, query, mode).matched)
+              .map(l => l.message);
+          } else {
+            lines = logs.map(l => l.message);
+          }
+          this.onCopyLogs(lines.join('\n'));
+        },
       },
     ];
   }

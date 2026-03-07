@@ -88,6 +88,11 @@ export class DockerDashboardProvider implements vscode.Disposable {
       case 'requestRefresh':
         await this.service?.forceRefresh();
         break;
+
+      case 'copyLogs':
+        await vscode.env.clipboard.writeText(message.text);
+        this._postMessage({ type: 'toast', message: 'Logs copied to clipboard', severity: 'info' });
+        break;
     }
   }
 
@@ -532,6 +537,19 @@ export class DockerDashboardProvider implements vscode.Disposable {
       font-size: 0.85em;
       color: var(--vscode-descriptionForeground);
       white-space: nowrap;
+    }
+    .log-filter-bar .copy-logs-btn {
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      user-select: none;
+      padding: 1px 4px;
+      border-radius: 3px;
+      transition: background 0.1s ease, color 0.1s ease;
+    }
+    .log-filter-bar .copy-logs-btn:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.1));
+      color: var(--vscode-foreground);
     }
 
     /* ─── Log pattern clustering ─────────────────────────────── */

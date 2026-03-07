@@ -47,6 +47,7 @@ export const networksPanel: PanelDefinition = {
       iconColor: net.isDefault ? 'var(--vscode-foreground)' : 'var(--vscode-descriptionForeground)',
       sortKey: net.isDefault ? 0 : 1,
       badge: net.containers.length > 0 ? `${net.containers.length} container${net.containers.length > 1 ? 's' : ''}` : undefined,
+      tooltip: net.name,
     }));
   },
 

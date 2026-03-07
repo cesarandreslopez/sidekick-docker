@@ -15,6 +15,7 @@ import { imagesPanel } from './panels/images';
 import { volumesPanel } from './panels/volumes';
 import { networksPanel } from './panels/networks';
 import { LogAnalytics } from '../log/LogAnalytics';
+import { filterLine } from '../log/LogFilter';
 
 const vscode = acquireVsCodeApi();
 const TOAST_DURATIONS = { error: 4000, warning: 3000, info: 2000 } as const;
@@ -220,7 +221,7 @@ function renderSideList(items: PanelItem[]): void {
     const selected = item.id === state.selectedItemId ? ' selected' : '';
     const iconHtml = item.icon ? `<span style="color:${item.iconColor};margin-right:4px;flex-shrink:0;">${item.icon}</span>` : '';
     const badgeHtml = item.badge ? `<span class="side-badge">${escapeHtml(item.badge)}</span>` : '';
-    html += `<div class="side-item${selected}" data-id="${escapeAttr(item.id)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${badgeHtml}</div>`;
+    html += `<div class="side-item${selected}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${badgeHtml}</div>`;
   }
   $sideList.innerHTML = html;
 
@@ -381,9 +382,37 @@ function navigateSide(delta: number): void {
   }
 }
 
+function copyCurrentLogs(): void {
+  if (!state.selectedItemId) return;
+  const entries = state.logs.get(state.selectedItemId);
+  if (!entries || entries.length === 0) {
+    addToast('No logs to copy', 'warning');
+    return;
+  }
+  const query = state.logFilterString;
+  const mode = state.logFilterMode;
+  let lines: string[];
+  if (query) {
+    lines = entries
+      .filter(e => filterLine(e.message, query, mode).matched)
+      .map(e => e.message);
+  } else {
+    lines = entries.map(e => e.message);
+  }
+  if (lines.length === 0) {
+    addToast('No matching logs to copy', 'warning');
+    return;
+  }
+  post({ type: 'copyLogs', text: lines.join('\n') });
+}
+
 function executeAction(action: ActionDefinition, itemId: string): void {
   if (action.actionType === 'exec') {
     post({ type: 'execContainer', containerId: itemId });
+    return;
+  }
+  if (action.actionType === 'copyLogs') {
+    copyCurrentLogs();
     return;
   }
   if (action.confirm) {
@@ -608,6 +637,9 @@ $detailContent.addEventListener('click', (e: Event) => {
   if (target.id === 'log-filter-mode') {
     state.logFilterMode = state.logFilterMode === 'exact' ? 'fuzzy' : 'exact';
     renderDetailContent(getFilteredItems());
+  }
+  if (target.id === 'copy-logs-btn') {
+    copyCurrentLogs();
   }
 });
 

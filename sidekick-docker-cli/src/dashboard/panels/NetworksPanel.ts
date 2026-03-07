@@ -51,7 +51,7 @@ export class NetworksPanel implements SidePanel {
       const countLabel = net.containers.length > 0 ? `${net.containers.length}` : '';
       return {
         id: net.id,
-        label: `${icon} ${truncate(net.name, 20)}`,
+        label: `${icon} ${truncate(net.name, 38)}`,
         sortKey: net.isDefault ? 0 : 1,
         data: net,
         iconColor: net.isDefault ? '#2B4C7E' : 'gray',

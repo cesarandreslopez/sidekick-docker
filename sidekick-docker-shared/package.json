@@ -1,6 +1,6 @@
 {
   "name": "sidekick-docker-shared",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Shared Docker API layer, types, and compose detection",
   "author": "Cesar Andres Lopez <cesarandreslopez@gmail.com>",
   "repository": {

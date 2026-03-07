@@ -5,6 +5,19 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.4] - 2026-03-07
+
+### Added
+
+- 3-state layout cycle (`z` key): Normal → Wide (42-col side panel) → Expanded (side panel hidden). Previously was a 2-state toggle between Normal and Expanded
+- Copy logs to clipboard (`c` key on Containers panel) — copies buffered log text to system clipboard, respects active log filter. Supports macOS (pbcopy) and Linux (xclip, xsel, wl-copy)
+
+### Changed
+
+- Side panel truncation limits increased across all panels to show full names in Wide mode (SideList already clips to available width in Normal mode)
+- Help overlay updated to reflect 3-state layout cycle
+- TabBar layout indicator now shows Normal/Wide/Expanded
+
 ## [0.1.3] - 2026-03-03
 
 ### Improved
@@ -75,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sidekick-docker logs <container>` — stream container logs
 - `--socket <path>` flag for custom Docker socket
 
+[0.1.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.4
 [0.1.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.3
 [0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1

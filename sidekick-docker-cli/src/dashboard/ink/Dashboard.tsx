@@ -30,6 +30,7 @@ import type { LayoutMode, DashboardUIState, Action } from './dashboardTypes';
 declare const __CLI_VERSION__: string;
 
 const SIDE_PANEL_WIDTH = 28;
+const SIDE_PANEL_WIDTH_WIDE = 42;
 const MIN_SCREEN_WIDTH = 60;
 const MIN_SCREEN_HEIGHT = 15;
 const RESERVED_UI_ROWS = 5;
@@ -58,7 +59,7 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
       return { ...state, detailTabIndex: next, detailScrollOffset: 0 };
     }
     case 'CYCLE_LAYOUT': {
-      const next: LayoutMode = state.layoutMode === 'normal' ? 'expanded' : 'normal';
+      const next: LayoutMode = state.layoutMode === 'normal' ? 'wide' : state.layoutMode === 'wide' ? 'expanded' : 'normal';
       return { ...state, layoutMode: next, focusTarget: next === 'expanded' ? 'detail' : state.focusTarget };
     }
     case 'TOGGLE_FOCUS':
@@ -241,7 +242,9 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   // Derived values
   const panel = panels[state.activePanelIndex];
   const tooSmall = columns < MIN_SCREEN_WIDTH || rows < MIN_SCREEN_HEIGHT;
-  const sideWidth = state.layoutMode === 'expanded' ? 0 : SIDE_PANEL_WIDTH;
+  const sideWidth = state.layoutMode === 'expanded' ? 0
+    : state.layoutMode === 'wide' ? SIDE_PANEL_WIDTH_WIDE
+    : SIDE_PANEL_WIDTH;
 
   // Get all items for active panel (once), then filter
   const allItems = panel.getItems(metrics);

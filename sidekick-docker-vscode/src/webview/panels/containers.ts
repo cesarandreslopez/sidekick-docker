@@ -44,7 +44,8 @@ export const containersPanel: PanelDefinition = {
         // Log filter bar
         html += `<div class="log-filter-bar">
           <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeHtml(state.logFilterString)}" data-container-id="${escapeHtml(item.id)}" />
-          <span class="filter-mode" id="log-filter-mode" title="Click to toggle">${state.logFilterMode}</span>`;
+          <span class="filter-mode" id="log-filter-mode" title="Click to toggle">${state.logFilterMode}</span>
+          <span class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</span>`;
 
         // Apply log content filter
         const query = state.logFilterString;
@@ -185,6 +186,7 @@ export const containersPanel: PanelDefinition = {
       sortKey: c.state === 'running' ? 0 : 1,
       badge: c.state === 'running' ? c.status.replace(/^Up /, '') : c.state,
       group: c.state === 'running' ? 'Running' : 'Stopped',
+      tooltip: c.name,
     }));
   },
 
@@ -200,6 +202,7 @@ export const containersPanel: PanelDefinition = {
       actions.push({ key: 'S', label: 'Stop', actionType: 'stop' });
       actions.push({ key: 'r', label: 'Restart', actionType: 'restart' });
     }
+    actions.push({ key: 'c', label: 'Copy Logs', actionType: 'copyLogs' });
     actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: 'Remove this container?' });
     if (c.state === 'running') {
       actions.push({ key: 'e', label: 'Exec', actionType: 'exec' });

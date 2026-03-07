@@ -9,6 +9,7 @@ export interface PanelItem {
   sortKey: number;
   badge?: string;
   group?: string;
+  tooltip?: string;
 }
 
 export interface ActionDefinition {

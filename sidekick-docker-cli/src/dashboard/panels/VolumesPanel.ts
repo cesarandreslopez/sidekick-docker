@@ -41,7 +41,7 @@ export class VolumesPanel implements SidePanel {
       const icon = vol.isInUse ? '\u25CF' : '\u25CB'; // ● vs ○
       return {
         id: vol.name,
-        label: `${icon} ${truncate(vol.name, 20)}`,
+        label: `${icon} ${truncate(vol.name, 38)}`,
         sortKey: vol.isInUse ? 0 : 1,
         data: vol,
         iconColor: vol.isInUse ? 'green' : 'gray',

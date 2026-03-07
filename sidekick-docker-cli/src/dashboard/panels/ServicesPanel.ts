@@ -93,7 +93,7 @@ export class ServicesPanel implements SidePanel {
         const icon = stateIcon(service.state);
         items.push({
           id: `service:${project.name}:${service.name}`,
-          label: `  ${icon} ${truncate(service.name, 18)}`,
+          label: `  ${icon} ${truncate(service.name, 36)}`,
           sortKey: sortKey++,
           data: { type: 'service' as const, service },
           iconColor: stateColor(service.state),
