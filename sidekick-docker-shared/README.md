@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/sidekick-docker-shared?label=npm)](https://www.npmjs.com/package/sidekick-docker-shared)
 [![npm Downloads](https://img.shields.io/npm/dt/sidekick-docker-shared?label=Downloads)](https://www.npmjs.com/package/sidekick-docker-shared)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cesarandreslopez/sidekick-docker/blob/main/LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cesarandreslopez/sidekick-docker)
 
 The Docker API abstraction layer that powers Sidekick Docker. Wraps dockerode into a typed, opinionated facade with async generators for streaming, Compose detection, and stats collection.
 

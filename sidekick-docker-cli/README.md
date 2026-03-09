@@ -3,6 +3,7 @@
 [![npm](https://img.shields.io/npm/v/sidekick-docker?label=npm)](https://www.npmjs.com/package/sidekick-docker)
 [![npm Downloads](https://img.shields.io/npm/dt/sidekick-docker?label=Downloads)](https://www.npmjs.com/package/sidekick-docker)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cesarandreslopez/sidekick-docker/blob/main/LICENSE)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cesarandreslopez/sidekick-docker)
 
 A terminal dashboard for Docker. Manage containers, Compose projects, images, volumes, and networks — all from a single, keyboard-driven TUI.
 
