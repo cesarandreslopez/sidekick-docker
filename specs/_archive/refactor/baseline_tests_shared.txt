@@ -1,0 +1,19 @@
+
+ RUN  v3.2.4 /home/datum/.contextful-tlap/git-worktrees/worktree-29abdc56-modular-typescript-refactoring-an417knl/sidekick-docker-shared
+
+ ✓ src/log/LogFilter.test.ts (12 tests) 4ms
+ ✓ src/stats/StatsCollector.test.ts (9 tests) 6ms
+ ✓ src/log/LogSeverityTimeSeries.test.ts (6 tests) 4ms
+ ✓ src/log/LogTemplateEngine.test.ts (7 tests) 5ms
+ ✓ src/log/LogAnalytics.test.ts (12 tests) 6ms
+ ✓ src/log/LogParser.test.ts (10 tests) 7ms
+ ✓ src/compose/ComposeDetector.test.ts (5 tests) 15ms
+ ✓ src/log/LogTokenizer.test.ts (16 tests) 13ms
+ ✓ src/docker/DockerClient.test.ts (8 tests) 17ms
+ ✓ src/events/EventWatcher.test.ts (3 tests) 159ms
+
+ Test Files  10 passed (10)
+      Tests  88 passed (88)
+   Start at  17:06:23
+   Duration  571ms (transform 462ms, setup 0ms, collect 915ms, tests 237ms, environment 3ms, prepare 1.06s)
+

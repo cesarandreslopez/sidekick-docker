@@ -1,0 +1,120 @@
+{
+  "branding.ts": [],
+  "compose/ComposeClient.ts": [
+    "types/container.ts"
+  ],
+  "compose/ComposeDetector.test.ts": [
+    "compose/ComposeDetector.ts",
+    "types/container.ts"
+  ],
+  "compose/ComposeDetector.ts": [
+    "compose/ComposeFileReader.ts",
+    "types/compose.ts",
+    "types/container.ts"
+  ],
+  "compose/ComposeFileReader.ts": [
+    "compose/schemas.ts"
+  ],
+  "compose/schemas.ts": [],
+  "docker/DockerClient.test.ts": [
+    "docker/DockerClient.ts"
+  ],
+  "docker/DockerClient.ts": [
+    "docker/schemas.ts",
+    "types/index.ts"
+  ],
+  "docker/schemas.ts": [],
+  "errors.ts": [],
+  "events/EventWatcher.test.ts": [
+    "docker/DockerClient.ts",
+    "events/EventWatcher.ts",
+    "types/events.ts"
+  ],
+  "events/EventWatcher.ts": [
+    "docker/DockerClient.ts",
+    "reconnect.ts",
+    "types/events.ts"
+  ],
+  "formatters.ts": [
+    "types/index.ts"
+  ],
+  "index.ts": [
+    "branding.ts",
+    "compose/ComposeClient.ts",
+    "compose/ComposeDetector.ts",
+    "compose/ComposeFileReader.ts",
+    "docker/DockerClient.ts",
+    "errors.ts",
+    "events/EventWatcher.ts",
+    "formatters.ts",
+    "log/LogAnalytics.ts",
+    "log/LogFilter.ts",
+    "log/LogParser.ts",
+    "log/LogSeverityTimeSeries.ts",
+    "log/LogTemplateEngine.ts",
+    "log/LogTokenizer.ts",
+    "phrases.ts",
+    "reconnect.ts",
+    "stats/StatsCollector.ts",
+    "types/index.ts"
+  ],
+  "log/LogAnalytics.test.ts": [
+    "log/LogAnalytics.ts"
+  ],
+  "log/LogAnalytics.ts": [],
+  "log/LogFilter.test.ts": [
+    "log/LogFilter.ts"
+  ],
+  "log/LogFilter.ts": [],
+  "log/LogParser.test.ts": [
+    "log/LogParser.ts"
+  ],
+  "log/LogParser.ts": [
+    "log/LogAnalytics.ts"
+  ],
+  "log/LogSeverityTimeSeries.test.ts": [
+    "log/LogSeverityTimeSeries.ts"
+  ],
+  "log/LogSeverityTimeSeries.ts": [
+    "log/LogAnalytics.ts"
+  ],
+  "log/LogTemplateEngine.test.ts": [
+    "log/LogTemplateEngine.ts"
+  ],
+  "log/LogTemplateEngine.ts": [],
+  "log/LogTokenizer.test.ts": [
+    "log/LogTokenizer.ts"
+  ],
+  "log/LogTokenizer.ts": [],
+  "log/index.ts": [
+    "log/LogAnalytics.ts",
+    "log/LogFilter.ts",
+    "log/LogParser.ts",
+    "log/LogSeverityTimeSeries.ts",
+    "log/LogTemplateEngine.ts",
+    "log/LogTokenizer.ts"
+  ],
+  "phrases.ts": [],
+  "reconnect.ts": [],
+  "stats/StatsCollector.test.ts": [
+    "stats/StatsCollector.ts",
+    "types/container.ts"
+  ],
+  "stats/StatsCollector.ts": [
+    "types/container.ts"
+  ],
+  "types/compose.ts": [],
+  "types/container.ts": [],
+  "types/events.ts": [],
+  "types/image.ts": [],
+  "types/index.ts": [
+    "types/compose.ts",
+    "types/container.ts",
+    "types/events.ts",
+    "types/image.ts",
+    "types/network.ts",
+    "types/volume.ts"
+  ],
+  "types/network.ts": [],
+  "types/volume.ts": []
+}

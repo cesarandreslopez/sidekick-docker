@@ -1,0 +1,167 @@
+{
+  "../../sidekick-docker-shared/dist/branding.d.ts": [],
+  "../../sidekick-docker-shared/dist/compose/ComposeClient.d.ts": [
+    "../../sidekick-docker-shared/dist/types/container.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/compose/ComposeDetector.d.ts": [
+    "../../sidekick-docker-shared/dist/compose/ComposeFileReader.d.ts",
+    "../../sidekick-docker-shared/dist/types/compose.d.ts",
+    "../../sidekick-docker-shared/dist/types/container.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/compose/ComposeFileReader.d.ts": [],
+  "../../sidekick-docker-shared/dist/docker/DockerClient.d.ts": [
+    "../../sidekick-docker-shared/dist/types/index.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/errors.d.ts": [],
+  "../../sidekick-docker-shared/dist/events/EventWatcher.d.ts": [
+    "../../sidekick-docker-shared/dist/docker/DockerClient.d.ts",
+    "../../sidekick-docker-shared/dist/types/events.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/formatters.d.ts": [
+    "../../sidekick-docker-shared/dist/types/index.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/index.d.ts": [
+    "../../sidekick-docker-shared/dist/branding.d.ts",
+    "../../sidekick-docker-shared/dist/compose/ComposeClient.d.ts",
+    "../../sidekick-docker-shared/dist/compose/ComposeDetector.d.ts",
+    "../../sidekick-docker-shared/dist/compose/ComposeFileReader.d.ts",
+    "../../sidekick-docker-shared/dist/docker/DockerClient.d.ts",
+    "../../sidekick-docker-shared/dist/errors.d.ts",
+    "../../sidekick-docker-shared/dist/events/EventWatcher.d.ts",
+    "../../sidekick-docker-shared/dist/formatters.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogAnalytics.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogFilter.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogParser.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogSeverityTimeSeries.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogTemplateEngine.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogTokenizer.d.ts",
+    "../../sidekick-docker-shared/dist/phrases.d.ts",
+    "../../sidekick-docker-shared/dist/reconnect.d.ts",
+    "../../sidekick-docker-shared/dist/stats/StatsCollector.d.ts",
+    "../../sidekick-docker-shared/dist/types/index.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/log/LogAnalytics.d.ts": [],
+  "../../sidekick-docker-shared/dist/log/LogFilter.d.ts": [],
+  "../../sidekick-docker-shared/dist/log/LogParser.d.ts": [
+    "../../sidekick-docker-shared/dist/log/LogAnalytics.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/log/LogSeverityTimeSeries.d.ts": [
+    "../../sidekick-docker-shared/dist/log/LogAnalytics.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/log/LogTemplateEngine.d.ts": [],
+  "../../sidekick-docker-shared/dist/log/LogTokenizer.d.ts": [],
+  "../../sidekick-docker-shared/dist/phrases.d.ts": [],
+  "../../sidekick-docker-shared/dist/reconnect.d.ts": [],
+  "../../sidekick-docker-shared/dist/stats/StatsCollector.d.ts": [
+    "../../sidekick-docker-shared/dist/types/container.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/types/compose.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/container.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/events.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/image.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/index.d.ts": [
+    "../../sidekick-docker-shared/dist/types/compose.d.ts",
+    "../../sidekick-docker-shared/dist/types/container.d.ts",
+    "../../sidekick-docker-shared/dist/types/events.d.ts",
+    "../../sidekick-docker-shared/dist/types/image.d.ts",
+    "../../sidekick-docker-shared/dist/types/network.d.ts",
+    "../../sidekick-docker-shared/dist/types/volume.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/types/network.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/volume.d.ts": [],
+  "extension.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "providers/ContainerTreeProvider.ts",
+    "providers/DockerDashboardProvider.ts",
+    "services/ContainerWatcherService.ts"
+  ],
+  "log/LogAnalytics.ts": [
+    "types/log.ts"
+  ],
+  "log/LogFilter.ts": [
+    "types/log.ts"
+  ],
+  "log/LogTemplateEngine.ts": [],
+  "log/LogTokenizer.ts": [
+    "types/log.ts"
+  ],
+  "providers/ContainerTreeProvider.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "providers/DockerDashboardProvider.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "services/DockerService.ts",
+    "types/messageSchemas.ts",
+    "types/messages.ts",
+    "utils/nonce.ts"
+  ],
+  "services/ContainerWatcherService.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "services/DockerService.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "types/messages.ts"
+  ],
+  "types/log.ts": [],
+  "types/messageSchemas.ts": [],
+  "types/messages.ts": [],
+  "utils/nonce.ts": [],
+  "webview/dashboard.ts": [
+    "log/LogAnalytics.ts",
+    "log/LogFilter.ts",
+    "types/messages.ts",
+    "webview/panels/containers.ts",
+    "webview/panels/images.ts",
+    "webview/panels/networks.ts",
+    "webview/panels/services.ts",
+    "webview/panels/types.ts",
+    "webview/panels/volumes.ts",
+    "webview/state.ts"
+  ],
+  "webview/formatters.ts": [
+    "log/LogTokenizer.ts",
+    "types/log.ts",
+    "types/messages.ts"
+  ],
+  "webview/panels/containers.ts": [
+    "log/LogFilter.ts",
+    "log/LogTemplateEngine.ts",
+    "types/log.ts",
+    "types/messages.ts",
+    "webview/formatters.ts",
+    "webview/panels/types.ts",
+    "webview/state.ts"
+  ],
+  "webview/panels/images.ts": [
+    "types/messages.ts",
+    "webview/formatters.ts",
+    "webview/panels/types.ts",
+    "webview/state.ts"
+  ],
+  "webview/panels/networks.ts": [
+    "types/messages.ts",
+    "webview/formatters.ts",
+    "webview/panels/types.ts",
+    "webview/state.ts"
+  ],
+  "webview/panels/services.ts": [
+    "types/messages.ts",
+    "webview/formatters.ts",
+    "webview/panels/types.ts",
+    "webview/state.ts"
+  ],
+  "webview/panels/types.ts": [
+    "types/messages.ts",
+    "webview/state.ts"
+  ],
+  "webview/panels/volumes.ts": [
+    "types/messages.ts",
+    "webview/formatters.ts",
+    "webview/panels/types.ts",
+    "webview/state.ts"
+  ],
+  "webview/state.ts": [
+    "types/log.ts",
+    "types/messages.ts"
+  ]
+}

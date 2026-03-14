@@ -1,0 +1,261 @@
+{
+  "../../sidekick-docker-shared/dist/branding.d.ts": [],
+  "../../sidekick-docker-shared/dist/compose/ComposeClient.d.ts": [
+    "../../sidekick-docker-shared/dist/types/container.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/compose/ComposeDetector.d.ts": [
+    "../../sidekick-docker-shared/dist/compose/ComposeFileReader.d.ts",
+    "../../sidekick-docker-shared/dist/types/compose.d.ts",
+    "../../sidekick-docker-shared/dist/types/container.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/compose/ComposeFileReader.d.ts": [],
+  "../../sidekick-docker-shared/dist/docker/DockerClient.d.ts": [
+    "../../sidekick-docker-shared/dist/types/index.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/errors.d.ts": [],
+  "../../sidekick-docker-shared/dist/events/EventWatcher.d.ts": [
+    "../../sidekick-docker-shared/dist/docker/DockerClient.d.ts",
+    "../../sidekick-docker-shared/dist/types/events.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/formatters.d.ts": [
+    "../../sidekick-docker-shared/dist/types/index.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/index.d.ts": [
+    "../../sidekick-docker-shared/dist/branding.d.ts",
+    "../../sidekick-docker-shared/dist/compose/ComposeClient.d.ts",
+    "../../sidekick-docker-shared/dist/compose/ComposeDetector.d.ts",
+    "../../sidekick-docker-shared/dist/compose/ComposeFileReader.d.ts",
+    "../../sidekick-docker-shared/dist/docker/DockerClient.d.ts",
+    "../../sidekick-docker-shared/dist/errors.d.ts",
+    "../../sidekick-docker-shared/dist/events/EventWatcher.d.ts",
+    "../../sidekick-docker-shared/dist/formatters.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogAnalytics.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogFilter.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogParser.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogSeverityTimeSeries.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogTemplateEngine.d.ts",
+    "../../sidekick-docker-shared/dist/log/LogTokenizer.d.ts",
+    "../../sidekick-docker-shared/dist/phrases.d.ts",
+    "../../sidekick-docker-shared/dist/reconnect.d.ts",
+    "../../sidekick-docker-shared/dist/stats/StatsCollector.d.ts",
+    "../../sidekick-docker-shared/dist/types/index.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/log/LogAnalytics.d.ts": [],
+  "../../sidekick-docker-shared/dist/log/LogFilter.d.ts": [],
+  "../../sidekick-docker-shared/dist/log/LogParser.d.ts": [
+    "../../sidekick-docker-shared/dist/log/LogAnalytics.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/log/LogSeverityTimeSeries.d.ts": [
+    "../../sidekick-docker-shared/dist/log/LogAnalytics.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/log/LogTemplateEngine.d.ts": [],
+  "../../sidekick-docker-shared/dist/log/LogTokenizer.d.ts": [],
+  "../../sidekick-docker-shared/dist/phrases.d.ts": [],
+  "../../sidekick-docker-shared/dist/reconnect.d.ts": [],
+  "../../sidekick-docker-shared/dist/stats/StatsCollector.d.ts": [
+    "../../sidekick-docker-shared/dist/types/container.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/types/compose.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/container.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/events.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/image.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/index.d.ts": [
+    "../../sidekick-docker-shared/dist/types/compose.d.ts",
+    "../../sidekick-docker-shared/dist/types/container.d.ts",
+    "../../sidekick-docker-shared/dist/types/events.d.ts",
+    "../../sidekick-docker-shared/dist/types/image.d.ts",
+    "../../sidekick-docker-shared/dist/types/network.d.ts",
+    "../../sidekick-docker-shared/dist/types/volume.d.ts"
+  ],
+  "../../sidekick-docker-shared/dist/types/network.d.ts": [],
+  "../../sidekick-docker-shared/dist/types/volume.d.ts": [],
+  "cli.ts": [
+    "commands/dashboard.ts",
+    "commands/logs.ts",
+    "commands/ps.ts"
+  ],
+  "commands/dashboard.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/ComposeLogStreamManager.ts",
+    "dashboard/DockerState.ts",
+    "dashboard/LogStreamManager.ts",
+    "dashboard/StatsStreamManager.ts",
+    "dashboard/ink/Dashboard.tsx",
+    "dashboard/ink/mouse/index.ts",
+    "dashboard/panels/ContainersPanel.ts",
+    "dashboard/panels/ImagesPanel.ts",
+    "dashboard/panels/NetworksPanel.ts",
+    "dashboard/panels/ServicesPanel.ts",
+    "dashboard/panels/VolumesPanel.ts",
+    "dashboard/panels/types.ts",
+    "utils/clipboard.ts"
+  ],
+  "commands/logs.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "commands/ps.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "formatters.ts"
+  ],
+  "dashboard/ComposeLogStreamManager.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/DockerState.test.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/DockerState.ts"
+  ],
+  "dashboard/DockerState.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/ExecManager.ts": [],
+  "dashboard/LogStreamManager.test.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/LogStreamManager.ts"
+  ],
+  "dashboard/LogStreamManager.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/StatsStreamManager.test.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/StatsStreamManager.ts"
+  ],
+  "dashboard/StatsStreamManager.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/branding.ts": [],
+  "dashboard/ink/ConfirmOverlay.tsx": [],
+  "dashboard/ink/ContextMenuOverlay.tsx": [
+    "dashboard/panels/types.ts"
+  ],
+  "dashboard/ink/Dashboard.tsx": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/DockerState.ts",
+    "dashboard/ExecManager.ts",
+    "dashboard/ink/ConfirmOverlay.tsx",
+    "dashboard/ink/ContextMenuOverlay.tsx",
+    "dashboard/ink/DetailPane.tsx",
+    "dashboard/ink/DetailTabBar.tsx",
+    "dashboard/ink/ExecOverlay.tsx",
+    "dashboard/ink/FilterOverlay.tsx",
+    "dashboard/ink/HelpOverlay.tsx",
+    "dashboard/ink/LogFilterOverlay.tsx",
+    "dashboard/ink/SideList.tsx",
+    "dashboard/ink/SortOverlay.tsx",
+    "dashboard/ink/StatusBar.tsx",
+    "dashboard/ink/TabBar.tsx",
+    "dashboard/ink/ToastNotification.tsx",
+    "dashboard/ink/TooSmallOverlay.tsx",
+    "dashboard/ink/VersionOverlay.tsx",
+    "dashboard/ink/dashboardTypes.ts",
+    "dashboard/ink/mouse/index.ts",
+    "dashboard/ink/useKeyboardHandler.ts",
+    "dashboard/ink/useMouseHandler.ts",
+    "dashboard/ink/useTerminalSize.ts",
+    "dashboard/ink/useWindowedScroll.ts",
+    "dashboard/panels/types.ts",
+    "formatters.ts"
+  ],
+  "dashboard/ink/DetailPane.tsx": [],
+  "dashboard/ink/DetailTabBar.tsx": [
+    "dashboard/panels/types.ts"
+  ],
+  "dashboard/ink/ExecOverlay.tsx": [
+    "dashboard/ink/useTerminalSize.ts"
+  ],
+  "dashboard/ink/FilterOverlay.tsx": [],
+  "dashboard/ink/HelpOverlay.tsx": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/panels/types.ts"
+  ],
+  "dashboard/ink/LogFilterOverlay.tsx": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/ink/SideList.tsx": [
+    "dashboard/panels/types.ts"
+  ],
+  "dashboard/ink/SortOverlay.tsx": [
+    "dashboard/ink/dashboardTypes.ts"
+  ],
+  "dashboard/ink/StatusBar.tsx": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/ink/TabBar.tsx": [
+    "dashboard/panels/types.ts"
+  ],
+  "dashboard/ink/ToastNotification.tsx": [],
+  "dashboard/ink/TooSmallOverlay.tsx": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/ink/VersionOverlay.tsx": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/ink/dashboardTypes.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "dashboard/ink/mouse/MouseProvider.tsx": [
+    "dashboard/ink/mouse/mouseProtocol.ts",
+    "dashboard/ink/mouse/parseMouseEvent.ts"
+  ],
+  "dashboard/ink/mouse/index.ts": [
+    "dashboard/ink/mouse/MouseProvider.tsx",
+    "dashboard/ink/mouse/mouseProtocol.ts",
+    "dashboard/ink/mouse/parseMouseEvent.ts"
+  ],
+  "dashboard/ink/mouse/mouseProtocol.ts": [],
+  "dashboard/ink/mouse/parseMouseEvent.test.ts": [
+    "dashboard/ink/mouse/parseMouseEvent.ts"
+  ],
+  "dashboard/ink/mouse/parseMouseEvent.ts": [],
+  "dashboard/ink/useKeyboardHandler.ts": [
+    "dashboard/ink/dashboardTypes.ts",
+    "dashboard/panels/types.ts"
+  ],
+  "dashboard/ink/useMouseHandler.ts": [
+    "dashboard/ink/dashboardTypes.ts",
+    "dashboard/ink/mouse/index.ts",
+    "dashboard/panels/types.ts"
+  ],
+  "dashboard/ink/useTerminalSize.ts": [],
+  "dashboard/ink/useWindowedScroll.ts": [],
+  "dashboard/panels/ContainersPanel.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/DockerState.ts",
+    "dashboard/panels/types.ts",
+    "formatters.ts"
+  ],
+  "dashboard/panels/ImagesPanel.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/DockerState.ts",
+    "dashboard/panels/types.ts",
+    "formatters.ts"
+  ],
+  "dashboard/panels/NetworksPanel.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/DockerState.ts",
+    "dashboard/panels/types.ts",
+    "formatters.ts"
+  ],
+  "dashboard/panels/ServicesPanel.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/DockerState.ts",
+    "dashboard/panels/types.ts",
+    "formatters.ts"
+  ],
+  "dashboard/panels/VolumesPanel.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts",
+    "dashboard/DockerState.ts",
+    "dashboard/panels/types.ts",
+    "formatters.ts"
+  ],
+  "dashboard/panels/types.ts": [
+    "dashboard/DockerState.ts"
+  ],
+  "dashboard/phrases.ts": [],
+  "formatters.test.ts": [
+    "formatters.ts"
+  ],
+  "formatters.ts": [
+    "../../sidekick-docker-shared/dist/index.d.ts"
+  ],
+  "utils/clipboard.ts": []
+}

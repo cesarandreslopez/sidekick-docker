@@ -1,0 +1,14 @@
+
+ RUN  v3.2.4 /home/datum/.contextful-tlap/git-worktrees/worktree-29abdc56-modular-typescript-refactoring-an417knl/sidekick-docker-cli
+
+ ✓ src/dashboard/ink/mouse/parseMouseEvent.test.ts (15 tests) 6ms
+ ✓ src/dashboard/DockerState.test.ts (13 tests) 11ms
+ ✓ src/formatters.test.ts (30 tests) 6ms
+ ✓ src/dashboard/StatsStreamManager.test.ts (5 tests) 12ms
+ ✓ src/dashboard/LogStreamManager.test.ts (6 tests) 9ms
+
+ Test Files  5 passed (5)
+      Tests  69 passed (69)
+   Start at  17:06:24
+   Duration  565ms (transform 258ms, setup 0ms, collect 1.02s, tests 45ms, environment 1ms, prepare 582ms)
+
