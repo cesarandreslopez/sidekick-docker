@@ -138,7 +138,8 @@
     "@types/vscode": "^1.85.0",
     "esbuild": "^0.24.0",
     "sidekick-docker-shared": "file:../sidekick-docker-shared",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "zod": "^4.3.6"
   },
   "license": "MIT"
 }
