@@ -220,7 +220,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Start',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          this.client.startContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.startContainer(c.id).then(() => { this.onAction(); });
         },
         condition: (item) => panelData<ContainerInfo>(item).state !== 'running',
       },
@@ -229,7 +229,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Stop',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          this.client.stopContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.stopContainer(c.id).then(() => { this.onAction(); });
         },
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
@@ -238,7 +238,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Restart',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          this.client.restartContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.restartContainer(c.id).then(() => { this.onAction(); });
         },
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
@@ -247,7 +247,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Pause',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          this.client.pauseContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.pauseContainer(c.id).then(() => { this.onAction(); });
         },
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
@@ -256,7 +256,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Unpause',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          this.client.unpauseContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.unpauseContainer(c.id).then(() => { this.onAction(); });
         },
         condition: (item) => panelData<ContainerInfo>(item).state === 'paused',
       },
@@ -265,9 +265,10 @@ export class ContainersPanel implements SidePanel {
         label: 'Remove',
         confirm: true,
         confirmMessage: 'Remove this container?',
+        confirmSeverity: 'high',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          this.client.removeContainer(c.id, true).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.removeContainer(c.id, true).then(() => { this.onAction(); });
         },
       },
       {

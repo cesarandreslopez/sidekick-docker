@@ -120,7 +120,7 @@ export class ServicesPanel implements SidePanel {
         label: 'Up',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          this.composeClient.up(getProjectName(d), this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.composeClient.up(getProjectName(d), this.cwd).then(() => { this.onAction(); });
         },
         condition: (item) => item.data !== null,
       },
@@ -129,9 +129,10 @@ export class ServicesPanel implements SidePanel {
         label: 'Down',
         confirm: true,
         confirmMessage: 'Bring down this compose project?',
+        confirmSeverity: 'high',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          this.composeClient.down(getProjectName(d), this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.composeClient.down(getProjectName(d), this.cwd).then(() => { this.onAction(); });
         },
         condition: (item) => item.data !== null,
       },
@@ -141,10 +142,9 @@ export class ServicesPanel implements SidePanel {
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
           if (d.type === 'service') {
-            this.composeClient.restart(d.service.projectName, d.service.name, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
-          } else {
-            this.composeClient.restart(d.project.name, undefined, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+            return this.composeClient.restart(d.service.projectName, d.service.name, this.cwd).then(() => { this.onAction(); });
           }
+          return this.composeClient.restart(d.project.name, undefined, this.cwd).then(() => { this.onAction(); });
         },
         condition: (item) => item.data !== null,
       },
@@ -154,10 +154,9 @@ export class ServicesPanel implements SidePanel {
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
           if (d.type === 'service') {
-            this.composeClient.stop(d.service.projectName, d.service.name, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
-          } else {
-            this.composeClient.stop(d.project.name, undefined, this.cwd).then(() => this.onAction()).catch(e => this.onError(String(e)));
+            return this.composeClient.stop(d.service.projectName, d.service.name, this.cwd).then(() => { this.onAction(); });
           }
+          return this.composeClient.stop(d.project.name, undefined, this.cwd).then(() => { this.onAction(); });
         },
         condition: (item) => item.data !== null,
       },

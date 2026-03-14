@@ -1,6 +1,6 @@
 import { useInput, useApp } from 'ink';
 import type { SidePanel, PanelItem, PanelAction } from '../panels/types';
-import type { DashboardUIState, Action, SortField } from './dashboardTypes';
+import type { DashboardUIState, Action, SortField, ToastSeverity } from './dashboardTypes';
 
 const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
 
@@ -24,22 +24,39 @@ interface KeyboardContext {
     selectFirst(): void;
     selectLast(): void;
   };
-  addToast: (message: string, severity: 'error' | 'warning' | 'info') => void;
+  addToast: (message: string, severity: ToastSeverity, duration?: number) => number;
+  removeToast: (id: number) => void;
   rotatePhrase: () => void;
 }
 
-/** Execute a panel action, routing through the confirm overlay if needed. */
+function isPromise(value: unknown): value is Promise<void> {
+  return value != null && typeof (value as Promise<void>).then === 'function';
+}
+
+/** Execute a panel action with async feedback: in-progress spinner → success/error toast. */
 function executeAction(
   action: PanelAction,
   item: PanelItem,
   dispatch: (action: Action) => void,
-  addToast: (message: string, severity: 'error' | 'warning' | 'info') => void,
+  addToast: (message: string, severity: ToastSeverity, duration?: number) => number,
+  removeToast: (id: number) => void,
 ): void {
+  const run = () => {
+    const result = action.handler(item);
+    if (isPromise(result)) {
+      const progressId = addToast(`${action.label}\u2026`, 'info');
+      result
+        .then(() => { removeToast(progressId); addToast(action.label, 'success'); })
+        .catch(() => { removeToast(progressId); addToast(`${action.label} failed`, 'error'); });
+    } else {
+      addToast(action.label, 'info', 2000);
+    }
+  };
+
   if (action.confirm) {
-    dispatch({ type: 'SET_CONFIRM', action: () => { action.handler(item); addToast(action.label, 'info'); }, message: action.confirmMessage || 'Are you sure?' });
+    dispatch({ type: 'SET_CONFIRM', action: run, message: action.confirmMessage || 'Are you sure?', severity: action.confirmSeverity ?? 'high' });
   } else {
-    action.handler(item);
-    addToast(action.label, 'info');
+    run();
   }
 }
 
@@ -52,7 +69,7 @@ function handleFilterInput(
     setAction: string;
     clearToast?: string;
     dispatch: (action: Action) => void;
-    addToast: (message: string, severity: 'error' | 'warning' | 'info') => void;
+    addToast: (message: string, severity: ToastSeverity, duration?: number) => number;
     onTab?: () => void;
   },
 ): void {
@@ -83,7 +100,7 @@ function handleFilterInput(
 
 export function useKeyboardHandler(ctx: KeyboardContext): void {
   const { exit } = useApp();
-  const { state, dispatch, panels, panel, selectedItem, contextActions, clampedSelection, currentItems, detailLines, detailViewportHeight, detailTabs, tabIdx, panelActions, sideScroll, addToast, rotatePhrase } = ctx;
+  const { state, dispatch, panels, panel, selectedItem, contextActions, clampedSelection, currentItems, detailLines, detailViewportHeight, detailTabs, tabIdx, panelActions, sideScroll, addToast, removeToast, rotatePhrase } = ctx;
 
   useInput((input, key) => {
     if (state.overlay === 'exec') return;
@@ -149,14 +166,14 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
       if (key.return) {
         const action = contextActions[state.contextMenuIndex];
         if (action && selectedItem) {
-          executeAction(action, selectedItem, dispatch, addToast);
+          executeAction(action, selectedItem, dispatch, addToast, removeToast);
           dispatch({ type: 'SET_OVERLAY', overlay: null });
         }
         return;
       }
       const match = contextActions.find(a => a.key === input);
       if (match && selectedItem) {
-        executeAction(match, selectedItem, dispatch, addToast);
+        executeAction(match, selectedItem, dispatch, addToast, removeToast);
         dispatch({ type: 'SET_OVERLAY', overlay: null });
       }
       return;
@@ -354,7 +371,7 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
     if (selectedItem) {
       const actionMatch = panelActions.find(a => a.key === input && (!a.condition || a.condition(selectedItem)));
       if (actionMatch) {
-        executeAction(actionMatch, selectedItem, dispatch, addToast);
+        executeAction(actionMatch, selectedItem, dispatch, addToast, removeToast);
       }
     }
   });

@@ -68,9 +68,10 @@ export class NetworksPanel implements SidePanel {
         label: 'Remove',
         confirm: true,
         confirmMessage: 'Remove this network?',
+        confirmSeverity: 'high',
         handler: (item) => {
           const net = panelData<NetworkInfo>(item);
-          this.client.removeNetwork(net.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.removeNetwork(net.id).then(() => { this.onAction(); });
         },
         condition: (item) => {
           const net = panelData<NetworkInfo>(item);
@@ -82,8 +83,9 @@ export class NetworksPanel implements SidePanel {
         label: 'Prune',
         confirm: true,
         confirmMessage: 'Prune all unused networks?',
+        confirmSeverity: 'batch',
         handler: () => {
-          this.client.pruneNetworks().then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.pruneNetworks().then(() => { this.onAction(); });
         },
       },
     ];

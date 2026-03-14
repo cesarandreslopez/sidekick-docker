@@ -46,11 +46,25 @@ export function sectionHeader(title: string): string {
   return ansi.bold(ansi.yellow(title));
 }
 
-/** Sparkline with ANSI color (cyan for CPU, green for memory). */
+/** Sparkline with ANSI color, min/max labels, and time window. */
 export function coloredSparkline(values: number[], color: 'cpu' | 'memory', width = 40): string {
   const s = sparkline(values, width);
   if (!s) return '';
-  return color === 'cpu' ? ansi.brand(s) : ansi.green(s);
+  const colorFn = color === 'cpu' ? ansi.brand : ansi.green;
+  const recent = values.slice(-width);
+  const min = Math.min(...recent);
+  const max = Math.max(...recent, 1);
+  const minLabel = ansi.dim(ansi.gray(formatSparkValue(min)));
+  const maxLabel = ansi.dim(ansi.gray(formatSparkValue(max)));
+  const timeLabel = ansi.dim(ansi.gray(`\u2190${recent.length}s`));
+  return `${minLabel}${colorFn(s)}${maxLabel} ${timeLabel}`;
+}
+
+function formatSparkValue(v: number): string {
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  if (v >= 100) return `${Math.round(v)}`;
+  return v.toFixed(1);
 }
 
 export function sparkline(values: number[], width = 40): string {

@@ -58,9 +58,10 @@ export class VolumesPanel implements SidePanel {
         label: 'Remove',
         confirm: true,
         confirmMessage: 'Remove this volume?',
+        confirmSeverity: 'high',
         handler: (item) => {
           const vol = panelData<VolumeInfo>(item);
-          this.client.removeVolume(vol.name).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.removeVolume(vol.name).then(() => { this.onAction(); });
         },
         condition: (item) => !panelData<VolumeInfo>(item).isInUse,
       },
@@ -69,8 +70,9 @@ export class VolumesPanel implements SidePanel {
         label: 'Prune',
         confirm: true,
         confirmMessage: 'Prune all unused volumes?',
+        confirmSeverity: 'batch',
         handler: () => {
-          this.client.pruneVolumes().then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.pruneVolumes().then(() => { this.onAction(); });
         },
       },
     ];

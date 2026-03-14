@@ -3,11 +3,21 @@ import { Box, Text } from 'ink';
 
 interface ConfirmOverlayProps {
   message: string;
+  severity: 'low' | 'high' | 'batch';
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export function ConfirmOverlay({ message }: ConfirmOverlayProps): React.ReactElement {
+const SEVERITY_CONFIG = {
+  low: { borderColor: 'yellow', icon: '\u26A0', title: 'Confirm', warning: '' },
+  high: { borderColor: 'red', icon: '\u2717', title: 'Destructive Action', warning: '  This cannot be undone.' },
+  batch: { borderColor: 'red', icon: '\u2717\u2717', title: 'Batch Destructive Action', warning: '  This cannot be undone.' },
+} as const;
+
+export function ConfirmOverlay({ message, severity }: ConfirmOverlayProps): React.ReactElement {
+  const config = SEVERITY_CONFIG[severity];
+  const color = config.borderColor;
+
   return (
     <Box
       position="absolute"
@@ -15,20 +25,22 @@ export function ConfirmOverlay({ message }: ConfirmOverlayProps): React.ReactEle
       marginLeft={3}
       flexDirection="column"
       borderStyle="double"
-      borderColor="red"
+      borderColor={color}
       paddingX={2}
       paddingY={1}
     >
       <Box>
-        <Text color="red" bold>{'\u26A0 '}</Text>
-        <Text bold color="red">{'Confirm Action'}</Text>
+        <Text color={color} bold>{`${config.icon} `}</Text>
+        <Text bold color={color}>{config.title}</Text>
       </Box>
       <Text>{''}</Text>
-      <Text>{` ${message}`}</Text>
-      <Text color="gray" dimColor>{'  This cannot be undone.'}</Text>
+      <Text bold>{` ${message}`}</Text>
+      {config.warning ? (
+        <Text color="gray" dimColor>{config.warning}</Text>
+      ) : null}
       <Text>{''}</Text>
       <Box>
-        <Text backgroundColor="green" color="white" bold>{' y Yes '}</Text>
+        <Text backgroundColor={severity === 'low' ? 'yellow' : 'green'} color={severity === 'low' ? 'black' : 'white'} bold>{' y Yes '}</Text>
         <Text>{'  '}</Text>
         <Text backgroundColor="red" color="white" bold>{' n No '}</Text>
         <Text color="gray" dimColor>{'   or Esc to cancel'}</Text>

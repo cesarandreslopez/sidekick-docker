@@ -37,7 +37,8 @@ const SIDE_PANEL_WIDTH_WIDE = 42;
 const MIN_SCREEN_WIDTH = 60;
 const MIN_SCREEN_HEIGHT = 15;
 const RESERVED_UI_ROWS = 5;
-const TOAST_DURATIONS = { error: 4000, warning: 3000, info: 2000 } as const;
+const TOAST_DURATIONS = { error: 4000, warning: 3000, info: 30000, success: 2000 } as const;
+const QUICK_INFO_DURATION = 2000;
 
 function reducer(state: DashboardUIState, action: Action): DashboardUIState {
   switch (action.type) {
@@ -51,15 +52,19 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
         focusTarget: 'side',
         overlay: null,
         detailScrollOffset: 0,
+        detailScrollPerTab: {},
       };
     case 'SELECT_ITEM':
-      return { ...state, selectedItemIndex: action.index, detailTabIndex: 0, detailScrollOffset: 0 };
-    case 'SET_DETAIL_TAB':
-      return { ...state, detailTabIndex: action.index, detailScrollOffset: 0 };
+      return { ...state, selectedItemIndex: action.index, detailTabIndex: 0, detailScrollOffset: 0, detailScrollPerTab: {} };
+    case 'SET_DETAIL_TAB': {
+      const saved = { ...state.detailScrollPerTab, [state.detailTabIndex]: state.detailScrollOffset };
+      return { ...state, detailTabIndex: action.index, detailScrollOffset: saved[action.index] ?? 0, detailScrollPerTab: saved };
+    }
     case 'CYCLE_DETAIL_TAB': {
       if (action.tabCount <= 1) return state;
       const next = (state.detailTabIndex + action.direction + action.tabCount) % action.tabCount;
-      return { ...state, detailTabIndex: next, detailScrollOffset: 0 };
+      const saved = { ...state.detailScrollPerTab, [state.detailTabIndex]: state.detailScrollOffset };
+      return { ...state, detailTabIndex: next, detailScrollOffset: saved[next] ?? 0, detailScrollPerTab: saved };
     }
     case 'CYCLE_LAYOUT': {
       const next: LayoutMode = state.layoutMode === 'normal' ? 'wide' : state.layoutMode === 'wide' ? 'expanded' : 'normal';
@@ -96,7 +101,7 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
       return { ...state, selectedItemIndex: next, detailTabIndex: 0, detailScrollOffset: 0 };
     }
     case 'SET_CONFIRM':
-      return { ...state, confirmAction: action.action, confirmMessage: action.message, overlay: action.action ? 'confirm' : null };
+      return { ...state, confirmAction: action.action, confirmMessage: action.message, confirmSeverity: action.severity ?? 'high', overlay: action.action ? 'confirm' : null };
     case 'EXEC_START':
       return { ...state, overlay: 'exec', execContainerId: action.containerId, execContainerName: action.containerName, execOutputLines: [] };
     case 'EXEC_APPEND_OUTPUT': {
@@ -143,10 +148,12 @@ const initialState: DashboardUIState = {
   overlay: null,
   filterString: '',
   detailScrollOffset: 0,
+  detailScrollPerTab: {},
   toasts: [],
   contextMenuIndex: 0,
   confirmAction: null,
   confirmMessage: '',
+  confirmSeverity: 'high' as const,
   execOutputLines: [],
   execContainerId: null,
   execContainerName: '',
@@ -250,10 +257,16 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
     }
   }, [columns, rows, state.overlay]);
 
-  const addToast = useCallback((message: string, severity: 'error' | 'warning' | 'info') => {
+  const addToast = useCallback((message: string, severity: 'error' | 'warning' | 'info' | 'success', duration?: number) => {
     const id = ++toastIdRef.current;
-    dispatch({ type: 'ADD_TOAST', toast: { id, message, severity, expiresAt: Date.now() + TOAST_DURATIONS[severity] } });
-    setTimeout(() => dispatch({ type: 'REMOVE_TOAST', id }), TOAST_DURATIONS[severity]);
+    const dur = duration ?? TOAST_DURATIONS[severity];
+    dispatch({ type: 'ADD_TOAST', toast: { id, message, severity, expiresAt: Date.now() + dur } });
+    setTimeout(() => dispatch({ type: 'REMOVE_TOAST', id }), dur);
+    return id;
+  }, []);
+
+  const removeToast = useCallback((id: number) => {
+    dispatch({ type: 'REMOVE_TOAST', id });
   }, []);
 
   // Derived values
@@ -409,7 +422,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   useKeyboardHandler({
     state, dispatch, panels, panel, selectedItem, contextActions,
     clampedSelection, currentItems, detailLines, detailViewportHeight,
-    detailTabs, tabIdx, panelActions, sideScroll, addToast, rotatePhrase,
+    detailTabs, tabIdx, panelActions, sideScroll, addToast, removeToast, rotatePhrase,
   });
 
   // Render
@@ -422,6 +435,18 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
   // Panel action hints for status bar (structured for color coding)
   const panelActionHints = applicableActions
     .map(a => ({ key: a.key, label: a.label, destructive: !!a.confirm }));
+
+  // Contextual hints based on active panel + tab
+  const contextHint = (() => {
+    if (panel.id === 'containers') {
+      const parts: string[] = [];
+      if (tabIdx === 0) parts.push('f:Filter logs', 'c:Copy');
+      parts.push(state.showAllContainers ? 'a:Running only' : 'a:Show all');
+      parts.push(`\u2195${state.sortField}`);
+      return parts.join('  ');
+    }
+    return '';
+  })();
 
   return (
     <MouseProvider onMouse={handleMouse}>
@@ -486,6 +511,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
             matchCount={state.filterString ? currentItems.length : undefined}
             totalCount={state.filterString ? totalItemCount : undefined}
             lastRefresh={metrics.lastRefresh}
+            contextHint={contextHint}
           />
         )}
 
@@ -516,6 +542,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
         {state.overlay === 'confirm' && (
           <ConfirmOverlay
             message={state.confirmMessage}
+            severity={state.confirmSeverity}
             onConfirm={() => {
               state.confirmAction?.();
               dispatch({ type: 'SET_CONFIRM', action: null, message: '' });

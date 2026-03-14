@@ -6,10 +6,12 @@ export type OverlayKind = null | 'help' | 'context-menu' | 'filter' | 'confirm' 
 export type SortField = 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids';
 export type FocusTarget = 'side' | 'detail';
 
+export type ToastSeverity = 'error' | 'warning' | 'info' | 'success';
+
 export interface ToastEntry {
   id: number;
   message: string;
-  severity: 'error' | 'warning' | 'info';
+  severity: ToastSeverity;
   expiresAt: number;
 }
 
@@ -22,10 +24,13 @@ export interface DashboardUIState {
   overlay: OverlayKind;
   filterString: string;
   detailScrollOffset: number;
+  /** Saved scroll positions per detail tab index. */
+  detailScrollPerTab: Record<number, number>;
   toasts: ToastEntry[];
   contextMenuIndex: number;
   confirmAction: (() => void) | null;
   confirmMessage: string;
+  confirmSeverity: 'low' | 'high' | 'batch';
   execOutputLines: string[];
   execContainerId: string | null;
   execContainerName: string;
@@ -53,7 +58,7 @@ export type Action =
   | { type: 'REMOVE_TOAST'; id: number }
   | { type: 'CONTEXT_MENU_NAV'; delta: number; itemCount: number }
   | { type: 'SCROLL_SIDE'; delta: number; itemCount: number }
-  | { type: 'SET_CONFIRM'; action: (() => void) | null; message: string }
+  | { type: 'SET_CONFIRM'; action: (() => void) | null; message: string; severity?: 'low' | 'high' | 'batch' }
   | { type: 'EXEC_START'; containerId: string; containerName: string }
   | { type: 'EXEC_APPEND_OUTPUT'; data: string }
   | { type: 'EXEC_END' }

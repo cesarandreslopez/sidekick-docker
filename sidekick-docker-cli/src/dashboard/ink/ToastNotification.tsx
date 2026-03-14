@@ -4,7 +4,7 @@ import { Box, Text } from 'ink';
 interface ToastEntry {
   id: number;
   message: string;
-  severity: 'error' | 'warning' | 'info';
+  severity: 'error' | 'warning' | 'info' | 'success';
 }
 
 interface ToastNotificationProps {
@@ -15,6 +15,7 @@ const SEVERITY_COLORS: Record<string, string> = {
   error: 'red',
   warning: 'yellow',
   info: '#2B4C7E',
+  success: 'green',
 };
 
 const SPINNER_FRAMES = '\u280B\u2819\u2839\u2838\u283C\u2834\u2826\u2827';
@@ -34,6 +35,7 @@ export function ToastNotification({ toast }: ToastNotificationProps): React.Reac
     error: '\u2717',    // ✗
     warning: '\u26A0',  // ⚠
     info: SPINNER_FRAMES[frame],
+    success: '\u2713',  // ✓
   };
 
   const icon = SEVERITY_ICONS[toast.severity] || '';

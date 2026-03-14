@@ -59,9 +59,10 @@ export class ImagesPanel implements SidePanel {
         label: 'Remove',
         confirm: true,
         confirmMessage: 'Remove this image?',
+        confirmSeverity: 'high',
         handler: (item) => {
           const img = panelData<ImageInfo>(item);
-          this.client.removeImage(img.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.removeImage(img.id).then(() => { this.onAction(); });
         },
       },
       {
@@ -69,8 +70,9 @@ export class ImagesPanel implements SidePanel {
         label: 'Prune',
         confirm: true,
         confirmMessage: 'Prune all dangling images?',
+        confirmSeverity: 'batch',
         handler: () => {
-          this.client.pruneImages().then(() => this.onAction()).catch(e => this.onError(String(e)));
+          return this.client.pruneImages().then(() => { this.onAction(); });
         },
       },
     ];

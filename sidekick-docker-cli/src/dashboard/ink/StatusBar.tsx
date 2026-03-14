@@ -19,6 +19,7 @@ interface StatusBarProps {
   matchCount?: number;
   totalCount?: number;
   lastRefresh?: Date | null;
+  contextHint?: string;
 }
 
 function formatAgo(date: Date): { text: string; stale: boolean } {
@@ -31,7 +32,7 @@ function formatAgo(date: Date): { text: string; stale: boolean } {
 
 const SEP = '\u2502'; // │ vertical bar separator
 
-export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh }: StatusBarProps): React.ReactElement {
+export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh, contextHint }: StatusBarProps): React.ReactElement {
   // Re-render periodically to keep "ago" text fresh
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -87,6 +88,11 @@ export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filt
       <Text color="gray" dimColor>
         {'  j/k  Tab  /  ?  q'}
       </Text>
+
+      {/* Contextual hints for active panel */}
+      {contextHint ? (
+        <Text color="cyan" dimColor>{`  ${contextHint}`}</Text>
+      ) : null}
 
       {/* Active filter indicator */}
       {filterString ? (
