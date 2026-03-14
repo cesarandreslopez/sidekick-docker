@@ -11,7 +11,14 @@ import type {
   DockerEvent,
   DockerResourceType,
 } from '../types';
-import { DockerStatsRawSchema, DockerEventRawSchema } from './schemas';
+import {
+  DockerStatsRawSchema,
+  DockerEventRawSchema,
+  ContainerStateSchema,
+  PortProtocolSchema,
+  VolumeItemRawSchema,
+  NetworkContainerRefRawSchema,
+} from './schemas';
 import type { DockerStatsRaw } from './schemas';
 
 export interface DockerClientOptions {
@@ -56,13 +63,13 @@ export class DockerClient {
         id: c.Id,
         name: (c.Names[0] || '').replace(/^\//, ''),
         image: c.Image,
-        state: c.State as ContainerInfo['state'],
+        state: ContainerStateSchema.parse(c.State),
         status: c.Status,
         ports: (c.Ports || []).map((p): PortBinding => ({
           hostIp: p.IP || '0.0.0.0',
           hostPort: p.PublicPort || 0,
           containerPort: p.PrivatePort,
-          protocol: (p.Type || 'tcp') as 'tcp' | 'udp',
+          protocol: PortProtocolSchema.parse(p.Type || 'tcp'),
         })),
         created: new Date(c.Created * 1000),
         composeProject: c.Labels?.['com.docker.compose.project'],
@@ -303,13 +310,16 @@ export class DockerClient {
       }
     }
 
-    return volumes.map((v): VolumeInfo => ({
-      name: v.Name,
-      driver: v.Driver,
-      mountpoint: v.Mountpoint,
-      created: new Date((v as unknown as Record<string, unknown>).CreatedAt as string || 0),
-      isInUse: usedVolumes.has(v.Name),
-    }));
+    return volumes.map((v): VolumeInfo => {
+      const validated = VolumeItemRawSchema.parse(v);
+      return {
+        name: validated.Name,
+        driver: validated.Driver,
+        mountpoint: validated.Mountpoint,
+        created: new Date(validated.CreatedAt || 0),
+        isInUse: usedVolumes.has(validated.Name),
+      };
+    });
   }
 
   async removeVolume(name: string): Promise<void> {
@@ -329,10 +339,10 @@ export class DockerClient {
       const containers: NetworkContainerRef[] = [];
       if (n.Containers) {
         for (const [id, info] of Object.entries(n.Containers)) {
-          const c = info as { Name?: string };
+          const validated = NetworkContainerRefRawSchema.parse(info);
           containers.push({
             containerId: id.substring(0, 12),
-            containerName: c.Name || id.substring(0, 12),
+            containerName: validated.Name || id.substring(0, 12),
           });
         }
       }

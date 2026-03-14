@@ -70,3 +70,28 @@ export const DockerEventRawSchema = z.object({
 });
 
 export type DockerEventRaw = z.infer<typeof DockerEventRawSchema>;
+
+// --- Dockerode list response field schemas ---
+
+/** Validates container state from Docker API, falling back to 'exited' for unknown values. */
+export const ContainerStateSchema = z.enum([
+  'running', 'paused', 'restarting', 'exited', 'dead', 'created', 'removing',
+]).catch('exited');
+
+/** Validates port protocol from Docker API, falling back to 'tcp' for unknown values. */
+export const PortProtocolSchema = z.enum(['tcp', 'udp']).catch('tcp');
+
+/** Validates a volume item from the Docker API (includes CreatedAt not in upstream Dockerode types). */
+export const VolumeItemRawSchema = z.object({
+  Name: z.string(),
+  Driver: z.string(),
+  Mountpoint: z.string(),
+  CreatedAt: z.string().optional(),
+});
+export type VolumeItemRaw = z.infer<typeof VolumeItemRawSchema>;
+
+/** Validates a network container reference from the Docker API. */
+export const NetworkContainerRefRawSchema = z.object({
+  Name: z.string().default(''),
+});
+export type NetworkContainerRefRaw = z.infer<typeof NetworkContainerRefRawSchema>;

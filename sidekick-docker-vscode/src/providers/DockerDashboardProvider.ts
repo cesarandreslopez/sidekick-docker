@@ -3,6 +3,7 @@ import { getRandomPhrase, errorMessage } from 'sidekick-docker-shared';
 import { getNonce } from '../utils/nonce';
 import { DockerService } from '../services/DockerService';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
+import { WebviewMessageSchema } from '../types/messageSchemas';
 
 export class DockerDashboardProvider implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
@@ -48,7 +49,10 @@ export class DockerDashboardProvider implements vscode.Disposable {
     this.panel.webview.html = this._getHtmlForWebview(this.panel.webview);
 
     this.panel.webview.onDidReceiveMessage(
-      (message: WebviewMessage) => this._handleMessage(message),
+      (raw: unknown) => {
+        const result = WebviewMessageSchema.safeParse(raw);
+        if (result.success) this._handleMessage(result.data);
+      },
       undefined,
       this.disposables
     );
