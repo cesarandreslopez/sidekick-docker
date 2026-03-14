@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { ComposeConfigRawSchema } from './schemas';
 
 export interface ComposeFileServiceConfig {
   name: string;
@@ -23,22 +24,21 @@ export class ComposeFileReader {
       const result = await this.exec(['config', '--format', 'json'], cwd);
       if (result.exitCode !== 0) return null;
 
-      const config = JSON.parse(result.stdout);
-      const projectName: string = config.name || '';
+      const raw: unknown = JSON.parse(result.stdout);
+      const config = ComposeConfigRawSchema.parse(raw);
+      const projectName = config.name;
       if (!projectName) return null;
 
       const services: ComposeFileServiceConfig[] = [];
-      const svcMap = config.services || {};
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for (const [name, def] of Object.entries<any>(svcMap)) {
+      for (const [name, def] of Object.entries(config.services)) {
         const ports: string[] = [];
         if (def.ports) {
           for (const p of def.ports) {
             if (typeof p === 'string') {
               ports.push(p);
-            } else if (p && p.published && p.target) {
-              ports.push(`${p.published}:${p.target}/${p.protocol || 'tcp'}`);
+            } else {
+              ports.push(`${p.published}:${p.target}/${p.protocol}`);
             }
           }
         }

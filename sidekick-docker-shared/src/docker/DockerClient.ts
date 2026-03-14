@@ -11,6 +11,8 @@ import type {
   DockerEvent,
   DockerResourceType,
 } from '../types';
+import { DockerStatsRawSchema, DockerEventRawSchema } from './schemas';
+import type { DockerStatsRaw } from './schemas';
 
 export interface DockerClientOptions {
   socketPath?: string;
@@ -165,32 +167,32 @@ export class DockerClient {
   }
 
   private parseStats(
-    raw: Record<string, unknown>,
+    validated: DockerStatsRaw,
     prevCpu: number,
     prevSystem: number,
   ): { stats: ContainerStats; cpuTotal: number; systemTotal: number } {
-    const cpuStats = raw.cpu_stats as Record<string, unknown> | undefined;
-    const preCpuStats = raw.precpu_stats as Record<string, unknown> | undefined;
-    const memStats = raw.memory_stats as Record<string, unknown> | undefined;
-    const netStats = raw.networks as Record<string, Record<string, number>> | undefined;
-    const pidsStats = raw.pids_stats as Record<string, number> | undefined;
-    const blkioStats = raw.blkio_stats as Record<string, unknown> | undefined;
+    const cpuStats = validated.cpu_stats;
+    const preCpuStats = validated.precpu_stats;
+    const memStats = validated.memory_stats;
+    const netStats = validated.networks;
+    const pidsStats = validated.pids_stats;
+    const blkioStats = validated.blkio_stats;
 
     // CPU calculation
-    const cpuUsage = (cpuStats?.cpu_usage as Record<string, number>)?.total_usage ?? 0;
-    const systemUsage = (cpuStats?.system_cpu_usage as number) ?? 0;
-    const numCpus = ((cpuStats?.cpu_usage as Record<string, unknown>)?.percpu_usage as unknown[])?.length
-      ?? (cpuStats?.online_cpus as number)
+    const cpuUsage = cpuStats?.cpu_usage.total_usage ?? 0;
+    const systemUsage = cpuStats?.system_cpu_usage ?? 0;
+    const numCpus = cpuStats?.cpu_usage.percpu_usage?.length
+      ?? cpuStats?.online_cpus
       ?? 1;
 
-    const cpuDelta = cpuUsage - (prevCpu || ((preCpuStats?.cpu_usage as Record<string, number>)?.total_usage ?? 0));
-    const systemDelta = systemUsage - (prevSystem || ((preCpuStats?.system_cpu_usage as number) ?? 0));
+    const cpuDelta = cpuUsage - (prevCpu || (preCpuStats?.cpu_usage.total_usage ?? 0));
+    const systemDelta = systemUsage - (prevSystem || (preCpuStats?.system_cpu_usage ?? 0));
 
     const cpuPercent = systemDelta > 0 ? (cpuDelta / systemDelta) * numCpus * 100 : 0;
 
     // Memory
-    const memUsage = (memStats?.usage as number) ?? 0;
-    const memLimit = (memStats?.limit as number) ?? 0;
+    const memUsage = memStats?.usage ?? 0;
+    const memLimit = memStats?.limit ?? 0;
     const memPercent = memLimit > 0 ? (memUsage / memLimit) * 100 : 0;
 
     // Network
@@ -198,20 +200,20 @@ export class DockerClient {
     let netTx = 0;
     if (netStats) {
       for (const iface of Object.values(netStats)) {
-        netRx += iface.rx_bytes ?? 0;
-        netTx += iface.tx_bytes ?? 0;
+        netRx += iface.rx_bytes;
+        netTx += iface.tx_bytes;
       }
     }
 
     // Block I/O
     let blockRead = 0;
     let blockWrite = 0;
-    const ioServiceBytes = blkioStats?.io_service_bytes_recursive as Array<{ op: string; value: number }> | null | undefined;
+    const ioServiceBytes = blkioStats?.io_service_bytes_recursive;
     if (ioServiceBytes) {
       for (const entry of ioServiceBytes) {
-        const op = (entry.op || '').toLowerCase();
-        if (op === 'read') blockRead += entry.value ?? 0;
-        else if (op === 'write') blockWrite += entry.value ?? 0;
+        const op = entry.op.toLowerCase();
+        if (op === 'read') blockRead += entry.value;
+        else if (op === 'write') blockWrite += entry.value;
       }
     }
 
@@ -240,8 +242,9 @@ export class DockerClient {
     let prevCpu = 0;
     let prevSystem = 0;
     try {
-      const snapshot = await container.stats({ stream: false }) as unknown as Record<string, unknown>;
-      const { stats: first, cpuTotal, systemTotal } = this.parseStats(snapshot, 0, 0);
+      const snapshot = await container.stats({ stream: false });
+      const validated = DockerStatsRawSchema.parse(snapshot);
+      const { stats: first, cpuTotal, systemTotal } = this.parseStats(validated, 0, 0);
       prevCpu = cpuTotal;
       prevSystem = systemTotal;
       yield first;
@@ -254,17 +257,16 @@ export class DockerClient {
     for await (const chunk of stream as AsyncIterable<Buffer>) {
       const lines = chunk.toString('utf8').split('\n').filter(Boolean);
       for (const line of lines) {
-        let raw: Record<string, unknown>;
         try {
-          raw = JSON.parse(line);
+          const raw: unknown = JSON.parse(line);
+          const validated = DockerStatsRawSchema.parse(raw);
+          const { stats, cpuTotal, systemTotal } = this.parseStats(validated, prevCpu, prevSystem);
+          prevCpu = cpuTotal;
+          prevSystem = systemTotal;
+          yield stats;
         } catch {
           continue;
         }
-
-        const { stats, cpuTotal, systemTotal } = this.parseStats(raw, prevCpu, prevSystem);
-        prevCpu = cpuTotal;
-        prevSystem = systemTotal;
-        yield stats;
       }
     }
   }
@@ -368,24 +370,21 @@ export class DockerClient {
       if (signal?.aborted) break;
       const lines = chunk.toString('utf8').split('\n').filter(Boolean);
       for (const line of lines) {
-        let raw: Record<string, unknown>;
         try {
-          raw = JSON.parse(line);
+          const raw: unknown = JSON.parse(line);
+          const event = DockerEventRawSchema.parse(raw);
+          const resourceType = mapResourceType(event.Type);
+
+          yield {
+            type: event.Action || event.status || 'unknown',
+            resourceType,
+            resourceId: event.Actor?.ID || '',
+            timestamp: new Date(event.time * 1000),
+            attributes: event.Actor?.Attributes || {},
+          };
         } catch {
           continue;
         }
-
-        const type = raw.Type as string || 'container';
-        const resourceType = mapResourceType(type);
-        const actor = raw.Actor as Record<string, unknown> | undefined;
-
-        yield {
-          type: raw.Action as string || raw.status as string || 'unknown',
-          resourceType,
-          resourceId: (actor?.ID as string) || '',
-          timestamp: new Date((raw.time as number || 0) * 1000),
-          attributes: (actor?.Attributes as Record<string, string>) || {},
-        };
       }
     }
   }
