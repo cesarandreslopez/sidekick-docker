@@ -1,7 +1,7 @@
 import type { NetworkInfo } from 'sidekick-docker-shared';
 import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError } from './types';
+import { defaultOnError, panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { truncate, colorizeDetailKey, colorizeId, colorizeBool, colorizeNetworkContainer } from '../../formatters';
 
@@ -24,7 +24,7 @@ export class NetworksPanel implements SidePanel {
     {
       label: 'Info',
       render: (item) => {
-        const net = item.data as NetworkInfo;
+        const net = panelData<NetworkInfo>(item);
         const lines = [
           colorizeDetailKey(`ID:      ${colorizeId(net.id)}`),
           colorizeDetailKey(`Name:    ${net.name}`),
@@ -69,11 +69,11 @@ export class NetworksPanel implements SidePanel {
         confirm: true,
         confirmMessage: 'Remove this network?',
         handler: (item) => {
-          const net = item.data as NetworkInfo;
+          const net = panelData<NetworkInfo>(item);
           this.client.removeNetwork(net.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
         condition: (item) => {
-          const net = item.data as NetworkInfo;
+          const net = panelData<NetworkInfo>(item);
           return !net.isDefault && net.containers.length === 0;
         },
       },
@@ -90,7 +90,7 @@ export class NetworksPanel implements SidePanel {
   }
 
   getSearchableText(item: PanelItem): string {
-    const net = item.data as NetworkInfo;
+    const net = panelData<NetworkInfo>(item);
     return `${net.name} ${net.driver}`;
   }
 }

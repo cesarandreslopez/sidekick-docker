@@ -20,7 +20,7 @@ export const networksPanel: PanelDefinition = {
         const net = findNetwork(item.id, state.snapshot);
         if (!net) return '';
         let html = renderKvGrid([
-          ['ID', colorizeId(net.id.substring(0, 12))],
+          ['ID', colorizeId(net.id)],
           ['Name', escapeHtml(net.name)],
           ['Driver', escapeHtml(net.driver)],
           ['Scope', escapeHtml(net.scope)],
@@ -31,7 +31,7 @@ export const networksPanel: PanelDefinition = {
           html += '<div style="color:var(--vscode-descriptionForeground);padding-left:8px;">(none)</div>';
         } else {
           for (const c of net.containers) {
-            html += `<div style="padding-left:8px;">${colorizeNetworkContainer(c.containerName, c.containerId.substring(0, 12))}</div>`;
+            html += `<div style="padding-left:8px;">${colorizeNetworkContainer(c.containerName, c.containerId)}</div>`;
           }
         }
         return html;

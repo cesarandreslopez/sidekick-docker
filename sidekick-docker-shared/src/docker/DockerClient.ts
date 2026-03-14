@@ -25,6 +25,7 @@ import {
   ContainerInspectEnvSchema,
 } from './schemas';
 import type { DockerStatsRaw } from './schemas';
+import { shortId } from './utils';
 
 export interface DockerClientOptions {
   socketPath?: string;
@@ -295,7 +296,7 @@ export class DockerClient {
       const validated = ImageItemRawSchema.parse(img);
       const repoTags = validated.RepoTags ?? ['<none>:<none>'];
       return {
-        id: validated.Id.replace('sha256:', '').substring(0, 12),
+        id: shortId(validated.Id.replace('sha256:', '')),
         repoTags,
         size: validated.Size,
         created: new Date(validated.Created * 1000),
@@ -358,14 +359,14 @@ export class DockerClient {
         for (const [id, info] of Object.entries(n.Containers)) {
           const validated = NetworkContainerRefRawSchema.parse(info);
           containers.push({
-            containerId: id.substring(0, 12),
-            containerName: validated.Name || id.substring(0, 12),
+            containerId: shortId(id),
+            containerName: validated.Name || shortId(id),
           });
         }
       }
 
       return {
-        id: n.Id.substring(0, 12),
+        id: shortId(n.Id),
         name: n.Name,
         driver: n.Driver || '',
         scope: n.Scope || '',

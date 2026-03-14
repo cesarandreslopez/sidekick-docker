@@ -1,5 +1,5 @@
 import type { LogEntry, SeverityLevel } from 'sidekick-docker-shared';
-import { tokenizeLogLine } from 'sidekick-docker-shared';
+import { tokenizeLogLine, formatTimestampTime } from 'sidekick-docker-shared';
 import type { LogTokenType, FilterMatch } from 'sidekick-docker-shared';
 
 // Re-export pure formatters from shared package
@@ -126,7 +126,7 @@ function colorizeTokens(message: string): string {
 }
 
 export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[]): string {
-  const ts = entry.timestamp ? entry.timestamp.toISOString().substring(11, 23) : '';
+  const ts = entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
   const tsColored = ts ? ansi.dim(ansi.gray(ts)) + ' ' : '';
 
   if (entry.stream === 'stderr') {

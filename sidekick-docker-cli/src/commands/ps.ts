@@ -1,4 +1,4 @@
-import { DockerClient } from 'sidekick-docker-shared';
+import { DockerClient, shortId } from 'sidekick-docker-shared';
 import { formatPorts, stateIcon, formatUptime } from '../formatters';
 
 export async function psAction(opts: { all?: boolean }): Promise<void> {
@@ -24,7 +24,7 @@ export async function psAction(opts: { all?: boolean }): Promise<void> {
 
   for (const c of containers) {
     const row = [
-      c.id.substring(0, 12).padEnd(20),
+      shortId(c.id).padEnd(20),
       `${stateIcon(c.state)} ${c.name}`.padEnd(20),
       c.image.padEnd(20),
       formatUptime(c.status).padEnd(20),

@@ -42,6 +42,15 @@ export function truncate(str: string, maxLen: number): string {
   return str.substring(0, maxLen - 1) + '\u2026';
 }
 
+// Re-export Docker ID utilities from docker module
+export { CONTAINER_ID_LENGTH, shortId } from './docker/utils';
+
+/** Extract HH:MM:SS.mmm from an ISO timestamp string or Date. */
+export function formatTimestampTime(timestamp: string | Date): string {
+  const iso = typeof timestamp === 'string' ? timestamp : timestamp.toISOString();
+  return iso.substring(11, 23);
+}
+
 export function stateColor(state: ContainerInfo['state'] | 'not_created'): string {
   switch (state) {
     case 'running': return 'green';

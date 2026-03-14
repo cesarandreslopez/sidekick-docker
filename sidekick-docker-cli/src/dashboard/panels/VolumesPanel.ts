@@ -1,7 +1,7 @@
 import type { VolumeInfo } from 'sidekick-docker-shared';
 import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError } from './types';
+import { defaultOnError, panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { truncate, colorizeDetailKey, colorizeBool } from '../../formatters';
 
@@ -24,7 +24,7 @@ export class VolumesPanel implements SidePanel {
     {
       label: 'Info',
       render: (item) => {
-        const vol = item.data as VolumeInfo;
+        const vol = panelData<VolumeInfo>(item);
         return [
           colorizeDetailKey(`Name:       ${vol.name}`),
           colorizeDetailKey(`Driver:     ${vol.driver}`),
@@ -59,10 +59,10 @@ export class VolumesPanel implements SidePanel {
         confirm: true,
         confirmMessage: 'Remove this volume?',
         handler: (item) => {
-          const vol = item.data as VolumeInfo;
+          const vol = panelData<VolumeInfo>(item);
           this.client.removeVolume(vol.name).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
-        condition: (item) => !(item.data as VolumeInfo).isInUse,
+        condition: (item) => !panelData<VolumeInfo>(item).isInUse,
       },
       {
         key: 'P',
@@ -77,7 +77,7 @@ export class VolumesPanel implements SidePanel {
   }
 
   getSearchableText(item: PanelItem): string {
-    const vol = item.data as VolumeInfo;
+    const vol = panelData<VolumeInfo>(item);
     return `${vol.name} ${vol.driver}`;
   }
 }

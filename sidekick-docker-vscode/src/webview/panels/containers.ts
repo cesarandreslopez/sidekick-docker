@@ -136,7 +136,7 @@ export const containersPanel: PanelDefinition = {
         const c = findContainer(item.id, state.snapshot);
         if (!c) return '';
         const pairs: [string, string][] = [
-          ['ID', colorizeId(c.id.substring(0, 12))],
+          ['ID', colorizeId(c.id)],
           ['Name', escapeHtml(c.name)],
           ['Image', escapeHtml(c.image)],
           ['State', colorizeState(c.state)],

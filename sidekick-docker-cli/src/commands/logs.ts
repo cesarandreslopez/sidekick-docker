@@ -1,4 +1,4 @@
-import { DockerClient, errorMessage } from 'sidekick-docker-shared';
+import { DockerClient, errorMessage, formatTimestampTime } from 'sidekick-docker-shared';
 
 export async function logsAction(container: string, opts: { follow?: boolean; tail?: string }): Promise<void> {
   const client = new DockerClient();
@@ -14,7 +14,7 @@ export async function logsAction(container: string, opts: { follow?: boolean; ta
       follow: opts.follow ?? true,
       tail: parseInt(opts.tail || '100', 10),
     })) {
-      const ts = entry.timestamp ? entry.timestamp.toISOString().substring(11, 23) : '';
+      const ts = entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
       const prefix = entry.stream === 'stderr' ? '\x1b[31m' : '';
       const reset = entry.stream === 'stderr' ? '\x1b[0m' : '';
       console.log(`${prefix}${ts} ${entry.message}${reset}`);

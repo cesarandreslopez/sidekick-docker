@@ -1,7 +1,7 @@
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { DockerClient, filterLine } from 'sidekick-docker-shared';
+import { DockerClient, filterLine, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError } from './types';
+import { defaultOnError, panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeLogEntry, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, coloredSparkline, severitySparkline } from '../../formatters';
 
@@ -81,7 +81,7 @@ export class ContainersPanel implements SidePanel {
     {
       label: 'Stats',
       render: (item, metrics) => {
-        const c = item.data as ContainerInfo;
+        const c = panelData<ContainerInfo>(item);
         if (c.state !== 'running') return 'Container is not running.';
 
         const latest = metrics.statsCollector.getLatest(c.id);
@@ -137,7 +137,7 @@ export class ContainersPanel implements SidePanel {
     {
       label: 'Env',
       render: (item, metrics) => {
-        const c = item.data as ContainerInfo;
+        const c = panelData<ContainerInfo>(item);
         const env = metrics.inspectedEnv.get(c.id);
         if (!env) return 'Loading environment variables...';
         if (env.length === 0) return 'No environment variables set.';
@@ -147,10 +147,10 @@ export class ContainersPanel implements SidePanel {
     {
       label: 'Config',
       render: (item) => {
-        const c = item.data as ContainerInfo;
+        const c = panelData<ContainerInfo>(item);
         const lines = [
           sectionHeader('Identity'),
-          colorizeDetailKey(`  ID:      ${colorizeId(c.id.substring(0, 12))}`),
+          colorizeDetailKey(`  ID:      ${colorizeId(shortId(c.id))}`),
           colorizeDetailKey(`  Name:    ${c.name}`),
           colorizeDetailKey(`  Image:   ${c.image}`),
           '',
@@ -219,46 +219,46 @@ export class ContainersPanel implements SidePanel {
         key: 's',
         label: 'Start',
         handler: (item) => {
-          const c = item.data as ContainerInfo;
+          const c = panelData<ContainerInfo>(item);
           this.client.startContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
-        condition: (item) => (item.data as ContainerInfo).state !== 'running',
+        condition: (item) => panelData<ContainerInfo>(item).state !== 'running',
       },
       {
         key: 'S',
         label: 'Stop',
         handler: (item) => {
-          const c = item.data as ContainerInfo;
+          const c = panelData<ContainerInfo>(item);
           this.client.stopContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
-        condition: (item) => (item.data as ContainerInfo).state === 'running',
+        condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
       {
         key: 'r',
         label: 'Restart',
         handler: (item) => {
-          const c = item.data as ContainerInfo;
+          const c = panelData<ContainerInfo>(item);
           this.client.restartContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
-        condition: (item) => (item.data as ContainerInfo).state === 'running',
+        condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
       {
         key: 'p',
         label: 'Pause',
         handler: (item) => {
-          const c = item.data as ContainerInfo;
+          const c = panelData<ContainerInfo>(item);
           this.client.pauseContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
-        condition: (item) => (item.data as ContainerInfo).state === 'running',
+        condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
       {
         key: 'u',
         label: 'Unpause',
         handler: (item) => {
-          const c = item.data as ContainerInfo;
+          const c = panelData<ContainerInfo>(item);
           this.client.unpauseContainer(c.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
-        condition: (item) => (item.data as ContainerInfo).state === 'paused',
+        condition: (item) => panelData<ContainerInfo>(item).state === 'paused',
       },
       {
         key: 'd',
@@ -266,7 +266,7 @@ export class ContainersPanel implements SidePanel {
         confirm: true,
         confirmMessage: 'Remove this container?',
         handler: (item) => {
-          const c = item.data as ContainerInfo;
+          const c = panelData<ContainerInfo>(item);
           this.client.removeContainer(c.id, true).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
       },
@@ -274,10 +274,10 @@ export class ContainersPanel implements SidePanel {
         key: 'e',
         label: 'Exec',
         handler: (item) => {
-          const c = item.data as ContainerInfo;
+          const c = panelData<ContainerInfo>(item);
           this.onExec?.(c.id);
         },
-        condition: (item) => (item.data as ContainerInfo).state === 'running',
+        condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
       {
         key: 'c',
@@ -302,7 +302,7 @@ export class ContainersPanel implements SidePanel {
   }
 
   getSearchableText(item: PanelItem): string {
-    const c = item.data as ContainerInfo;
+    const c = panelData<ContainerInfo>(item);
     return `${c.name} ${c.image} ${c.state}`;
   }
 }

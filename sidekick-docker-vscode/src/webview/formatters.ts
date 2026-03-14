@@ -1,9 +1,9 @@
 import type { SerializedLogEntry } from '../types/messages';
 import type { LogTokenType, FilterMatch } from 'sidekick-docker-shared/log';
 import { tokenizeLogLine } from 'sidekick-docker-shared/log';
-import { formatBytes, formatCpu, formatMemory, truncate } from 'sidekick-docker-shared/formatters';
+import { formatBytes, formatCpu, formatMemory, truncate, shortId, formatTimestampTime } from 'sidekick-docker-shared/formatters';
 
-export { formatBytes, formatCpu, formatMemory, truncate };
+export { formatBytes, formatCpu, formatMemory, truncate, shortId, formatTimestampTime };
 
 // VSCode-specific formatters (type signatures or return values differ from shared)
 
@@ -104,7 +104,7 @@ function highlightMatchesHtml(message: string, matches: FilterMatch[], wrapClass
 }
 
 export function colorizeLogEntry(entry: SerializedLogEntry, filterMatches?: FilterMatch[]): string {
-  const ts = entry.timestamp ? entry.timestamp.substring(11, 23) : '';
+  const ts = entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
   const tsHtml = ts ? `<span class="log-timestamp">${escapeHtml(ts)}</span> ` : '';
 
   if (entry.stream === 'stderr') {

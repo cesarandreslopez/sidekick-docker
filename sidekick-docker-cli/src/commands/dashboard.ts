@@ -1,7 +1,7 @@
 import React from 'react';
 import { spawnSync } from 'child_process';
 import type { Command } from 'commander';
-import { DockerClient, ComposeClient, EventWatcher } from 'sidekick-docker-shared';
+import { DockerClient, ComposeClient, EventWatcher, shortId } from 'sidekick-docker-shared';
 import { copyToClipboard } from '../utils/clipboard';
 import { DockerState } from '../dashboard/DockerState';
 import { ContainersPanel } from '../dashboard/panels/ContainersPanel';
@@ -75,7 +75,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     if (panelId === 'containers') {
       logManager.select(itemId);
       statsManager.select(itemId);
-      composeLogManager.select(null, null);
+      composeLogManager.selectCompose(null, null);
       // Fetch env vars if not cached
       if (itemId && !state.getInspectedEnv(itemId)) {
         client.getContainerEnv(itemId).then(env => {
@@ -89,14 +89,14 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       // Parse service item id: "project:name" or "service:project:name"
       const parts = itemId.split(':');
       if (parts[0] === 'project') {
-        composeLogManager.select(parts.slice(1).join(':'), null);
+        composeLogManager.selectCompose(parts.slice(1).join(':'), null);
       } else if (parts[0] === 'service') {
-        composeLogManager.select(parts[1], parts.slice(2).join(':'));
+        composeLogManager.selectCompose(parts[1], parts.slice(2).join(':'));
       }
     } else {
       logManager.select(null);
       statsManager.select(null);
-      composeLogManager.select(null, null);
+      composeLogManager.selectCompose(null, null);
     }
   };
 
@@ -170,7 +170,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   containersPanel.setOnExec((containerId: string) => {
     // Find container name for the overlay header
     const container = state.getMetrics().containers.find(c => c.id === containerId);
-    const name = container?.name ?? containerId.substring(0, 12);
+    const name = container?.name ?? shortId(containerId);
 
     if (execTriggerRef.current) {
       execTriggerRef.current(containerId, name);

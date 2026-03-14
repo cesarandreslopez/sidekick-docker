@@ -1,85 +1,57 @@
 import type { ComposeClient } from 'sidekick-docker-shared';
 import type { LogEntry } from 'sidekick-docker-shared';
-import { ReconnectScheduler, MAX_LOG_LINES, errorMessage } from 'sidekick-docker-shared';
+import { MAX_LOG_LINES } from 'sidekick-docker-shared';
+import { BaseStreamManager } from './BaseStreamManager';
+
+interface ComposeStreamId {
+  project: string | null;
+  service: string | null;
+}
 
 /**
  * Manages compose log streaming for the currently selected project/service.
  * Selection-driven: starts stream when selected, stops when deselected.
  * Auto-reconnects with exponential backoff when a stream ends.
  */
-export class ComposeLogStreamManager {
+export class ComposeLogStreamManager extends BaseStreamManager<ComposeStreamId, LogEntry> {
   private composeClient: ComposeClient;
-  private currentProject: string | null = null;
-  private currentService: string | null = null;
   private logs: LogEntry[] = [];
-  private aborted = false;
-  private reconnect = new ReconnectScheduler();
-  private onChange: () => void;
+
+  protected readonly streamLabel = 'compose log';
 
   constructor(composeClient: ComposeClient, onChange: () => void) {
+    super(onChange);
     this.composeClient = composeClient;
-    this.onChange = onChange;
   }
 
-  async select(project: string | null, service: string | null): Promise<void> {
-    if (project === this.currentProject && service === this.currentService) return;
+  protected emptyId(): ComposeStreamId { return { project: null, service: null }; }
+  protected isSameId(a: ComposeStreamId, b: ComposeStreamId): boolean {
+    return a.project === b.project && a.service === b.service;
+  }
+  protected isValidId(id: ComposeStreamId): boolean { return id.project !== null; }
+  protected idLabel(id: ComposeStreamId): string { return id.project ?? '(none)'; }
 
-    this.stop();
+  protected createStream(id: ComposeStreamId): AsyncIterable<LogEntry> {
+    return this.composeClient.streamLogs(id.project!, id.service ?? undefined);
+  }
 
-    this.currentProject = project;
-    this.currentService = service;
+  protected processItem(_id: ComposeStreamId, entry: LogEntry): void {
+    this.logs.push(entry);
+    if (this.logs.length > MAX_LOG_LINES) {
+      this.logs.shift();
+    }
+  }
+
+  protected onClear(): void {
     this.logs = [];
-
-    if (!project) return;
-
-    this.aborted = false;
-    this.reconnect.reset();
-    this.streamLogs(project, service);
   }
 
-  private async streamLogs(project: string, service: string | null): Promise<void> {
-    try {
-      for await (const entry of this.composeClient.streamLogs(project, service ?? undefined)) {
-        if (this.aborted || this.currentProject !== project) break;
-
-        this.logs.push(entry);
-        if (this.logs.length > MAX_LOG_LINES) {
-          this.logs.shift();
-        }
-
-        this.onChange();
-      }
-      // Stream ended normally — reset backoff
-      this.reconnect.reset();
-    } catch (err) {
-      console.debug('compose log stream error:', errorMessage(err));
-    }
-
-    // Auto-reconnect if still selected for this project
-    if (!this.aborted && this.currentProject === project) {
-      const scheduled = this.reconnect.schedule(() => {
-        if (!this.aborted && this.currentProject === project) {
-          this.streamLogs(project, service);
-        }
-      });
-      if (!scheduled) {
-        console.debug(`compose log stream: gave up reconnecting for ${project}`);
-      }
-    }
-  }
-
-  stop(): void {
-    this.aborted = true;
-    this.currentProject = null;
-    this.currentService = null;
-    this.reconnect.clear();
+  /** Select by project/service (convenience wrapper). */
+  async selectCompose(project: string | null, service: string | null): Promise<void> {
+    return this.select({ project, service });
   }
 
   getLogs(): LogEntry[] {
     return this.logs;
-  }
-
-  dispose(): void {
-    this.stop();
   }
 }

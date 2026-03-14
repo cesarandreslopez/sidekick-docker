@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getRandomPhrase, errorMessage } from 'sidekick-docker-shared';
+import { getRandomPhrase, errorMessage, shortId } from 'sidekick-docker-shared';
 import { getNonce } from '../utils/nonce';
 import { DockerService } from '../services/DockerService';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
@@ -219,7 +219,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
   }
 
   private _openExecTerminal(containerId: string): void {
-    const name = this.service?.getContainerName(containerId) ?? containerId.substring(0, 12);
+    const name = this.service?.getContainerName(containerId) ?? shortId(containerId);
     const terminal = vscode.window.createTerminal({
       name: `Exec: ${name}`,
       shellPath: 'docker',

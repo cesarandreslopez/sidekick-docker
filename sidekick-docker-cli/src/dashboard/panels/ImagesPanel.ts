@@ -1,7 +1,7 @@
 import type { ImageInfo } from 'sidekick-docker-shared';
 import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError } from './types';
+import { defaultOnError, panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { formatBytes, truncate, colorizeDetailKey, colorizeId, colorizeBool } from '../../formatters';
 
@@ -24,7 +24,7 @@ export class ImagesPanel implements SidePanel {
     {
       label: 'Info',
       render: (item) => {
-        const img = item.data as ImageInfo;
+        const img = panelData<ImageInfo>(item);
         return [
           colorizeDetailKey(`ID:       ${colorizeId(img.id)}`),
           colorizeDetailKey(`Tags:     ${img.repoTags.join(', ')}`),
@@ -60,7 +60,7 @@ export class ImagesPanel implements SidePanel {
         confirm: true,
         confirmMessage: 'Remove this image?',
         handler: (item) => {
-          const img = item.data as ImageInfo;
+          const img = panelData<ImageInfo>(item);
           this.client.removeImage(img.id).then(() => this.onAction()).catch(e => this.onError(String(e)));
         },
       },
@@ -77,7 +77,7 @@ export class ImagesPanel implements SidePanel {
   }
 
   getSearchableText(item: PanelItem): string {
-    const img = item.data as ImageInfo;
+    const img = panelData<ImageInfo>(item);
     return img.repoTags.join(' ');
   }
 }

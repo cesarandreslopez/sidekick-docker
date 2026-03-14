@@ -43,6 +43,14 @@ export interface DetailTab {
   autoScrollBottom?: boolean;
 }
 
+/** Safely extract typed data from a PanelItem. Throws if data is null/undefined. */
+export function panelData<T>(item: PanelItem): T {
+  if (item.data == null) {
+    throw new Error(`Panel item "${item.id}" has no data`);
+  }
+  return item.data as T;
+}
+
 /** A panel that populates the side list and detail pane. */
 export interface SidePanel {
   readonly id: string;
