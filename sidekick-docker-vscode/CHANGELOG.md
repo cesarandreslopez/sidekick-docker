@@ -5,6 +5,16 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-14
+
+### Added
+
+- New **Files** detail tab on Containers panel — shows all filesystem changes inside a container with color-coded markers (A=added, C=changed, D=deleted). Works on running and stopped containers
+- New **Layers** detail tab on Images panel — shows full image layer history with layer number, size, and Dockerfile instruction. Highlights the largest layer
+- Network I/O rate sparklines (RX/TX bytes/sec) in Stats tab
+- Block I/O rate sparklines (read/write bytes/sec) in Stats tab
+- Log severity sparkline in Stats tab (colored by dominant severity per time bucket)
+
 ## [0.1.5] - 2026-03-08
 
 ### Added
@@ -78,6 +88,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Container config detail view
 - Docker event watching for real-time state updates
 
+[0.2.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.0
 [0.1.5]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.5
 [0.1.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.4
 [0.1.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.3

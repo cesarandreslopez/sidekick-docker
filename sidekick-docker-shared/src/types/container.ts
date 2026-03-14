@@ -42,3 +42,8 @@ export interface LogEntry {
   stream: 'stdout' | 'stderr';
   message: string;
 }
+
+export interface FilesystemChange {
+  path: string;
+  kind: 'added' | 'changed' | 'deleted';
+}

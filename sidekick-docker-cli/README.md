@@ -48,9 +48,9 @@ The dashboard has 5 panels, each mapped to a number key:
 
 | # | Panel | Shows | Detail Tabs |
 |---|-------|-------|-------------|
-| 1 | **Containers** | All containers with state, image, ports, uptime | Logs, Stats, Env, Config, Patterns |
+| 1 | **Containers** | All containers with state, image, ports, uptime | Logs, Stats, Env, Config, Files, Patterns |
 | 2 | **Services** | Compose projects and their services | Info, Logs |
-| 3 | **Images** | Local images with tags, size, age | Info |
+| 3 | **Images** | Local images with tags, size, age | Info, Layers |
 | 4 | **Volumes** | Named volumes with driver, mount path, usage status | Info |
 | 5 | **Networks** | Docker networks with driver, scope, connected containers | Info |
 
@@ -112,7 +112,9 @@ The dashboard has 5 panels, each mapped to a number key:
 - **Real-time log streaming** — follows container logs with token-level syntax highlighting (HTTP methods, status codes, URLs, IPs, timestamps, JSON keys)
 - **Log search & filter** — press `f` on the Logs tab to search within log output with exact or fuzzy matching and match highlighting
 - **Log analytics** — severity count badges, severity sparkline over time, and pattern clustering that groups similar logs into templates with `<*>` wildcards
-- **Live stats with sparklines** — CPU, memory, and log severity usage charted as inline sparklines (60-sample history)
+- **Live stats with sparklines** — CPU, memory, network I/O, block I/O, and log severity charted as inline sparklines (60-sample history)
+- **Filesystem inspector** — view all filesystem changes inside containers (added/changed/deleted files)
+- **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions
 - **Interactive exec** — open a shell inside any running container
 - **Compose detection** — automatically discovers projects from container labels, merges with compose file config
 - **Filter** — press `/` to filter any list by name

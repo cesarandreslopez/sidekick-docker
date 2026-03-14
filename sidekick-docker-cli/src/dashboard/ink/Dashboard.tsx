@@ -11,6 +11,7 @@ import { SideList } from './SideList';
 import { DetailTabBar } from './DetailTabBar';
 import { DetailPane } from './DetailPane';
 import { StatusBar } from './StatusBar';
+import type { ActionHint } from './StatusBar';
 import { HelpOverlay } from './HelpOverlay';
 import { FilterOverlay } from './FilterOverlay';
 import { ContextMenuOverlay } from './ContextMenuOverlay';
@@ -432,17 +433,18 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
 
   const showNormalLayout = state.overlay !== 'help' && state.overlay !== 'exec' && state.overlay !== 'version';
 
-  // Panel action hints for status bar (structured for color coding)
-  const panelActionHints = applicableActions
-    .map(a => ({ key: a.key, label: a.label, destructive: !!a.confirm }));
+  // Panel action hints for status bar — compact summary, not full action list
+  const panelActionHints: ActionHint[] = applicableActions.length > 0
+    ? [{ key: 'x', label: 'Actions', destructive: false }]
+    : [];
 
   // Contextual hints based on active panel + tab
   const contextHint = (() => {
     if (panel.id === 'containers') {
       const parts: string[] = [];
-      if (tabIdx === 0) parts.push('f:Filter logs', 'c:Copy');
-      parts.push(state.showAllContainers ? 'a:Running only' : 'a:Show all');
-      parts.push(`\u2195${state.sortField}`);
+      if (tabIdx === 0) parts.push('f:Filter', 'c:Copy');
+      parts.push(state.showAllContainers ? 'a:All' : 'a:Running');
+      parts.push(`o:\u2195${state.sortField}`);
       return parts.join('  ');
     }
     return '';

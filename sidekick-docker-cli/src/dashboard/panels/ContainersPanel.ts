@@ -1,4 +1,4 @@
-import type { ContainerInfo } from 'sidekick-docker-shared';
+import type { ContainerInfo, FilesystemChange } from 'sidekick-docker-shared';
 import { DockerClient, filterLine, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { defaultOnError, panelData } from './types';
@@ -167,6 +167,22 @@ export class ContainersPanel implements SidePanel {
           lines.push('', sectionHeader('Compose'));
           lines.push(colorizeDetailKey(`  Project: ${c.composeProject}`));
           lines.push(colorizeDetailKey(`  Service: ${c.composeService}`));
+        }
+        return lines.join('\n');
+      },
+    },
+    {
+      label: 'Files',
+      render: (item, metrics) => {
+        const c = panelData<ContainerInfo>(item);
+        const changes = metrics.containerChanges.get(c.id);
+        if (!changes) return 'Loading filesystem changes...';
+        if (changes.length === 0) return 'No filesystem changes detected.';
+        const lines = [sectionHeader(`Filesystem Changes (${changes.length} files)`), ''];
+        for (const change of changes) {
+          const icon = change.kind === 'added' ? 'A' : change.kind === 'deleted' ? 'D' : 'C';
+          const color = change.kind === 'added' ? '\x1b[32m' : change.kind === 'deleted' ? '\x1b[31m' : '\x1b[33m';
+          lines.push(`${color} ${icon}\x1b[39m  ${change.path}`);
         }
         return lines.join('\n');
       },

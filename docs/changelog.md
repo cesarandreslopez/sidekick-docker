@@ -6,6 +6,45 @@ All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-14
+
+### Added
+
+#### Container Filesystem Inspector
+
+- New **Files** detail tab on the Containers panel showing all filesystem changes made inside a container
+- Color-coded change markers: green `A` for added, yellow `C` for changed, red `D` for deleted files
+- Uses Docker's `container.changes()` API — works on both running and stopped containers
+- Available in both TUI and VS Code extension
+
+#### Image Layer Explorer
+
+- New **Layers** detail tab on the Images panel showing the full layer history of an image
+- Displays layer number, size, and the Dockerfile instruction that created it
+- Shows total image size and highlights the largest layer
+- Uses Docker's `image.history()` API
+- Available in both TUI and VS Code extension
+
+#### Docker API Layer (`sidekick-docker-shared`)
+
+- `DockerClient.getContainerChanges(id)` — returns typed `FilesystemChange[]`
+- `DockerClient.getImageHistory(nameOrId)` — returns typed `ImageLayer[]`
+- Zod schemas for container changes and image history API responses
+
+#### VS Code Extension
+
+- Network I/O rate sparklines (RX/TX bytes/sec) in Stats tab
+- Block I/O rate sparklines (read/write bytes/sec) in Stats tab
+- Log severity sparkline in Stats tab
+
+### Improved
+
+- Comprehensive Zod runtime validation for all Docker API responses
+- Modular shared package with enforced import DAG and integration tests
+- Sub-path exports eliminating code forks in VSCode package
+- `BaseStreamManager` extracted from three identical stream manager implementations
+- Async action feedback, contextual hints, and tiered confirmation modals in TUI
+
 ## [0.1.5] - 2026-03-08
 
 ### Added

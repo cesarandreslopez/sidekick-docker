@@ -5,6 +5,8 @@ import type {
   LogEntry,
   PortBinding,
   ImageInfo,
+  ImageLayer,
+  FilesystemChange,
   VolumeInfo,
   NetworkInfo,
   NetworkContainerRef,
@@ -23,6 +25,8 @@ import {
   PruneVolumesResponseSchema,
   PruneNetworksResponseSchema,
   ContainerInspectEnvSchema,
+  ContainerChangesResponseSchema,
+  ImageHistoryResponseSchema,
 } from './schemas';
 import type { DockerStatsRaw } from './schemas';
 import { shortId } from './utils';
@@ -386,6 +390,29 @@ export class DockerClient {
     return { networksDeleted: validated.NetworksDeleted ?? [] };
   }
 
+  async getContainerChanges(id: string): Promise<FilesystemChange[]> {
+    const container = this.docker.getContainer(id);
+    const raw = await container.changes();
+    const validated = ContainerChangesResponseSchema.parse(raw);
+    return (validated || []).map(c => ({
+      path: c.Path,
+      kind: c.Kind === 1 ? 'added' as const : c.Kind === 2 ? 'deleted' as const : 'changed' as const,
+    }));
+  }
+
+  async getImageHistory(nameOrId: string): Promise<ImageLayer[]> {
+    const image = this.docker.getImage(nameOrId);
+    const raw = await image.history();
+    const validated = ImageHistoryResponseSchema.parse(raw);
+    return validated.map(h => ({
+      id: h.Id === '<missing>' ? '' : shortId(h.Id.replace('sha256:', '')),
+      created: new Date(h.Created * 1000),
+      createdBy: cleanDockerInstruction(h.CreatedBy),
+      size: h.Size,
+      comment: h.Comment,
+    }));
+  }
+
   async *streamEvents(filters?: Record<string, string[]>, signal?: AbortSignal): AsyncIterable<DockerEvent> {
     const stream = await this.docker.getEvents({ filters });
 
@@ -432,6 +459,10 @@ function mapResourceType(type: string): DockerResourceType {
     case 'network': return 'network';
     default: return 'daemon';
   }
+}
+
+function cleanDockerInstruction(raw: string): string {
+  return raw.replace(/^\/bin\/sh -c (#\(nop\)\s+)?/, '').trim();
 }
 
 function parseLogLine(line: string, defaultStream: 'stdout' | 'stderr'): LogEntry {

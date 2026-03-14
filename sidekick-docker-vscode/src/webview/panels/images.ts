@@ -3,6 +3,7 @@ import type { DashboardStateSnapshot, SerializedImageInfo } from '../../types/me
 import type { WebviewState } from '../state';
 import { formatBytes, truncate, escapeHtml, colorizeId, colorizeBool, renderKvGrid } from '../formatters';
 
+
 function findImage(id: string, snapshot: DashboardStateSnapshot): SerializedImageInfo | undefined {
   return snapshot.images.find(i => i.id === id);
 }
@@ -26,6 +27,32 @@ export const imagesPanel: PanelDefinition = {
           ['Created', escapeHtml(new Date(img.created).toLocaleString())],
           ['Dangling', colorizeBool(img.isDangling)],
         ]);
+      },
+    },
+    {
+      label: 'Layers',
+      render: (item: PanelItem, state: WebviewState): string => {
+        const layers = state.imageLayers.get(item.id);
+        if (!layers) return 'Loading layers...';
+        if (layers.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4E6}</div><div class="empty-title">No layer history</div><div class="empty-subtitle">No layer history available for this image</div></div>';
+
+        const total = layers.reduce((sum, l) => sum + l.size, 0);
+        let html = `<div style="font-size:12px;color:var(--vscode-descriptionForeground);margin-bottom:6px;">${layers.length} layers, ${escapeHtml(formatBytes(total))} total</div>`;
+        for (let i = 0; i < layers.length; i++) {
+          const l = layers[i];
+          const num = String(i + 1);
+          const sizeStr = l.size > 0 ? formatBytes(l.size) : '0 B';
+          const sizeClass = l.size === 0 ? ' zero' : '';
+          html += `<div class="layer-row"><span class="layer-num">${escapeHtml(num)}</span><span class="layer-size${sizeClass}">${escapeHtml(sizeStr)}</span><span class="layer-cmd" title="${escapeHtml(l.createdBy)}">${escapeHtml(truncate(l.createdBy, 80))}</span></div>`;
+        }
+
+        // Show largest layer
+        const largest = layers.reduce((max, l) => l.size > max.size ? l : max, layers[0]);
+        const largestIdx = layers.indexOf(largest) + 1;
+        if (largest.size > 0) {
+          html += `<div class="layer-summary">Largest: #${largestIdx} (${escapeHtml(formatBytes(largest.size))}) &mdash; ${escapeHtml(truncate(largest.createdBy, 50))}</div>`;
+        }
+        return html;
       },
     },
   ] as DetailTabDefinition[],

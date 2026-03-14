@@ -1,6 +1,8 @@
 import type {
   ContainerInfo,
   ImageInfo,
+  ImageLayer,
+  FilesystemChange,
   VolumeInfo,
   NetworkInfo,
   ComposeProject,
@@ -18,6 +20,8 @@ export interface DockerDashboardMetrics {
   composeProjects: ComposeProject[];
   statsCollector: StatsCollector;
   inspectedEnv: Map<string, string[]>;
+  containerChanges: Map<string, FilesystemChange[]>;
+  imageLayers: Map<string, ImageLayer[]>;
   selectedContainerLogs: LogEntry[];
   selectedComposeLogs: LogEntry[];
   lastRefresh: Date | null;
@@ -44,6 +48,8 @@ export class DockerState {
   private selectedLogs: LogEntry[] = [];
   private selectedComposeLogs: LogEntry[] = [];
   private inspectedEnv = new Map<string, string[]>();
+  private containerChanges = new Map<string, FilesystemChange[]>();
+  private imageLayers = new Map<string, ImageLayer[]>();
   private lastRefresh: Date | null = null;
   private daemonConnected = false;
   private cachedFileConfig: ComposeFileConfig | null = null;
@@ -190,6 +196,22 @@ export class DockerState {
     return this.inspectedEnv.get(containerId);
   }
 
+  setContainerChanges(containerId: string, changes: FilesystemChange[]): void {
+    this.containerChanges.set(containerId, changes);
+  }
+
+  getContainerChanges(containerId: string): FilesystemChange[] | undefined {
+    return this.containerChanges.get(containerId);
+  }
+
+  setImageLayers(imageId: string, layers: ImageLayer[]): void {
+    this.imageLayers.set(imageId, layers);
+  }
+
+  getImageLayers(imageId: string): ImageLayer[] | undefined {
+    return this.imageLayers.get(imageId);
+  }
+
   getMetrics(): DockerDashboardMetrics {
     return {
       containers: [...this.containers],
@@ -199,6 +221,8 @@ export class DockerState {
       composeProjects: [...this.composeProjects],
       statsCollector: this.statsCollector,
       inspectedEnv: this.inspectedEnv,
+      containerChanges: this.containerChanges,
+      imageLayers: this.imageLayers,
       selectedContainerLogs: [...this.selectedLogs],
       selectedComposeLogs: [...this.selectedComposeLogs],
       lastRefresh: this.lastRefresh,

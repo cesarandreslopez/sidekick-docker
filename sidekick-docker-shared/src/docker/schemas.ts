@@ -126,3 +126,21 @@ export const ContainerInspectEnvSchema = z.object({
     Env: z.array(z.string()).nullable().default([]),
   }),
 });
+
+/** Validates a single entry from Docker container changes API (Kind: 0=Modified, 1=Added, 2=Deleted). */
+export const ContainerChangeRawSchema = z.object({
+  Path: z.string(),
+  Kind: z.number(),
+});
+export const ContainerChangesResponseSchema = z.array(ContainerChangeRawSchema).nullable();
+
+/** Validates a single entry from Docker image history API. */
+export const ImageHistoryItemRawSchema = z.object({
+  Id: z.string().default('<missing>'),
+  Created: z.number().default(0),
+  CreatedBy: z.string().default(''),
+  Size: z.number().default(0),
+  Comment: z.string().default(''),
+  Tags: z.array(z.string()).nullable().optional(),
+});
+export const ImageHistoryResponseSchema = z.array(ImageHistoryItemRawSchema);

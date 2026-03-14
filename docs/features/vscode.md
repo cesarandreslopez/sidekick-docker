@@ -30,7 +30,9 @@ The dashboard opens as a webview panel with the same layout as the terminal TUI.
 - **Container management** — start, stop, restart, pause, unpause, remove directly
 - **Health status** — shows healthy/unhealthy/starting indicators for containers with health checks
 - **Compose support** — detect and manage projects
-- **Stats monitoring** — live CPU, memory, network I/O, and block I/O metrics
+- **Stats monitoring** — live CPU, memory, network I/O, and block I/O metrics with sparkline charts
+- **Filesystem inspector** — view all filesystem changes inside containers (Files tab)
+- **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions (Layers tab)
 
 ## Requirements
 

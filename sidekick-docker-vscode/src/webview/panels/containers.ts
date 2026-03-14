@@ -172,6 +172,22 @@ export const containersPanel: PanelDefinition = {
       },
     },
     {
+      label: 'Files',
+      render: (item: PanelItem, state: WebviewState): string => {
+        const changes = state.containerChanges.get(item.id);
+        if (!changes) return 'Loading filesystem changes...';
+        if (changes.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4C2}</div><div class="empty-title">No filesystem changes</div><div class="empty-subtitle">No changes detected in the container\'s filesystem</div></div>';
+
+        let html = `<div style="font-size:12px;color:var(--vscode-descriptionForeground);margin-bottom:6px;">Filesystem Changes (${changes.length} files)</div>`;
+        for (const c of changes) {
+          const kind = c.kind === 'added' ? 'A' : c.kind === 'deleted' ? 'D' : 'C';
+          const cls = `change-${c.kind}`;
+          html += `<div class="change-row"><span class="change-kind ${cls}">${kind}</span><span class="change-path">${escapeHtml(c.path)}</span></div>`;
+        }
+        return html;
+      },
+    },
+    {
       label: 'Patterns',
       render: (item: PanelItem, state: WebviewState): string => {
         const entries = state.logs.get(item.id);

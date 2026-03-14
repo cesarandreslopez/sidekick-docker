@@ -2,6 +2,8 @@ import type {
   DashboardStateSnapshot,
   SerializedLogEntry,
   SerializedContainerStats,
+  SerializedFilesystemChange,
+  SerializedImageLayer,
 } from '../types/messages';
 import type { SeverityCounts, FilterMode } from 'sidekick-docker-shared/log';
 
@@ -31,6 +33,8 @@ export interface WebviewState {
   logs: Map<string, SerializedLogEntry[]>;
   stats: Map<string, ContainerStatsEntry>;
   envVars: Map<string, string[]>;
+  containerChanges: Map<string, SerializedFilesystemChange[]>;
+  imageLayers: Map<string, SerializedImageLayer[]>;
   composeLogs: Map<string, SerializedLogEntry[]>;
 
   // Log analysis state
@@ -75,6 +79,8 @@ export function createInitialState(): WebviewState {
     logs: new Map(),
     stats: new Map(),
     envVars: new Map(),
+    containerChanges: new Map(),
+    imageLayers: new Map(),
     composeLogs: new Map(),
     logSeverityCounts: new Map(),
     logFilterString: '',

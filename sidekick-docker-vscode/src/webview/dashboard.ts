@@ -1087,6 +1087,24 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       break;
     }
 
+    case 'updateChanges': {
+      state.containerChanges.set(msg.containerId, msg.changes);
+      // Re-render if viewing this container's Files tab
+      if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 4) {
+        renderDetailContent(getFilteredItems());
+      }
+      break;
+    }
+
+    case 'updateLayers': {
+      state.imageLayers.set(msg.imageId, msg.layers);
+      // Re-render if viewing this image's Layers tab
+      if (state.selectedItemId === msg.imageId && getPanel().id === 'images' && state.detailTabIndex === 1) {
+        renderDetailContent(getFilteredItems());
+      }
+      break;
+    }
+
     case 'updateComposeLogs': {
       const key = msg.serviceName ? `${msg.projectName}:${msg.serviceName}` : msg.projectName;
       state.composeLogs.set(key, msg.entries);

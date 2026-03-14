@@ -86,7 +86,7 @@ export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filt
 
       {/* Navigation hints */}
       <Text color="gray" dimColor>
-        {'  j/k  Tab  /  ?  q'}
+        {'  j/k  Tab  /  ?'}
       </Text>
 
       {/* Contextual hints for active panel */}

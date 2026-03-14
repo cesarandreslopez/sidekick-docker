@@ -71,6 +71,19 @@ export interface SerializedLogEntry {
   message: string;
 }
 
+export interface SerializedFilesystemChange {
+  path: string;
+  kind: 'added' | 'changed' | 'deleted';
+}
+
+export interface SerializedImageLayer {
+  id: string;
+  created: string;
+  createdBy: string;
+  size: number;
+  comment: string;
+}
+
 /** Full state snapshot sent to webview. */
 export interface DashboardStateSnapshot {
   containers: SerializedContainerInfo[];
@@ -92,7 +105,9 @@ export type ExtensionMessage =
   | { type: 'phraseBank'; phrases: string[] }
   | { type: 'toast'; message: string; severity: 'error' | 'warning' | 'info' | 'success' }
   | { type: 'focusContainer'; containerId: string }
-  | { type: 'updateComposeLogs'; projectName: string; serviceName: string | null; entries: SerializedLogEntry[] };
+  | { type: 'updateComposeLogs'; projectName: string; serviceName: string | null; entries: SerializedLogEntry[] }
+  | { type: 'updateChanges'; containerId: string; changes: SerializedFilesystemChange[] }
+  | { type: 'updateLayers'; imageId: string; layers: SerializedImageLayer[] };
 
 // ─── Webview → Extension ────────────────────────────────────────────
 

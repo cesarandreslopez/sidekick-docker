@@ -11,6 +11,8 @@ import { LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/lo
 import type {
   ContainerInfo,
   ImageInfo,
+  ImageLayer,
+  FilesystemChange,
   VolumeInfo,
   NetworkInfo,
   ComposeProject,
@@ -28,6 +30,8 @@ import type {
   SerializedComposeProject,
   SerializedLogEntry,
   SerializedContainerStats,
+  SerializedFilesystemChange,
+  SerializedImageLayer,
 } from '../types/messages';
 
 export interface StatsChangeData {
@@ -49,6 +53,8 @@ export interface DockerServiceCallbacks {
   onStatsChange: (data: StatsChangeData) => void;
   onComposeLogs: (projectName: string, serviceName: string | null, entries: SerializedLogEntry[]) => void;
   onEnvLoaded: (containerId: string, env: string[]) => void;
+  onChangesLoaded: (containerId: string, changes: SerializedFilesystemChange[]) => void;
+  onLayersLoaded: (imageId: string, layers: SerializedImageLayer[]) => void;
   onError: (message: string) => void;
 }
 
@@ -69,6 +75,8 @@ export class DockerService {
   private daemonConnected = false;
   private lastRefresh: Date | null = null;
   private inspectedEnv = new Map<string, string[]>();
+  private inspectedChanges = new Map<string, FilesystemChange[]>();
+  private inspectedLayers = new Map<string, ImageLayer[]>();
 
   // Log streaming
   private logContainerId: string | null = null;
@@ -251,6 +259,19 @@ export class DockerService {
     } else {
       this.callbacks.onEnvLoaded(containerId, this.inspectedEnv.get(containerId)!);
     }
+
+    // Fetch filesystem changes
+    if (!this.inspectedChanges.has(containerId)) {
+      try {
+        const changes = await this.client.getContainerChanges(containerId);
+        this.inspectedChanges.set(containerId, changes);
+        if (!this.disposed) {
+          this.callbacks.onChangesLoaded(containerId, changes.map(serializeFilesystemChange));
+        }
+      } catch { /* ignore */ }
+    } else {
+      this.callbacks.onChangesLoaded(containerId, this.inspectedChanges.get(containerId)!.map(serializeFilesystemChange));
+    }
   }
 
   private async streamLogs(containerId: string): Promise<void> {
@@ -324,6 +345,22 @@ export class DockerService {
     if (this.statsLoadingInterval) {
       clearInterval(this.statsLoadingInterval);
       this.statsLoadingInterval = null;
+    }
+  }
+
+  async selectImage(imageId: string | null): Promise<void> {
+    if (!imageId) return;
+
+    if (!this.inspectedLayers.has(imageId)) {
+      try {
+        const layers = await this.client.getImageHistory(imageId);
+        this.inspectedLayers.set(imageId, layers);
+        if (!this.disposed) {
+          this.callbacks.onLayersLoaded(imageId, layers.map(serializeImageLayer));
+        }
+      } catch { /* ignore */ }
+    } else {
+      this.callbacks.onLayersLoaded(imageId, this.inspectedLayers.get(imageId)!.map(serializeImageLayer));
     }
   }
 
@@ -501,6 +538,20 @@ function serializeComposeProject(p: ComposeProject): SerializedComposeProject {
 
 function serializeLogEntry(e: LogEntry): SerializedLogEntry {
   return { timestamp: e.timestamp?.toISOString() ?? null, stream: e.stream, message: e.message };
+}
+
+function serializeFilesystemChange(c: FilesystemChange): SerializedFilesystemChange {
+  return { path: c.path, kind: c.kind };
+}
+
+function serializeImageLayer(l: ImageLayer): SerializedImageLayer {
+  return {
+    id: l.id,
+    created: l.created.toISOString(),
+    createdBy: l.createdBy,
+    size: l.size,
+    comment: l.comment,
+  };
 }
 
 function serializeStats(s: ContainerStats): SerializedContainerStats {

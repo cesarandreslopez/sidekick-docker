@@ -5,3 +5,11 @@ export interface ImageInfo {
   created: Date;
   isDangling: boolean;
 }
+
+export interface ImageLayer {
+  id: string;
+  created: Date;
+  createdBy: string;
+  size: number;
+  comment: string;
+}

@@ -53,6 +53,16 @@ Environment variables set in the container, displayed as key-value pairs.
 
 Container configuration details — ID, name, image, state, status, health status (when available), creation time, ports, and Compose project info.
 
+### Files
+
+Shows all filesystem changes made inside the container compared to its base image. Each change is marked with a color-coded indicator:
+
+- **A** (green) — file added
+- **C** (yellow) — file changed
+- **D** (red) — file deleted
+
+Uses Docker's `container.changes()` API, which works on both running and stopped containers. Changes are fetched once on selection and cached.
+
 ### Patterns
 
 Groups similar log lines into templates by replacing variable parts (IDs, IPs, timestamps) with `<*>` wildcards. Templates are ranked by frequency, helping you quickly identify the most common log patterns and spot anomalies.

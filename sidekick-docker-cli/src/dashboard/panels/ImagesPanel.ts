@@ -1,9 +1,9 @@
-import type { ImageInfo } from 'sidekick-docker-shared';
+import type { ImageInfo, ImageLayer } from 'sidekick-docker-shared';
 import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { defaultOnError, panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { formatBytes, truncate, colorizeDetailKey, colorizeId, colorizeBool } from '../../formatters';
+import { formatBytes, truncate, colorizeDetailKey, colorizeId, colorizeBool, sectionHeader } from '../../formatters';
 
 export class ImagesPanel implements SidePanel {
   readonly id = 'images';
@@ -32,6 +32,32 @@ export class ImagesPanel implements SidePanel {
           colorizeDetailKey(`Created:  ${img.created.toLocaleString()}`),
           colorizeDetailKey(`Dangling: ${colorizeBool(img.isDangling)}`),
         ].join('\n');
+      },
+    },
+    {
+      label: 'Layers',
+      render: (item, metrics) => {
+        const img = panelData<ImageInfo>(item);
+        const layers = metrics.imageLayers.get(img.id);
+        if (!layers) return 'Loading layers...';
+        if (layers.length === 0) return 'No layer history available.';
+        const total = layers.reduce((sum, l) => sum + l.size, 0);
+        const lines = [sectionHeader(`Image Layers (${layers.length} layers, ${formatBytes(total)} total)`), ''];
+        lines.push(`${'  #'.padEnd(5)} ${'SIZE'.padEnd(12)} COMMAND`);
+        for (let i = 0; i < layers.length; i++) {
+          const l = layers[i];
+          const num = String(i + 1).padStart(3);
+          const size = l.size > 0 ? formatBytes(l.size).padEnd(10) : '0 B'.padEnd(10);
+          const cmd = truncate(l.createdBy, 60);
+          lines.push(`  ${num}   ${size} ${cmd}`);
+        }
+        const largest = layers.reduce((max, l) => l.size > max.size ? l : max, layers[0]);
+        const largestIdx = layers.indexOf(largest) + 1;
+        if (largest.size > 0) {
+          lines.push('');
+          lines.push(`Largest: #${largestIdx} (${formatBytes(largest.size)}) — ${truncate(largest.createdBy, 40)}`);
+        }
+        return lines.join('\n');
       },
     },
   ];

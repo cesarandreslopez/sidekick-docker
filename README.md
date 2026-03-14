@@ -39,7 +39,9 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 - **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
 - **Log analytics** — severity counts, severity sparkline over time, and pattern clustering that groups similar logs into templates
 - **Vi keybindings** — navigate with `j`/`k`, jump with `g`/`G`, switch panels with `1`-`5`
-- **Sparkline charts** — CPU, memory, and log severity rendered as inline sparklines
+- **Sparkline charts** — CPU, memory, network I/O, block I/O, and log severity rendered as inline sparklines
+- **Filesystem inspector** — view all filesystem changes inside containers (added/changed/deleted files)
+- **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions
 - **Compose support** — detect projects from container labels, run `up`/`down`/`restart` per project
 - **Interactive exec** — drop into a running container shell without leaving the dashboard
 - **Filter & search** — `/` to filter any resource list by name

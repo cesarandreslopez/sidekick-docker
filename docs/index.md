@@ -40,6 +40,8 @@ A full-featured Docker management dashboard that runs in your terminal and in VS
 - **Full container lifecycle** — start, stop, restart, pause, unpause, remove, exec
 - **Container sorting** — sort by state, name, CPU, memory, network I/O, block I/O, or PIDs with reverse toggle
 - **Show all / running toggle** — filter container list to running-only with a single keypress
+- **Filesystem inspector** — view all filesystem changes inside containers (added/changed/deleted files)
+- **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions
 - **Network & block I/O sparklines** — rate-based sparklines for network and disk activity
 - **Vi keybindings** — `j`/`k` navigation, `g`/`G` jump, `1`-`5` panel switching
 - **Compose support** — automatic project detection, per-project actions

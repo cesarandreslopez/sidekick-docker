@@ -72,6 +72,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
       case 'selectItem':
         if (message.panelId === 'containers') {
           await this.service?.selectContainer(message.itemId);
+        } else if (message.panelId === 'images') {
+          await this.service?.selectContainer(null);
+          await this.service?.selectImage(message.itemId);
         } else {
           await this.service?.selectContainer(null);
         }
@@ -119,6 +122,12 @@ export class DockerDashboardProvider implements vscode.Disposable {
       },
       onEnvLoaded: (containerId, env) => {
         this._postMessage({ type: 'updateEnv', containerId, env });
+      },
+      onChangesLoaded: (containerId, changes) => {
+        this._postMessage({ type: 'updateChanges', containerId, changes });
+      },
+      onLayersLoaded: (imageId, layers) => {
+        this._postMessage({ type: 'updateLayers', imageId, layers });
       },
       onError: (message) => {
         this._postMessage({ type: 'toast', message, severity: 'error' });
@@ -1065,6 +1074,24 @@ export class DockerDashboardProvider implements vscode.Disposable {
     .sparkline-row.block-read .sparkline { color: var(--vscode-editorWarning-foreground, #cca700); }
     .sparkline-row.block-write .sparkline { color: var(--vscode-descriptionForeground); }
     .sparkline-row.severity { margin-top: 4px; }
+
+    /* ─── Filesystem changes ─────────────────────────────────────── */
+    .change-added { color: var(--vscode-testing-iconPassed, #3fb950); }
+    .change-changed { color: var(--vscode-editorWarning-foreground, #cca700); }
+    .change-deleted { color: var(--vscode-errorForeground, #f85149); }
+    .change-row { display: flex; gap: 8px; padding: 1px 4px; font-size: 12px; }
+    .change-row:hover { background: var(--vscode-list-hoverBackground); }
+    .change-kind { min-width: 16px; font-weight: 600; }
+    .change-path { flex: 1; word-break: break-all; }
+
+    /* ─── Image layers ───────────────────────────────────────────── */
+    .layer-row { display: flex; gap: 8px; padding: 2px 4px; font-size: 12px; }
+    .layer-row:hover { background: var(--vscode-list-hoverBackground); }
+    .layer-num { min-width: 24px; text-align: right; color: var(--vscode-descriptionForeground); }
+    .layer-size { min-width: 70px; text-align: right; font-variant-numeric: tabular-nums; }
+    .layer-size.zero { color: var(--vscode-descriptionForeground); opacity: 0.5; }
+    .layer-cmd { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .layer-summary { padding: 8px 4px; font-size: 12px; color: var(--vscode-descriptionForeground); }
   </style>
 </head>
 <body>

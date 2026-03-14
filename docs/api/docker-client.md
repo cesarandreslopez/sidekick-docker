@@ -26,6 +26,8 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 | `unpauseContainer` | `(id: string) => Promise<void>` | Unpause a paused container |
 | `removeContainer` | `(id: string, force?: boolean) => Promise<void>` | Remove a container |
 | `inspectContainer` | `(id: string) => Promise<ContainerInspectInfo>` | Get full container details |
+| `getContainerEnv` | `(id: string) => Promise<string[]>` | Get container environment variables |
+| `getContainerChanges` | `(id: string) => Promise<FilesystemChange[]>` | Get filesystem changes vs base image |
 | `streamLogs` | `(id: string, opts?: LogStreamOptions) => AsyncIterable<LogEntry>` | Stream container logs |
 | `streamStats` | `(id: string) => AsyncIterable<ContainerStats>` | Stream live container stats |
 
@@ -34,6 +36,7 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `listImages` | `(all?: boolean) => Promise<ImageInfo[]>` | List images |
+| `getImageHistory` | `(nameOrId: string) => Promise<ImageLayer[]>` | Get image layer history |
 | `removeImage` | `(id: string) => Promise<void>` | Remove an image |
 | `pruneImages` | `() => Promise<{ spaceReclaimed: number }>` | Remove dangling images |
 

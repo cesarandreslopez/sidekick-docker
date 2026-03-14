@@ -83,6 +83,13 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           scheduleRender();
         }).catch(e => console.debug('getContainerEnv failed:', e));
       }
+      // Fetch filesystem changes if not cached
+      if (itemId && !state.getContainerChanges(itemId)) {
+        client.getContainerChanges(itemId).then(changes => {
+          state.setContainerChanges(itemId, changes);
+          scheduleRender();
+        }).catch(e => console.debug('getContainerChanges failed:', e));
+      }
     } else if (panelId === 'services' && itemId) {
       logManager.select(null);
       statsManager.select(null);
@@ -92,6 +99,17 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
         composeLogManager.selectCompose(parts.slice(1).join(':'), null);
       } else if (parts[0] === 'service') {
         composeLogManager.selectCompose(parts[1], parts.slice(2).join(':'));
+      }
+    } else if (panelId === 'images') {
+      logManager.select(null);
+      statsManager.select(null);
+      composeLogManager.selectCompose(null, null);
+      // Fetch image layers if not cached
+      if (itemId && !state.getImageLayers(itemId)) {
+        client.getImageHistory(itemId).then(layers => {
+          state.setImageLayers(itemId, layers);
+          scheduleRender();
+        }).catch(e => console.debug('getImageHistory failed:', e));
       }
     } else {
       logManager.select(null);
