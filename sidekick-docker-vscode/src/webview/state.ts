@@ -3,7 +3,7 @@ import type {
   SerializedLogEntry,
   SerializedContainerStats,
 } from '../types/messages';
-import type { SeverityCounts, FilterMode } from '../types/log';
+import type { SeverityCounts, FilterMode } from 'sidekick-docker-shared/log';
 
 export interface WebviewState {
   activePanelIndex: number;

@@ -117,7 +117,7 @@ const ALLOWED_DEPS = {
   'vscode/log':       ['vscode/types'],
   'vscode/services':  ['shared', 'vscode/types'],
   'vscode/providers': ['vscode/services', 'vscode/types', 'vscode/utils', 'shared'],
-  'vscode/webview':   ['vscode/types', 'vscode/log'],
+  'vscode/webview':   ['vscode/types', 'shared'],
   'vscode/extension': ['vscode/providers', 'vscode/services', 'shared'],
 };
 

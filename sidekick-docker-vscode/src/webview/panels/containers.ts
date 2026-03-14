@@ -2,9 +2,8 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline } from '../formatters';
-import { filterLine } from '../../log/LogFilter';
-import { LogTemplateEngine } from '../../log/LogTemplateEngine';
-import type { SeverityCounts } from '../../types/log';
+import { filterLine, LogTemplateEngine } from 'sidekick-docker-shared/log';
+import type { SeverityCounts } from 'sidekick-docker-shared/log';
 
 
 function findContainer(id: string, snapshot: DashboardStateSnapshot): SerializedContainerInfo | undefined {

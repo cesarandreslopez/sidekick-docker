@@ -14,8 +14,8 @@ import { servicesPanel } from './panels/services';
 import { imagesPanel } from './panels/images';
 import { volumesPanel } from './panels/volumes';
 import { networksPanel } from './panels/networks';
-import { LogAnalytics } from '../log/LogAnalytics';
-import { filterLine } from '../log/LogFilter';
+import { LogAnalytics } from 'sidekick-docker-shared/log';
+import { filterLine } from 'sidekick-docker-shared/log';
 
 const vscode = acquireVsCodeApi();
 const TOAST_DURATIONS = { error: 4000, warning: 3000, info: 2000 } as const;

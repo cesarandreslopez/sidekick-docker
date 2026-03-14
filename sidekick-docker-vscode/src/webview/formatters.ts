@@ -1,6 +1,6 @@
 import type { SerializedLogEntry } from '../types/messages';
-import type { LogTokenType, FilterMatch } from '../types/log';
-import { tokenizeLogLine } from '../log/LogTokenizer';
+import type { LogTokenType, FilterMatch } from 'sidekick-docker-shared/log';
+import { tokenizeLogLine } from 'sidekick-docker-shared/log';
 
 // Pure formatters (duplicated from shared to avoid Node.js deps in browser bundle)
 
