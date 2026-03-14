@@ -139,15 +139,6 @@ describe('Events module composition', () => {
     expect(barrel.INITIAL_RECONNECT_DELAY).toBe(events.INITIAL_RECONNECT_DELAY);
   });
 
-  it('deprecated reconnect.ts shim re-exports from events/', async () => {
-    const shim = await import('../reconnect');
-    const events = await import('../events/index');
-
-    expect(shim.ReconnectScheduler).toBe(events.ReconnectScheduler);
-    expect(shim.INITIAL_RECONNECT_DELAY).toBe(events.INITIAL_RECONNECT_DELAY);
-    expect(shim.MAX_RECONNECT_DELAY).toBe(events.MAX_RECONNECT_DELAY);
-    expect(shim.MAX_RECONNECT_ATTEMPTS).toBe(events.MAX_RECONNECT_ATTEMPTS);
-  });
 });
 
 describe('Cross-module type flow', () => {
