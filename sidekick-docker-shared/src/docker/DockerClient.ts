@@ -18,6 +18,10 @@ import {
   PortProtocolSchema,
   VolumeItemRawSchema,
   NetworkContainerRefRawSchema,
+  ImageItemRawSchema,
+  PruneImagesResponseSchema,
+  PruneVolumesResponseSchema,
+  PruneNetworksResponseSchema,
 } from './schemas';
 import type { DockerStatsRaw } from './schemas';
 
@@ -280,13 +284,17 @@ export class DockerClient {
 
   async listImages(all = false): Promise<ImageInfo[]> {
     const images = await this.docker.listImages({ all });
-    return images.map((img): ImageInfo => ({
-      id: img.Id.replace('sha256:', '').substring(0, 12),
-      repoTags: img.RepoTags || ['<none>:<none>'],
-      size: img.Size,
-      created: new Date(img.Created * 1000),
-      isDangling: !img.RepoTags || img.RepoTags[0] === '<none>:<none>',
-    }));
+    return images.map((img): ImageInfo => {
+      const validated = ImageItemRawSchema.parse(img);
+      const repoTags = validated.RepoTags ?? ['<none>:<none>'];
+      return {
+        id: validated.Id.replace('sha256:', '').substring(0, 12),
+        repoTags,
+        size: validated.Size,
+        created: new Date(validated.Created * 1000),
+        isDangling: repoTags[0] === '<none>:<none>',
+      };
+    });
   }
 
   async removeImage(id: string): Promise<void> {
@@ -295,7 +303,8 @@ export class DockerClient {
 
   async pruneImages(): Promise<{ spaceReclaimed: number }> {
     const result = await this.docker.pruneImages();
-    return { spaceReclaimed: result.SpaceReclaimed ?? 0 };
+    const validated = PruneImagesResponseSchema.parse(result);
+    return { spaceReclaimed: validated.SpaceReclaimed };
   }
 
   async listVolumes(): Promise<VolumeInfo[]> {
@@ -328,7 +337,8 @@ export class DockerClient {
 
   async pruneVolumes(): Promise<{ spaceReclaimed: number }> {
     const result = await this.docker.pruneVolumes();
-    return { spaceReclaimed: result.SpaceReclaimed ?? 0 };
+    const validated = PruneVolumesResponseSchema.parse(result);
+    return { spaceReclaimed: validated.SpaceReclaimed };
   }
 
   async listNetworks(): Promise<NetworkInfo[]> {
@@ -364,7 +374,8 @@ export class DockerClient {
 
   async pruneNetworks(): Promise<{ networksDeleted: string[] }> {
     const result = await this.docker.pruneNetworks();
-    return { networksDeleted: result.NetworksDeleted || [] };
+    const validated = PruneNetworksResponseSchema.parse(result);
+    return { networksDeleted: validated.NetworksDeleted ?? [] };
   }
 
   async *streamEvents(filters?: Record<string, string[]>, signal?: AbortSignal): AsyncIterable<DockerEvent> {

@@ -95,3 +95,27 @@ export const NetworkContainerRefRawSchema = z.object({
   Name: z.string().default(''),
 });
 export type NetworkContainerRefRaw = z.infer<typeof NetworkContainerRefRawSchema>;
+
+/** Validates an image item from the Docker API (Dockerode listImages response). */
+export const ImageItemRawSchema = z.object({
+  Id: z.string(),
+  RepoTags: z.array(z.string()).nullable().optional(),
+  Size: z.number().default(0),
+  Created: z.number().default(0),
+});
+export type ImageItemRaw = z.infer<typeof ImageItemRawSchema>;
+
+/** Validates a prune images response from the Docker API. */
+export const PruneImagesResponseSchema = z.object({
+  SpaceReclaimed: z.number().default(0),
+});
+
+/** Validates a prune volumes response from the Docker API. */
+export const PruneVolumesResponseSchema = z.object({
+  SpaceReclaimed: z.number().default(0),
+});
+
+/** Validates a prune networks response from the Docker API. */
+export const PruneNetworksResponseSchema = z.object({
+  NetworksDeleted: z.array(z.string()).nullable().default([]),
+});
