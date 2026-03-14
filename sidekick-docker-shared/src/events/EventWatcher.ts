@@ -1,6 +1,6 @@
 import type { DockerClient } from '../docker/DockerClient';
 import type { DockerEvent } from '../types/events';
-import { INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY } from '../reconnect';
+import { INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY } from './reconnect';
 
 export interface EventWatcherCallbacks {
   onEvent: (event: DockerEvent) => void;
