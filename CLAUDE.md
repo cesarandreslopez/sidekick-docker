@@ -84,39 +84,68 @@ bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 
 - **esbuild plugins** (CLI): Stubs `ssh2`, `cpu-features`, `react-devtools-core`. Externalizes `node-pty`. Injects `__CLI_VERSION__`.
 - **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts`.
 
-## Refactoring Status
+## Module Architecture
 
-Modular architecture refactoring — Phase 3 (Extract Modules) complete. See `specs/refactor/` for plans and `specs/*/progress.md` for per-module status.
+The shared package is organized into 7 sub-modules, each with a barrel `index.ts` defining its public API. Import DAG is enforced by `scripts/check-imports.mjs`.
 
-### Completed Extractions
+### Shared Sub-Modules
 
-- **reconnect.ts** moved to `events/reconnect.ts` (deprecated re-export shim at old location)
-- **CLI phrases.ts + branding.ts** deleted (740 lines, were dead code — already importing from shared)
-- **Sub-path exports** added to shared package.json: `./log`, `./formatters` (with `typesVersions` for TS resolution)
-- **VSCode log/ fork** consolidated — 4 forked files + types/log.ts deleted (~290 lines), now import from `sidekick-docker-shared/log`
-- **VSCode formatters** deduplicated — `formatBytes`, `formatCpu`, `formatMemory`, `truncate` re-exported from shared
+| Module | Path | Deps | Sub-path Export |
+|--------|------|------|-----------------|
+| types | `shared/src/types/` | (leaf) | — |
+| docker | `shared/src/docker/` | types | — |
+| compose | `shared/src/compose/` | types | — |
+| log | `shared/src/log/` | (leaf) | `sidekick-docker-shared/log` |
+| events | `shared/src/events/` | docker, types | — |
+| stats | `shared/src/stats/` | types | — |
+| core | `shared/src/` (root) | types | `sidekick-docker-shared/formatters` |
 
-### Module Map
+### Dependency DAG
 
-| Module | Package | Path | Deps | Status |
-|--------|---------|------|------|--------|
-| types | shared | `shared/src/types/` | (leaf) | Clean |
-| docker | shared | `shared/src/docker/` | types | Clean |
-| compose | shared | `shared/src/compose/` | types | Clean |
-| log | shared | `shared/src/log/` | (leaf) | Clean + sub-path export |
-| events | shared | `shared/src/events/` | docker, types | Extracted (reconnect.ts moved in) |
-| stats | shared | `shared/src/stats/` | types | Clean |
-| core | shared | `shared/src/` (root files) | types | Clean + sub-path export |
-| cli | cli | `cli/src/` | shared | Deduped |
-| vscode | vscode | `vscode/src/` | shared | Consolidated |
+```
+                    ┌─────────┐
+                    │  types  │  (Layer 0 — leaf)
+                    └────┬────┘
+          ┌──────────┬───┴───┬──────────┬──────────┐
+          ▼          ▼       ▼          ▼          ▼
+     ┌────────┐ ┌────────┐ ┌─────┐ ┌────────────┐ │
+     │ docker │ │compose │ │stats│ │ formatters │ │
+     └───┬────┘ └────────┘ └─────┘ └────────────┘ │
+         ▼                                         │
+     ┌────────┐                                    │
+     │ events │                                    │
+     └────────┘                                    │
+                                                   │
+     ┌─────┐  (leaf — no internal deps)            │
+     │ log │                                       │
+     └─────┘                                       │
+     ┌──────────────────┐  (leaf)                  │
+     │ branding/phrases │                          │
+     └──────────────────┘                          │
+                    ┌──────────────┐               │
+                    │ shared/index │◄──────────────┘
+                    └──────┬───────┘
+                ┌──────────┴──────────┐
+                ▼                     ▼
+          ┌──────────┐         ┌──────────┐
+          │   cli    │         │  vscode  │
+          └──────────┘         └──────────┘
+```
 
-### Refactoring Rules
+### Quality Gates
 
-- Every PR must be under ~300 lines changed (excluding tests)
-- `npx tsc --noEmit` must pass after every commit (run per-package)
-- `npm test` must pass after every commit
-- `node scripts/check-imports.mjs` must pass (import DAG enforcement)
-- `npx madge --circular --extensions ts,tsx` must find no cycles
-- No new `any` types
-- Use the re-export pattern in `specs/refactor/re-export-template.md` when moving files
-- Tests accompany every extraction
+Run these checks before every commit:
+
+```bash
+npx tsc --noEmit                                        # per-package type check
+npm test                                                # vitest (shared + cli)
+node scripts/check-imports.mjs                          # import DAG enforcement
+npx madge --circular --extensions ts,tsx src/            # no circular deps
+```
+
+### Known Technical Debt
+
+- God files: `DockerDashboardProvider.ts` (959 LOC), `webview/dashboard.ts` (776 LOC), `Dashboard.tsx` (533 LOC)
+- `noUncheckedIndexedAccess` not yet enabled (50+ errors to fix)
+- VSCode package has zero test coverage
+- See `specs/_archive/` for refactoring history and `specs/*/design.md` for module design docs
