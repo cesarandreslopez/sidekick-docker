@@ -1,24 +1,11 @@
 import type { SerializedLogEntry } from '../types/messages';
 import type { LogTokenType, FilterMatch } from 'sidekick-docker-shared/log';
 import { tokenizeLogLine } from 'sidekick-docker-shared/log';
+import { formatBytes, formatCpu, formatMemory, truncate } from 'sidekick-docker-shared/formatters';
 
-// Pure formatters (duplicated from shared to avoid Node.js deps in browser bundle)
+export { formatBytes, formatCpu, formatMemory, truncate };
 
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(1024));
-  const val = bytes / Math.pow(1024, i);
-  return `${val.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
-}
-
-export function formatCpu(percent: number): string {
-  return `${percent.toFixed(1)}%`;
-}
-
-export function formatMemory(usage: number, limit: number): string {
-  return `${formatBytes(usage)} / ${formatBytes(limit)}`;
-}
+// VSCode-specific formatters (type signatures or return values differ from shared)
 
 export function formatPorts(ports: { hostPort: number; containerPort: number; protocol: string }[]): string {
   return ports
@@ -53,11 +40,6 @@ export function stateColor(state: string): string {
     case 'removing': return 'var(--vscode-editorWarning-foreground, #cca700)';
     default: return 'var(--vscode-foreground)';
   }
-}
-
-export function truncate(str: string, maxLen: number): string {
-  if (str.length <= maxLen) return str;
-  return str.substring(0, maxLen - 1) + '\u2026';
 }
 
 export function escapeHtml(s: string): string {
