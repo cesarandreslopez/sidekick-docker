@@ -83,3 +83,40 @@ bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 
 - **Compose detection**: Primary from container labels (`com.docker.compose.*`), secondary from `docker compose config`. Merged to show running + planned services.
 - **esbuild plugins** (CLI): Stubs `ssh2`, `cpu-features`, `react-devtools-core`. Externalizes `node-pty`. Injects `__CLI_VERSION__`.
 - **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts`.
+
+## Refactoring Status
+
+Modular architecture refactoring — Phase 3 (Extract Modules) complete. See `specs/refactor/` for plans and `specs/*/progress.md` for per-module status.
+
+### Completed Extractions
+
+- **reconnect.ts** moved to `events/reconnect.ts` (deprecated re-export shim at old location)
+- **CLI phrases.ts + branding.ts** deleted (740 lines, were dead code — already importing from shared)
+- **Sub-path exports** added to shared package.json: `./log`, `./formatters` (with `typesVersions` for TS resolution)
+- **VSCode log/ fork** consolidated — 4 forked files + types/log.ts deleted (~290 lines), now import from `sidekick-docker-shared/log`
+- **VSCode formatters** deduplicated — `formatBytes`, `formatCpu`, `formatMemory`, `truncate` re-exported from shared
+
+### Module Map
+
+| Module | Package | Path | Deps | Status |
+|--------|---------|------|------|--------|
+| types | shared | `shared/src/types/` | (leaf) | Clean |
+| docker | shared | `shared/src/docker/` | types | Clean |
+| compose | shared | `shared/src/compose/` | types | Clean |
+| log | shared | `shared/src/log/` | (leaf) | Clean + sub-path export |
+| events | shared | `shared/src/events/` | docker, types | Extracted (reconnect.ts moved in) |
+| stats | shared | `shared/src/stats/` | types | Clean |
+| core | shared | `shared/src/` (root files) | types | Clean + sub-path export |
+| cli | cli | `cli/src/` | shared | Deduped |
+| vscode | vscode | `vscode/src/` | shared | Consolidated |
+
+### Refactoring Rules
+
+- Every PR must be under ~300 lines changed (excluding tests)
+- `npx tsc --noEmit` must pass after every commit (run per-package)
+- `npm test` must pass after every commit
+- `node scripts/check-imports.mjs` must pass (import DAG enforcement)
+- `npx madge --circular --extensions ts,tsx` must find no cycles
+- No new `any` types
+- Use the re-export pattern in `specs/refactor/re-export-template.md` when moving files
+- Tests accompany every extraction
