@@ -29,6 +29,17 @@
   "icon": "images/icon-128.png",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": "./dist/index.js",
+    "./log": "./dist/log/index.js",
+    "./formatters": "./dist/formatters.js"
+  },
+  "typesVersions": {
+    "*": {
+      "log": ["dist/log/index.d.ts"],
+      "formatters": ["dist/formatters.d.ts"]
+    }
+  },
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
