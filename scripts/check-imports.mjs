@@ -52,7 +52,6 @@ function classifyFile(relPath) {
     if (rest.startsWith('providers/')) return 'vscode/providers';
     if (rest.startsWith('services/')) return 'vscode/services';
     if (rest.startsWith('types/')) return 'vscode/types';
-    if (rest.startsWith('log/')) return 'vscode/log';
     if (rest.startsWith('utils/')) return 'vscode/utils';
     if (rest.startsWith('webview/')) return 'vscode/webview';
     return null;
@@ -114,7 +113,6 @@ const ALLOWED_DEPS = {
   // === VSCode package ===
   'vscode/utils':     [],
   'vscode/types':     [],
-  'vscode/log':       ['vscode/types'],
   'vscode/services':  ['shared', 'vscode/types'],
   'vscode/providers': ['vscode/services', 'vscode/types', 'vscode/utils', 'shared'],
   'vscode/webview':   ['vscode/types', 'shared'],
