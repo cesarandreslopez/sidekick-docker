@@ -78,10 +78,10 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       composeLogManager.select(null, null);
       // Fetch env vars if not cached
       if (itemId && !state.getInspectedEnv(itemId)) {
-        client.inspectContainer(itemId).then(info => {
-          state.setInspectedEnv(itemId, info.Config.Env || []);
+        client.getContainerEnv(itemId).then(env => {
+          state.setInspectedEnv(itemId, env);
           scheduleRender();
-        }).catch(e => console.debug('inspectContainer failed:', e));
+        }).catch(e => console.debug('getContainerEnv failed:', e));
       }
     } else if (panelId === 'services' && itemId) {
       logManager.select(null);

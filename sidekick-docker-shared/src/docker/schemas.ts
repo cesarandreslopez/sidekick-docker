@@ -119,3 +119,10 @@ export const PruneVolumesResponseSchema = z.object({
 export const PruneNetworksResponseSchema = z.object({
   NetworksDeleted: z.array(z.string()).nullable().default([]),
 });
+
+/** Validates the Config.Env field from a Docker inspect response. */
+export const ContainerInspectEnvSchema = z.object({
+  Config: z.object({
+    Env: z.array(z.string()).nullable().default([]),
+  }),
+});

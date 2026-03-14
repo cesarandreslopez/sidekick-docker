@@ -227,8 +227,7 @@ export class DockerService {
     // Fetch env vars
     if (!this.inspectedEnv.has(containerId)) {
       try {
-        const info = await this.client.inspectContainer(containerId);
-        const env = info.Config.Env || [];
+        const env = await this.client.getContainerEnv(containerId);
         this.inspectedEnv.set(containerId, env);
         if (!this.disposed) {
           this.callbacks.onEnvLoaded(containerId, env);

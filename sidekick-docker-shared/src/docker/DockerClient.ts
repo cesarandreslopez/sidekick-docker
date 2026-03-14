@@ -22,6 +22,7 @@ import {
   PruneImagesResponseSchema,
   PruneVolumesResponseSchema,
   PruneNetworksResponseSchema,
+  ContainerInspectEnvSchema,
 } from './schemas';
 import type { DockerStatsRaw } from './schemas';
 
@@ -109,6 +110,12 @@ export class DockerClient {
 
   async inspectContainer(id: string): Promise<Dockerode.ContainerInspectInfo> {
     return this.docker.getContainer(id).inspect();
+  }
+
+  async getContainerEnv(id: string): Promise<string[]> {
+    const info = await this.docker.getContainer(id).inspect();
+    const validated = ContainerInspectEnvSchema.parse(info);
+    return validated.Config.Env ?? [];
   }
 
   async *streamLogs(id: string, opts: LogStreamOptions = {}): AsyncIterable<LogEntry> {

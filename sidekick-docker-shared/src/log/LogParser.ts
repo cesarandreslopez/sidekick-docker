@@ -78,10 +78,10 @@ function parseLogfmt(line: string): ParsedLogLine | null {
   const obj: Record<string, string> = {};
   for (const [k, v] of pairs) obj[k] = v;
 
-  const levelValue = findField(obj as Record<string, unknown>, LEVEL_KEYS) as string | null;
+  const levelValue = findField(obj, LEVEL_KEYS);
   const level = levelValue ? normalizeLevel(levelValue) : null;
-  const message = findField(obj as Record<string, unknown>, MESSAGE_KEYS) as string | null ?? '';
-  const timestamp = findField(obj as Record<string, unknown>, TIMESTAMP_KEYS) as string | null;
+  const message = findField(obj, MESSAGE_KEYS) ?? '';
+  const timestamp = findField(obj, TIMESTAMP_KEYS);
 
   const extracted = new Set([...LEVEL_KEYS, ...MESSAGE_KEYS, ...TIMESTAMP_KEYS]);
   const fields: Record<string, string> = {};
