@@ -5,6 +5,22 @@ import type {
 } from '../types/messages';
 import type { SeverityCounts, FilterMode } from 'sidekick-docker-shared/log';
 
+export type SortField = 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids';
+export type LayoutMode = 'normal' | 'wide' | 'expanded';
+export type ToastSeverity = 'error' | 'warning' | 'info' | 'success';
+
+export interface ContainerStatsEntry {
+  stats: SerializedContainerStats | null;
+  loading: boolean;
+  cpuHistory?: number[];
+  memoryHistory?: number[];
+  networkRxRateHistory?: number[];
+  networkTxRateHistory?: number[];
+  blockReadRateHistory?: number[];
+  blockWriteRateHistory?: number[];
+  logSeveritySeries?: { severity: string; total: number }[];
+}
+
 export interface WebviewState {
   activePanelIndex: number;
   selectedItemId: string | null;
@@ -13,7 +29,7 @@ export interface WebviewState {
 
   snapshot: DashboardStateSnapshot | null;
   logs: Map<string, SerializedLogEntry[]>;
-  stats: Map<string, { stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[] }>;
+  stats: Map<string, ContainerStatsEntry>;
   envVars: Map<string, string[]>;
   composeLogs: Map<string, SerializedLogEntry[]>;
 
@@ -23,7 +39,20 @@ export interface WebviewState {
   logFilterMode: FilterMode;
 
   phrase: string;
-  toasts: { id: number; message: string; severity: 'error' | 'warning' | 'info'; timer: number }[];
+  toasts: { id: number; message: string; severity: ToastSeverity; timer: number }[];
+
+  // Focus & navigation
+  focusTarget: 'side' | 'detail';
+  showAllContainers: boolean;
+
+  // Sort
+  sortField: SortField;
+  sortReversed: boolean;
+  sortOverlayVisible: boolean;
+  sortMenuIndex: number;
+
+  // Layout
+  layoutMode: LayoutMode;
 
   // Overlay state
   confirmVisible: boolean;
@@ -32,6 +61,8 @@ export interface WebviewState {
   filterVisible: boolean;
   contextMenuVisible: boolean;
   contextMenuIndex: number;
+  helpOverlayVisible: boolean;
+  versionOverlayVisible: boolean;
 }
 
 export function createInitialState(): WebviewState {
@@ -50,11 +81,20 @@ export function createInitialState(): WebviewState {
     logFilterMode: 'exact',
     phrase: '',
     toasts: [],
+    focusTarget: 'side',
+    showAllContainers: true,
+    sortField: 'state',
+    sortReversed: false,
+    sortOverlayVisible: false,
+    sortMenuIndex: 0,
+    layoutMode: 'normal',
     confirmVisible: false,
     confirmMessage: '',
     confirmCallback: null,
     filterVisible: false,
     contextMenuVisible: false,
     contextMenuIndex: 0,
+    helpOverlayVisible: false,
+    versionOverlayVisible: false,
   };
 }

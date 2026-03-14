@@ -7,6 +7,7 @@ import {
   StatsCollector,
   MAX_LOG_LINES,
 } from 'sidekick-docker-shared';
+import { LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/log';
 import type {
   ContainerInfo,
   ImageInfo,
@@ -29,10 +30,23 @@ import type {
   SerializedContainerStats,
 } from '../types/messages';
 
+export interface StatsChangeData {
+  containerId: string;
+  stats: SerializedContainerStats | null;
+  loading: boolean;
+  cpuHistory?: number[];
+  memoryHistory?: number[];
+  networkRxRateHistory?: number[];
+  networkTxRateHistory?: number[];
+  blockReadRateHistory?: number[];
+  blockWriteRateHistory?: number[];
+  logSeveritySeries?: { severity: string; total: number }[];
+}
+
 export interface DockerServiceCallbacks {
   onStateChange: (snapshot: DashboardStateSnapshot) => void;
   onLogsChange: (containerId: string, entries: SerializedLogEntry[]) => void;
-  onStatsChange: (containerId: string, stats: SerializedContainerStats | null, loading: boolean, cpuHistory?: number[], memoryHistory?: number[]) => void;
+  onStatsChange: (data: StatsChangeData) => void;
   onComposeLogs: (projectName: string, serviceName: string | null, entries: SerializedLogEntry[]) => void;
   onEnvLoaded: (containerId: string, env: string[]) => void;
   onError: (message: string) => void;
@@ -60,6 +74,7 @@ export class DockerService {
   private logContainerId: string | null = null;
   private logAborted = false;
   private logs: LogEntry[] = [];
+  private logSeverityTimeSeries = new Map<string, LogSeverityTimeSeries>();
 
   // Stats streaming
   private statsContainerId: string | null = null;
@@ -219,7 +234,7 @@ export class DockerService {
     this.statsAborted = false;
     this.statsLoadingInterval = setInterval(() => {
       if (!this.disposed) {
-        this.callbacks.onStatsChange(containerId, null, true);
+        this.callbacks.onStatsChange({ containerId, stats: null, loading: true });
       }
     }, 200);
     this.streamStats(containerId);
@@ -239,11 +254,22 @@ export class DockerService {
   }
 
   private async streamLogs(containerId: string): Promise<void> {
+    // Ensure severity tracking exists for this container
+    if (!this.logSeverityTimeSeries.has(containerId)) {
+      this.logSeverityTimeSeries.set(containerId, new LogSeverityTimeSeries());
+    }
+    const timeSeries = this.logSeverityTimeSeries.get(containerId)!;
+
     try {
       for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 })) {
         if (this.logAborted || this.logContainerId !== containerId) break;
         this.logs.push(entry);
         if (this.logs.length > MAX_LOG_LINES) this.logs.shift();
+
+        // Track severity for time-series sparkline
+        const severity = detectSeverity(entry.message);
+        timeSeries.push(severity);
+
         if (!this.disposed) {
           this.callbacks.onLogsChange(containerId, this.logs.map(serializeLogEntry));
         }
@@ -260,7 +286,23 @@ export class DockerService {
         if (!this.disposed) {
           const cpuHistory = this.statsCollector.getCpuSeries(containerId);
           const memoryHistory = this.statsCollector.getMemorySeries(containerId);
-          this.callbacks.onStatsChange(containerId, serializeStats(stats), false, cpuHistory, memoryHistory);
+          const networkRxRateHistory = this.statsCollector.getNetworkRxRateSeries(containerId);
+          const networkTxRateHistory = this.statsCollector.getNetworkTxRateSeries(containerId);
+          const blockReadRateHistory = this.statsCollector.getBlockReadRateSeries(containerId);
+          const blockWriteRateHistory = this.statsCollector.getBlockWriteRateSeries(containerId);
+          const logSeveritySeries = this.logSeverityTimeSeries.get(containerId)?.getDominantSeries();
+          this.callbacks.onStatsChange({
+            containerId,
+            stats: serializeStats(stats),
+            loading: false,
+            cpuHistory,
+            memoryHistory,
+            networkRxRateHistory,
+            networkTxRateHistory,
+            blockReadRateHistory,
+            blockWriteRateHistory,
+            logSeveritySeries,
+          });
         }
       }
     } catch { /* stream ended */ }

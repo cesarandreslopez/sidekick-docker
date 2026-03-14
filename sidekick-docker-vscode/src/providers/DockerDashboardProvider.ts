@@ -111,8 +111,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
       onLogsChange: (containerId, entries) => {
         this._postMessage({ type: 'updateLogs', containerId, entries });
       },
-      onStatsChange: (containerId, stats, loading, cpuHistory, memoryHistory) => {
-        this._postMessage({ type: 'updateStats', containerId, stats, loading, cpuHistory, memoryHistory });
+      onStatsChange: (data) => {
+        this._postMessage({ type: 'updateStats', ...data });
       },
       onComposeLogs: (projectName, serviceName, entries) => {
         this._postMessage({ type: 'updateComposeLogs', projectName, serviceName, entries });
@@ -152,6 +152,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
   private async _handleAction(actionType: string, itemId: string, panelId: string): Promise<void> {
     if (!this.service) return;
+
+    // In-progress feedback
+    this._postMessage({ type: 'toast', message: `${actionType}\u2026`, severity: 'info' });
 
     try {
       switch (panelId) {
@@ -212,7 +215,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
           break;
       }
 
-      this._postMessage({ type: 'toast', message: `${actionType} completed`, severity: 'info' });
+      this._postMessage({ type: 'toast', message: actionType, severity: 'success' });
     } catch (err: unknown) {
       this._postMessage({ type: 'toast', message: `${actionType} failed: ${errorMessage(err)}`, severity: 'error' });
     }
@@ -904,6 +907,164 @@ export class DockerDashboardProvider implements vscode.Disposable {
       margin-left: 16px;
       font-size: 11px;
     }
+
+    /* ─── Success toast ─────────────────────────────────────────── */
+    .toast.success { border-left: 3px solid var(--vscode-testing-iconPassed, #3fb950); }
+
+    /* ─── Focus indicators ──────────────────────────────────────── */
+    #side-list.focused {
+      border-right-color: var(--vscode-focusBorder, #2B4C7E);
+    }
+    #detail-pane.focused {
+      box-shadow: inset 0 0 0 1px var(--vscode-focusBorder, #2B4C7E);
+    }
+
+    /* ─── Layout modes ──────────────────────────────────────────── */
+    #main-area { display: flex; flex-grow: 1; overflow: hidden; }
+    #main-area.layout-normal #side-list { width: 250px; min-width: 250px; }
+    #main-area.layout-wide #side-list { width: 340px; min-width: 340px; }
+    #main-area.layout-expanded #side-list { display: none; }
+
+    /* ─── Overlay panels (sort, help, version) ──────────────────── */
+    .overlay-panel {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      backdrop-filter: blur(2px);
+      z-index: 96;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      visibility: hidden;
+      opacity: 0;
+      transition: opacity 0.15s ease, visibility 0.15s ease;
+    }
+    .overlay-panel.visible { visibility: visible; opacity: 1; }
+    .overlay-panel .overlay-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--vscode-foreground);
+      margin-bottom: 8px;
+    }
+    .overlay-panel .overlay-section {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--vscode-editorWarning-foreground, #cca700);
+      margin-top: 12px;
+      margin-bottom: 4px;
+      border-bottom: 1px solid var(--vscode-panel-border);
+      padding-bottom: 2px;
+    }
+    .overlay-panel .overlay-hint {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      margin-top: 12px;
+    }
+
+    /* ─── Sort overlay items ────────────────────────────────────── */
+    .sort-item {
+      padding: 3px 20px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 3px;
+    }
+    .sort-item.selected {
+      background: var(--vscode-list-activeSelectionBackground);
+      color: var(--vscode-list-activeSelectionForeground);
+    }
+    .sort-item.current {
+      color: var(--vscode-editorWarning-foreground, #cca700);
+    }
+
+    /* ─── Help overlay ──────────────────────────────────────────── */
+    .help-row {
+      display: flex;
+      gap: 12px;
+      padding: 2px 0;
+      font-size: 12px;
+    }
+    .help-key {
+      background: var(--vscode-badge-background, #2B4C7E);
+      color: var(--vscode-badge-foreground, #fff);
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      min-width: 40px;
+      text-align: center;
+      font-family: var(--vscode-editor-font-family, monospace);
+    }
+    .help-key.destructive {
+      background: var(--vscode-errorForeground, #f85149);
+    }
+    .help-label {
+      color: var(--vscode-descriptionForeground);
+    }
+    .help-label.destructive {
+      color: var(--vscode-errorForeground, #f85149);
+    }
+
+    /* ─── Version overlay ───────────────────────────────────────── */
+    .version-tagline {
+      font-size: 13px;
+      color: var(--vscode-editorInfo-foreground, #2B4C7E);
+      font-weight: 600;
+    }
+    .version-divider {
+      width: 200px;
+      height: 1px;
+      background: var(--vscode-panel-border);
+      margin: 8px 0;
+    }
+    .version-phrase {
+      font-style: italic;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+    }
+
+    /* ─── Scroll indicators ─────────────────────────────────────── */
+    #scroll-indicators {
+      position: absolute;
+      right: 20px;
+      top: calc(var(--tab-height) + var(--detail-tab-height) + 4px);
+      z-index: 50;
+      font-size: 10px;
+      color: var(--vscode-descriptionForeground);
+      pointer-events: none;
+      display: flex;
+      gap: 8px;
+    }
+    .scroll-up, .scroll-down {
+      background: var(--vscode-editor-background);
+      padding: 1px 4px;
+      border-radius: 3px;
+      border: 1px solid var(--vscode-panel-border);
+      opacity: 0.8;
+    }
+
+    /* ─── Status bar indicators ─────────────────────────────────── */
+    #status-bar .status-indicator {
+      font-size: 10px;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: rgba(255,255,255,0.1);
+      text-transform: capitalize;
+    }
+
+    /* ─── Sparkline labels ──────────────────────────────────────── */
+    .sparkline-label {
+      font-size: 9px;
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.7;
+      margin: 0 2px;
+    }
+
+    /* ─── Rate sparkline rows ───────────────────────────────────── */
+    .sparkline-row.net-rx .sparkline { color: var(--vscode-testing-iconPassed, #3fb950); }
+    .sparkline-row.net-tx .sparkline { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
+    .sparkline-row.block-read .sparkline { color: var(--vscode-editorWarning-foreground, #cca700); }
+    .sparkline-row.block-write .sparkline { color: var(--vscode-descriptionForeground); }
+    .sparkline-row.severity { margin-top: 4px; }
   </style>
 </head>
 <body>
@@ -935,6 +1096,10 @@ export class DockerDashboardProvider implements vscode.Disposable {
     <input type="text" id="filter-input" placeholder="Type to filter..." />
   </div>
   <div id="context-menu"></div>
+  <div id="sort-overlay" class="overlay-panel"></div>
+  <div id="help-overlay" class="overlay-panel"></div>
+  <div id="version-overlay" class="overlay-panel"></div>
+  <div id="scroll-indicators"></div>
   <div id="toast-container"></div>
 
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>

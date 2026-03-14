@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline } from '../formatters';
+import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline, renderSeveritySparkline } from '../formatters';
 import { filterLine, LogTemplateEngine } from 'sidekick-docker-shared/log';
 import type { SeverityCounts } from 'sidekick-docker-shared/log';
 
@@ -97,6 +97,23 @@ export const containersPanel: PanelDefinition = {
         const memSparkline = statsData.memoryHistory && statsData.memoryHistory.length > 1
           ? `<div class="sparkline-row memory">${renderSparkline(statsData.memoryHistory)}</div>` : '';
 
+        // Rate sparklines for Network and Block I/O
+        const netRxSparkline = statsData.networkRxRateHistory && statsData.networkRxRateHistory.length > 1
+          ? `<div class="sparkline-row net-rx">${renderSparkline(statsData.networkRxRateHistory)}</div>` : '';
+        const netTxSparkline = statsData.networkTxRateHistory && statsData.networkTxRateHistory.length > 1
+          ? `<div class="sparkline-row net-tx">${renderSparkline(statsData.networkTxRateHistory)}</div>` : '';
+        const blockReadSparkline = statsData.blockReadRateHistory && statsData.blockReadRateHistory.length > 1
+          ? `<div class="sparkline-row block-read">${renderSparkline(statsData.blockReadRateHistory)}</div>` : '';
+        const blockWriteSparkline = statsData.blockWriteRateHistory && statsData.blockWriteRateHistory.length > 1
+          ? `<div class="sparkline-row block-write">${renderSparkline(statsData.blockWriteRateHistory)}</div>` : '';
+
+        // Log severity sparkline
+        const logSevSparkline = statsData.logSeveritySeries && statsData.logSeveritySeries.length > 0
+          ? `<div class="stat-row">
+    <div class="stat-row-label"><span class="stat-label">Log Activity</span></div>
+    <div class="sparkline-row severity">${renderSeveritySparkline(statsData.logSeveritySeries)}</div>
+  </div>` : '';
+
         return `<div class="stats-grid">
   <div class="stat-row">
     <div class="stat-row-label"><span class="stat-label">CPU</span><span class="stat-value">${escapeHtml(s.cpuPercent.toFixed(1))}%</span></div>
@@ -111,12 +128,15 @@ export const containersPanel: PanelDefinition = {
   <div class="stat-row">
     <div class="stat-row-label"><span class="stat-label">Network I/O</span></div>
     <div class="stat-net"><span class="stat-net-rx">\u25BC ${escapeHtml(formatBytes(s.networkRx))}</span><span class="stat-net-tx">\u25B2 ${escapeHtml(formatBytes(s.networkTx))}</span></div>
+    ${netRxSparkline}${netTxSparkline}
   </div>
   <div class="stat-row">
     <div class="stat-row-label"><span class="stat-label">Block I/O</span></div>
     <div class="stat-net"><span class="stat-net-rx">R ${escapeHtml(formatBytes(s.blockRead))}</span><span class="stat-net-tx">W ${escapeHtml(formatBytes(s.blockWrite))}</span></div>
+    ${blockReadSparkline}${blockWriteSparkline}
   </div>
   <div class="stat-pids">PIDs: ${escapeHtml(String(s.pids))}</div>
+  ${logSevSparkline}
 </div>`;
       },
     },

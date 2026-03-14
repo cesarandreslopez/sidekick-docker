@@ -7,7 +7,7 @@ declare const __VERSION__: string;
 
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
-import type { WebviewState } from './state';
+import type { WebviewState, SortField, ToastSeverity } from './state';
 import { createInitialState } from './state';
 import { containersPanel } from './panels/containers';
 import { servicesPanel } from './panels/services';
@@ -18,7 +18,33 @@ import { LogAnalytics } from 'sidekick-docker-shared/log';
 import { filterLine } from 'sidekick-docker-shared/log';
 
 const vscode = acquireVsCodeApi();
-const TOAST_DURATIONS = { error: 4000, warning: 3000, info: 2000 } as const;
+const TOAST_DURATIONS: Record<ToastSeverity, number> = { error: 4000, warning: 3000, info: 2000, success: 2000 };
+
+const SORT_OPTIONS: { field: SortField; label: string }[] = [
+  { field: 'state', label: 'State (running first)' },
+  { field: 'name', label: 'Name' },
+  { field: 'cpu', label: 'CPU %' },
+  { field: 'mem', label: 'Memory %' },
+  { field: 'net', label: 'Network I/O' },
+  { field: 'io', label: 'Block I/O' },
+  { field: 'pids', label: 'PIDs' },
+];
+
+const GLOBAL_KEYBINDINGS = [
+  { key: '1-5', label: 'Switch panel' },
+  { key: 'j/k', label: 'Navigate / scroll' },
+  { key: 'g/G', label: 'Jump to first / last' },
+  { key: 'Tab', label: 'Toggle focus' },
+  { key: '[/]', label: 'Cycle detail tabs' },
+  { key: 'z', label: 'Cycle layout (Normal/Wide/Expanded)' },
+  { key: '/', label: 'Filter items' },
+  { key: 'x', label: 'Actions menu' },
+  { key: 'a', label: 'Toggle all/running (Containers)' },
+  { key: 'o', label: 'Sort menu (Containers)' },
+  { key: 'R', label: 'Reverse sort (Containers)' },
+  { key: 'V', label: 'Version info' },
+  { key: '?', label: 'This help' },
+];
 
 const panels: PanelDefinition[] = [
   containersPanel,
@@ -71,6 +97,15 @@ function getPanel(): PanelDefinition { return panels[state.activePanelIndex]; }
 function getFilteredItems(): PanelItem[] {
   if (!state.snapshot) return [];
   let items = getPanel().getItems(state.snapshot);
+
+  // Show all/running filter (containers only)
+  if (!state.showAllContainers && getPanel().id === 'containers') {
+    items = items.filter(it => {
+      const c = state.snapshot!.containers.find(cc => cc.id === it.id);
+      return c?.state === 'running';
+    });
+  }
+
   if (state.filterString) {
     const f = state.filterString.toLowerCase();
     items = items.filter(it => {
@@ -78,8 +113,34 @@ function getFilteredItems(): PanelItem[] {
       return text.toLowerCase().includes(f);
     });
   }
-  items.sort((a, b) => a.sortKey - b.sortKey);
+
+  // Custom sort for containers panel
+  if (getPanel().id === 'containers' && state.sortField !== 'state') {
+    items.sort((a, b) => {
+      const val = containerSortCompare(a, b, state.sortField);
+      return state.sortReversed ? -val : val;
+    });
+  } else {
+    items.sort((a, b) => {
+      const val = a.sortKey - b.sortKey || a.label.localeCompare(b.label);
+      return state.sortReversed && getPanel().id === 'containers' ? -val : val;
+    });
+  }
   return items;
+}
+
+function containerSortCompare(a: PanelItem, b: PanelItem, field: SortField): number {
+  const sa = state.stats.get(a.id);
+  const sb = state.stats.get(b.id);
+  switch (field) {
+    case 'name': return a.label.localeCompare(b.label);
+    case 'cpu': return (sb?.stats?.cpuPercent ?? 0) - (sa?.stats?.cpuPercent ?? 0);
+    case 'mem': return (sb?.stats?.memoryPercent ?? 0) - (sa?.stats?.memoryPercent ?? 0);
+    case 'net': return ((sb?.stats?.networkRx ?? 0) + (sb?.stats?.networkTx ?? 0)) - ((sa?.stats?.networkRx ?? 0) + (sa?.stats?.networkTx ?? 0));
+    case 'io': return ((sb?.stats?.blockRead ?? 0) + (sb?.stats?.blockWrite ?? 0)) - ((sa?.stats?.blockRead ?? 0) + (sa?.stats?.blockWrite ?? 0));
+    case 'pids': return (sb?.stats?.pids ?? 0) - (sa?.stats?.pids ?? 0);
+    default: return a.sortKey - b.sortKey;
+  }
 }
 
 function getSelectedItem(items: PanelItem[]): PanelItem | undefined {
@@ -91,7 +152,7 @@ function getSelectedIndex(items: PanelItem[]): number {
   return idx >= 0 ? idx : 0;
 }
 
-function addToast(message: string, severity: 'error' | 'warning' | 'info'): void {
+function addToast(message: string, severity: ToastSeverity): void {
   const id = ++toastIdCounter;
   const timer = window.setTimeout(() => {
     // Start dismiss animation
@@ -178,6 +239,15 @@ function renderEmptyStateSide(panelId: string): string {
 
 // ─── Rendering ───────────────────────────────────────────────────────
 function renderAll(): void {
+  // Apply layout mode class
+  const mainArea = document.getElementById('main-area')!;
+  mainArea.className = `layout-${state.layoutMode}`;
+
+  // Apply focus indicator
+  $sideList.classList.toggle('focused', state.focusTarget === 'side');
+  const $detailPane = document.getElementById('detail-pane')!;
+  $detailPane.classList.toggle('focused', state.focusTarget === 'detail');
+
   renderTabBar();
   const items = getFilteredItems();
   renderSideList(items);
@@ -288,12 +358,23 @@ function renderStatusBar(items: PanelItem[]): void {
   const runningCount = snapshot?.containers.filter(c => c.state === 'running').length ?? 0;
   const totalCount = snapshot?.containers.length ?? 0;
 
+  // Build contextual hints from panel actions + global features
   const item = getSelectedItem(items);
-  let hints = '';
+  const hintParts: string[] = [];
+
   if (item && snapshot) {
     const actions = getPanel().getActions(item, snapshot);
-    hints = actions.map(a => `${a.key}:${a.label}`).join('  ');
+    hintParts.push(...actions.map(a => `${a.key}:${a.label}`));
   }
+
+  // Panel-specific hints
+  if (getPanel().id === 'containers') {
+    hintParts.push(`a:${state.showAllContainers ? 'Running only' : 'Show all'}`);
+    const sortLabel = SORT_OPTIONS.find(o => o.field === state.sortField)?.label ?? state.sortField;
+    hintParts.push(`\u2195${sortLabel}${state.sortReversed ? '\u25B2' : '\u25BC'}`);
+  }
+  hintParts.push('/ filter', 'x actions', '? help');
+  const hints = hintParts.join('  ');
 
   const connDot = connected ? '<span class="dot connected"></span>' : '<span class="dot disconnected"></span>';
   const connText = connected ? `${runningCount}/${totalCount}` : 'disconnected';
@@ -304,10 +385,16 @@ function renderStatusBar(items: PanelItem[]): void {
     filterHtml = `<span class="filter-indicator">Filter: "${escapeHtml(state.filterString)}" (${items.length} of ${allItems.length})</span>`;
   }
 
+  // Focus + layout indicators
+  const focusIndicator = `<span class="status-indicator">${state.focusTarget === 'detail' ? 'Detail' : 'List'}</span>`;
+  const layoutIndicator = state.layoutMode !== 'normal' ? `<span class="status-indicator">${state.layoutMode}</span>` : '';
+
   $statusBar.innerHTML = `
     <span class="brand">\u26A1 SIDEKICK Docker v${__VERSION__}</span>
-    <span class="hints">${escapeHtml(hints)}${hints ? '  ' : ''}/ filter  x actions  1-5 panels</span>
+    <span class="hints">${escapeHtml(hints)}</span>
     ${filterHtml}
+    ${layoutIndicator}
+    ${focusIndicator}
     <span class="connection">${connDot}<span class="conn-text">${connText}</span></span>
   `;
 }
@@ -333,6 +420,90 @@ function renderToasts(): void {
   $toastContainer.innerHTML = state.toasts.map(t =>
     `<div class="toast ${t.severity}" data-toast-id="${t.id}">${escapeHtml(t.message)}</div>`
   ).join('');
+}
+
+function renderSortOverlay(): void {
+  const $sort = document.getElementById('sort-overlay')!;
+  if (!state.sortOverlayVisible) {
+    $sort.classList.remove('visible');
+    return;
+  }
+  let html = '<div class="overlay-title">\u2195 Sort by</div>';
+  for (let i = 0; i < SORT_OPTIONS.length; i++) {
+    const opt = SORT_OPTIONS[i];
+    const selected = i === state.sortMenuIndex ? ' selected' : '';
+    const current = opt.field === state.sortField;
+    const indicator = current ? (state.sortReversed ? ' \u25B2' : ' \u25BC') : '';
+    const currentClass = current ? ' current' : '';
+    html += `<div class="sort-item${selected}${currentClass}" data-idx="${i}">${escapeHtml(opt.label)}${indicator}</div>`;
+  }
+  html += '<div class="overlay-hint">j/k select  Enter apply  R reverse  Esc close</div>';
+  $sort.innerHTML = html;
+  $sort.classList.add('visible');
+}
+
+function renderHelpOverlay(): void {
+  const $help = document.getElementById('help-overlay')!;
+  if (!state.helpOverlayVisible) {
+    $help.classList.remove('visible');
+    return;
+  }
+
+  let html = '<div class="overlay-title">\u26A1 SIDEKICK Docker</div>';
+  html += '<div class="overlay-section">Navigation</div>';
+  for (const b of GLOBAL_KEYBINDINGS) {
+    html += `<div class="help-row"><span class="help-key">${escapeHtml(b.key)}</span><span class="help-label">${escapeHtml(b.label)}</span></div>`;
+  }
+
+  // Panel-specific actions
+  const items = getFilteredItems();
+  const item = getSelectedItem(items);
+  if (item && state.snapshot) {
+    const actions = getPanel().getActions(item, state.snapshot);
+    if (actions.length > 0) {
+      html += `<div class="overlay-section">${escapeHtml(getPanel().title)} Actions</div>`;
+      for (const a of actions) {
+        const cls = a.confirm ? ' destructive' : '';
+        html += `<div class="help-row"><span class="help-key${cls}">${escapeHtml(a.key)}</span><span class="help-label${cls}">${escapeHtml(a.label)}${a.confirm ? ' \u26A0' : ''}</span></div>`;
+      }
+    }
+  }
+
+  html += '<div class="overlay-hint">Press ? or Esc to close</div>';
+  $help.innerHTML = html;
+  $help.classList.add('visible');
+}
+
+function renderVersionOverlay(): void {
+  const $version = document.getElementById('version-overlay')!;
+  if (!state.versionOverlayVisible) {
+    $version.classList.remove('visible');
+    return;
+  }
+  $version.innerHTML = `
+    <div class="overlay-title">\u26A1 SIDEKICK</div>
+    <div class="version-tagline">Docker v${__VERSION__}</div>
+    <div class="version-divider"></div>
+    <div class="version-phrase">"${escapeHtml(state.phrase)}"</div>
+    <div class="version-divider"></div>
+    <div class="overlay-hint">Press V or Esc to close</div>
+  `;
+  $version.classList.add('visible');
+}
+
+function renderScrollIndicators(): void {
+  const el = $detailContent;
+  const $indicators = document.getElementById('scroll-indicators')!;
+  if (el.scrollHeight <= el.clientHeight) {
+    $indicators.innerHTML = '';
+    return;
+  }
+  const above = el.scrollTop;
+  const below = el.scrollHeight - el.scrollTop - el.clientHeight;
+  const parts: string[] = [];
+  if (above > 0) parts.push(`<span class="scroll-up">\u25B2 ${Math.ceil(above / 20)}</span>`);
+  if (below > 0) parts.push(`<span class="scroll-down">\u25BC ${Math.ceil(below / 20)}</span>`);
+  $indicators.innerHTML = parts.join(' ');
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────
@@ -433,6 +604,12 @@ function executeContextAction(idx: number, actions: ActionDefinition[]): void {
   executeAction(action, item.id);
 }
 
+// ─── Detail pane scrolling helper ────────────────────────────────────
+function scrollDetail(delta: number): void {
+  $detailContent.scrollTop += delta * 24;
+  renderScrollIndicators();
+}
+
 // ─── Keyboard handling ───────────────────────────────────────────────
 document.addEventListener('keydown', (e: KeyboardEvent) => {
   rotatePhrase();
@@ -523,7 +700,85 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
     return;
   }
 
+  // Sort overlay
+  if (state.sortOverlayVisible) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      state.sortOverlayVisible = false;
+      renderSortOverlay();
+      return;
+    }
+    if (e.key === 'j' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      state.sortMenuIndex = (state.sortMenuIndex + 1) % SORT_OPTIONS.length;
+      renderSortOverlay();
+      return;
+    }
+    if (e.key === 'k' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      state.sortMenuIndex = (state.sortMenuIndex - 1 + SORT_OPTIONS.length) % SORT_OPTIONS.length;
+      renderSortOverlay();
+      return;
+    }
+    if (e.key === 'R') {
+      e.preventDefault();
+      state.sortReversed = !state.sortReversed;
+      addToast(`Sort: ${state.sortReversed ? 'descending' : 'ascending'}`, 'info');
+      renderSortOverlay();
+      renderAll();
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      state.sortField = SORT_OPTIONS[state.sortMenuIndex].field;
+      state.sortOverlayVisible = false;
+      addToast(`Sort: ${SORT_OPTIONS[state.sortMenuIndex].label}`, 'info');
+      renderSortOverlay();
+      renderAll();
+      return;
+    }
+    return;
+  }
+
+  // Help overlay
+  if (state.helpOverlayVisible) {
+    if (e.key === 'Escape' || e.key === '?') {
+      e.preventDefault();
+      state.helpOverlayVisible = false;
+      renderHelpOverlay();
+      return;
+    }
+    return;
+  }
+
+  // Version overlay
+  if (state.versionOverlayVisible) {
+    if (e.key === 'Escape' || e.key === 'V') {
+      e.preventDefault();
+      state.versionOverlayVisible = false;
+      renderVersionOverlay();
+      return;
+    }
+    return;
+  }
+
   // ── Global keys ────────────────────────────────────────────────
+  // Help overlay
+  if (e.key === '?') {
+    e.preventDefault();
+    state.helpOverlayVisible = true;
+    renderHelpOverlay();
+    return;
+  }
+
+  // Version overlay
+  if (e.key === 'V') {
+    e.preventDefault();
+    state.versionOverlayVisible = true;
+    renderVersionOverlay();
+    return;
+  }
+
   // Panel switching: 1-5
   const num = parseInt(e.key, 10);
   if (num >= 1 && num <= panels.length) {
@@ -532,25 +787,48 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
     return;
   }
 
-  // Navigation
-  if (e.key === 'j' || e.key === 'ArrowDown') {
+  // Focus toggle (Tab)
+  if (e.key === 'Tab') {
     e.preventDefault();
-    navigateSide(1);
+    state.focusTarget = state.focusTarget === 'side' ? 'detail' : 'side';
+    renderAll();
     return;
   }
-  if (e.key === 'k' || e.key === 'ArrowUp') {
+
+  // Layout mode cycle (z)
+  if (e.key === 'z') {
     e.preventDefault();
-    navigateSide(-1);
+    const modes: Array<'normal' | 'wide' | 'expanded'> = ['normal', 'wide', 'expanded'];
+    const curIdx = modes.indexOf(state.layoutMode);
+    state.layoutMode = modes[(curIdx + 1) % modes.length];
+    addToast(`Layout: ${state.layoutMode.charAt(0).toUpperCase() + state.layoutMode.slice(1)}`, 'info');
+    renderAll();
     return;
   }
-  if (e.key === 'g') {
+
+  // Show all/running toggle (a key, containers only)
+  if (e.key === 'a' && getPanel().id === 'containers') {
     e.preventDefault();
-    navigateSide(-Infinity);
+    state.showAllContainers = !state.showAllContainers;
+    addToast(state.showAllContainers ? 'Show all' : 'Running only', 'info');
+    renderAll();
     return;
   }
-  if (e.key === 'G') {
+
+  // Sort overlay (o key, containers only)
+  if (e.key === 'o' && getPanel().id === 'containers') {
     e.preventDefault();
-    navigateSide(Infinity);
+    state.sortOverlayVisible = true;
+    renderSortOverlay();
+    return;
+  }
+
+  // Sort reverse toggle (R key, containers only)
+  if (e.key === 'R' && getPanel().id === 'containers') {
+    e.preventDefault();
+    state.sortReversed = !state.sortReversed;
+    addToast(`Sort: ${state.sortReversed ? 'descending' : 'ascending'}`, 'info');
+    renderAll();
     return;
   }
 
@@ -590,13 +868,80 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
     return;
   }
 
-  // Escape: clear filter or close overlay
+  // Navigation (focus-aware)
+  if (state.focusTarget === 'side') {
+    if (e.key === 'j' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      navigateSide(1);
+      return;
+    }
+    if (e.key === 'k' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      navigateSide(-1);
+      return;
+    }
+    if (e.key === 'g') {
+      e.preventDefault();
+      navigateSide(-Infinity);
+      return;
+    }
+    if (e.key === 'G') {
+      e.preventDefault();
+      navigateSide(Infinity);
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      state.focusTarget = 'detail';
+      renderAll();
+      return;
+    }
+  }
+
+  if (state.focusTarget === 'detail') {
+    if (e.key === 'j' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      scrollDetail(1);
+      return;
+    }
+    if (e.key === 'k' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      scrollDetail(-1);
+      return;
+    }
+    if (e.key === 'h' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      state.focusTarget = 'side';
+      renderAll();
+      return;
+    }
+    if (e.key === 'g') {
+      e.preventDefault();
+      $detailContent.scrollTop = 0;
+      renderScrollIndicators();
+      return;
+    }
+    if (e.key === 'G') {
+      e.preventDefault();
+      $detailContent.scrollTop = $detailContent.scrollHeight;
+      renderScrollIndicators();
+      return;
+    }
+  }
+
+  // Escape: clear filter or return focus to side
   if (e.key === 'Escape') {
     e.preventDefault();
     if (state.filterString) {
       state.filterString = '';
       post({ type: 'filterChange', filter: '' });
       renderAll();
+      return;
+    }
+    if (state.focusTarget === 'detail') {
+      state.focusTarget = 'side';
+      renderAll();
+      return;
     }
     return;
   }
@@ -653,6 +998,9 @@ $confirmNo.addEventListener('click', () => hideConfirm());
 // Rotate phrase on mouse interaction
 document.addEventListener('mousedown', () => rotatePhrase());
 
+// Scroll indicators for detail pane
+$detailContent.addEventListener('scroll', () => renderScrollIndicators());
+
 // ─── Message handling ────────────────────────────────────────────────
 window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
   const msg = event.data;
@@ -686,7 +1034,17 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     }
 
     case 'updateStats': {
-      state.stats.set(msg.containerId, { stats: msg.stats, loading: msg.loading, cpuHistory: msg.cpuHistory, memoryHistory: msg.memoryHistory });
+      state.stats.set(msg.containerId, {
+        stats: msg.stats,
+        loading: msg.loading,
+        cpuHistory: msg.cpuHistory,
+        memoryHistory: msg.memoryHistory,
+        networkRxRateHistory: msg.networkRxRateHistory,
+        networkTxRateHistory: msg.networkTxRateHistory,
+        blockReadRateHistory: msg.blockReadRateHistory,
+        blockWriteRateHistory: msg.blockWriteRateHistory,
+        logSeveritySeries: msg.logSeveritySeries,
+      });
       if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 1) {
         renderDetailContent(getFilteredItems());
       }

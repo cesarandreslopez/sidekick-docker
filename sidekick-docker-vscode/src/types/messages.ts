@@ -87,10 +87,10 @@ export interface DashboardStateSnapshot {
 export type ExtensionMessage =
   | { type: 'updateState'; snapshot: DashboardStateSnapshot }
   | { type: 'updateLogs'; containerId: string; entries: SerializedLogEntry[] }
-  | { type: 'updateStats'; containerId: string; stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[] }
+  | { type: 'updateStats'; containerId: string; stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[]; networkRxRateHistory?: number[]; networkTxRateHistory?: number[]; blockReadRateHistory?: number[]; blockWriteRateHistory?: number[]; logSeveritySeries?: { severity: string; total: number }[] }
   | { type: 'updateEnv'; containerId: string; env: string[] }
   | { type: 'phraseBank'; phrases: string[] }
-  | { type: 'toast'; message: string; severity: 'error' | 'warning' | 'info' }
+  | { type: 'toast'; message: string; severity: 'error' | 'warning' | 'info' | 'success' }
   | { type: 'focusContainer'; containerId: string }
   | { type: 'updateComposeLogs'; projectName: string; serviceName: string | null; entries: SerializedLogEntry[] };
 

@@ -164,14 +164,48 @@ export function colorizeNetworkContainer(name: string, id: string): string {
   return `${escapeHtml(name)} (<span class="detail-id">${escapeHtml(id)}</span>)`;
 }
 
-export function renderSparkline(values: number[], width = 40): string {
+function formatSparkValue(v: number): string {
+  if (v >= 1000000) return `${(v / 1000000).toFixed(1)}M`;
+  if (v >= 1000) return `${(v / 1000).toFixed(1)}K`;
+  if (v >= 100) return `${Math.round(v)}`;
+  return v.toFixed(1);
+}
+
+export function renderSparkline(values: number[], width = 40, labels?: { min?: string; max?: string; timeWindow?: string }): string {
   if (values.length < 2) return '';
-  const max = Math.max(...values, 1);
-  const bars = '\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588';
   const recent = values.slice(-width);
+  const max = Math.max(...recent, 1);
+  const min = Math.min(...recent);
+  const bars = '\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588';
   const sparkline = recent.map(v => {
     const idx = Math.min(Math.floor((v / max) * (bars.length - 1)), bars.length - 1);
     return bars[idx];
   }).join('');
-  return `<span class="sparkline">${sparkline}</span>`;
+
+  const minLabel = labels?.min ?? formatSparkValue(min);
+  const maxLabel = labels?.max ?? formatSparkValue(max);
+  const timeLabel = labels?.timeWindow ?? `\u2190${recent.length}s`;
+
+  return `<span class="sparkline-label">${escapeHtml(minLabel)}</span><span class="sparkline">${sparkline}</span><span class="sparkline-label">${escapeHtml(maxLabel)}</span> <span class="sparkline-label">${escapeHtml(timeLabel)}</span>`;
+}
+
+const SEVERITY_CSS_COLORS: Record<string, string> = {
+  error: 'var(--vscode-errorForeground, #f85149)',
+  warn: 'var(--vscode-editorWarning-foreground, #cca700)',
+  info: 'var(--vscode-editorInfo-foreground, #3794ff)',
+  debug: 'var(--vscode-descriptionForeground)',
+  other: 'var(--vscode-descriptionForeground)',
+};
+
+export function renderSeveritySparkline(series: { severity: string; total: number }[], width = 40): string {
+  if (series.length === 0) return '';
+  const recent = series.slice(-width);
+  const max = Math.max(...recent.map(s => s.total), 1);
+  const bars = '\u2581\u2582\u2583\u2584\u2585\u2586\u2587\u2588';
+  const html = recent.map(s => {
+    const idx = Math.min(Math.floor((s.total / max) * (bars.length - 1)), bars.length - 1);
+    const color = SEVERITY_CSS_COLORS[s.severity] ?? SEVERITY_CSS_COLORS.other;
+    return `<span style="color:${color}">${bars[idx]}</span>`;
+  }).join('');
+  return `<span class="sparkline">${html}</span>`;
 }
