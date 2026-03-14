@@ -10,7 +10,10 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    "forceConsistentCasingInFileNames": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true
   },
   "exclude": ["node_modules", "out"]
 }

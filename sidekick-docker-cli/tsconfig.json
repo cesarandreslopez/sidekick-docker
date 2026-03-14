@@ -11,6 +11,8 @@
     "declaration": false,
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
     "jsx": "react-jsx",
     "jsxImportSource": "react"
   },
