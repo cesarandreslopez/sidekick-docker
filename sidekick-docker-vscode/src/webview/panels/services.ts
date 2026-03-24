@@ -119,6 +119,7 @@ export const servicesPanel: PanelDefinition = {
       { key: 'D', label: 'Down', actionType: 'down', confirm: true, confirmMessage: 'Bring down this compose project?' },
       { key: 'r', label: 'Restart', actionType: 'restart' },
       { key: 'S', label: 'Stop', actionType: 'stop' },
+      { key: 'c', label: 'Copy Logs', actionType: 'copyLogs' },
     ];
   },
 

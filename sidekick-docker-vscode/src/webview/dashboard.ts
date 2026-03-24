@@ -5,7 +5,7 @@ declare function acquireVsCodeApi(): {
 };
 declare const __VERSION__: string;
 
-import type { ExtensionMessage, WebviewMessage } from '../types/messages';
+import type { ExtensionMessage, WebviewMessage, SerializedLogEntry } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
 import type { WebviewState, SortField, ToastSeverity } from './state';
 import { createInitialState } from './state';
@@ -719,7 +719,19 @@ function navigateSide(delta: number): void {
 
 function copyCurrentLogs(): void {
   if (!state.selectedItemId) return;
-  const entries = state.logs.get(state.selectedItemId);
+  let entries: SerializedLogEntry[] | undefined;
+  if (getPanel().id === 'services') {
+    const parts = state.selectedItemId.split(':');
+    let key = '';
+    if (parts[0] === 'project') {
+      key = parts.slice(1).join(':');
+    } else if (parts[0] === 'service') {
+      key = `${parts[1]}:${parts.slice(2).join(':')}`;
+    }
+    entries = key ? state.composeLogs.get(key) : undefined;
+  } else {
+    entries = state.logs.get(state.selectedItemId);
+  }
   if (!entries || entries.length === 0) {
     addToast('No logs to copy', 'warning');
     return;

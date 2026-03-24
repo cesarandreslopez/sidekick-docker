@@ -251,10 +251,10 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Wire copy logs handler
   containersPanel.setOnCopyLogs((text: string) => {
-    // addToast not available here — use scheduleRender to show toast via rerender
-    // Instead, we'll let the keyboard handler's addToast handle feedback
-    // since executeAction already calls addToast with the action label.
-    // Just do the clipboard operation here.
+    copyToClipboard(text);
+  });
+  const servicesPanel = panels[1] as ServicesPanel;
+  servicesPanel.setOnCopyLogs((text: string) => {
     copyToClipboard(text);
   });
 

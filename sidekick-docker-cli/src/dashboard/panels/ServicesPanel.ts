@@ -1,5 +1,5 @@
 import type { ComposeService, ComposeProject } from 'sidekick-docker-shared';
-import { ComposeClient } from 'sidekick-docker-shared';
+import { ComposeClient, filterLine } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { defaultOnError, panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -22,12 +22,18 @@ export class ServicesPanel implements SidePanel {
   private onAction: () => void;
   private onError: (msg: string) => void;
   private cwd: string | undefined;
+  private onCopyLogs?: (text: string) => void;
+  private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(composeClient: ComposeClient, onAction: () => void, cwd?: string, onError?: (msg: string) => void) {
     this.composeClient = composeClient;
     this.onAction = onAction;
     this.onError = onError ?? defaultOnError;
     this.cwd = cwd;
+  }
+
+  setOnCopyLogs(handler: (text: string) => void): void {
+    this.onCopyLogs = handler;
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -70,6 +76,7 @@ export class ServicesPanel implements SidePanel {
   ];
 
   getItems(metrics: DockerDashboardMetrics): PanelItem[] {
+    this.lastMetrics = metrics;
     const items: PanelItem[] = [];
     let sortKey = 0;
 
@@ -159,6 +166,25 @@ export class ServicesPanel implements SidePanel {
           return this.composeClient.stop(d.project.name, undefined, this.cwd).then(() => { this.onAction(); });
         },
         condition: (item) => item.data !== null,
+      },
+      {
+        key: 'c',
+        label: 'Copy Logs',
+        handler: () => {
+          if (!this.lastMetrics || !this.onCopyLogs) return;
+          const logs = this.lastMetrics.selectedComposeLogs;
+          const query = this.lastMetrics.logFilterString;
+          const mode = this.lastMetrics.logFilterMode;
+          let lines: string[];
+          if (query) {
+            lines = logs
+              .filter(l => filterLine(l.message, query, mode).matched)
+              .map(l => l.message);
+          } else {
+            lines = logs.map(l => l.message);
+          }
+          this.onCopyLogs(lines.join('\n'));
+        },
       },
     ];
   }

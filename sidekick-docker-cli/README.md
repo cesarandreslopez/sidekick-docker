@@ -97,6 +97,7 @@ The dashboard has 5 panels, each mapped to a number key:
 | `r` | Restart |
 | `R` | Remove (with confirmation) |
 | `e` | Exec into container |
+| `c` | Copy logs to clipboard |
 
 ### Compose Actions (via context menu)
 
@@ -106,6 +107,7 @@ The dashboard has 5 panels, each mapped to a number key:
 | `d` | Down (stop project) |
 | `r` | Restart |
 | `S` | Stop |
+| `c` | Copy logs to clipboard |
 
 ## Features
 
