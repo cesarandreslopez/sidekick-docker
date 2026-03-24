@@ -6,6 +6,26 @@ All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.2] - 2026-03-24
+
+### Fixed
+
+- Copy logs (`c` key) now works on the Services panel — previously only worked on Containers panel (both CLI and VS Code)
+- VS Code extension copy logs function now correctly reads compose logs when on the Services panel
+
+## [0.2.1] - 2026-03-24
+
+### Improved
+
+- Debounced log rendering with 100ms flush window, reducing re-renders during high-throughput log output
+- View-state-driven streaming — stats and log streams now activate based on which detail tab is visible and which sort field is active, instead of starting on every selection
+- VS Code extension stops all background streams when the dashboard webview is hidden, restarting on focus
+- Smart stream demand in VS Code: logs only stream on Containers panel, compose logs only on Services panel, stats only when the Stats tab is active or sorting by live metrics
+
+### Fixed
+
+- Add missing `zod` dependency to VS Code extension package for CI build
+
 ## [0.2.0] - 2026-03-14
 
 ### Added

@@ -35,5 +35,6 @@ Press `x` on a project or service to open the context menu:
 | `d` | Down | Stop the project (`docker compose down`) |
 | `r` | Restart | Restart the project or individual service |
 | `S` | Stop | Stop the project or individual service |
+| `c` | Copy Logs | Copy buffered log text to clipboard |
 
 All compose operations run via the `docker compose` CLI through the `ComposeClient`.

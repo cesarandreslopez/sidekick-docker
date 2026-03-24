@@ -58,6 +58,7 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `d` | Down (stop project) |
 | `r` | Restart |
 | `S` | Stop |
+| `c` | Copy logs to clipboard |
 
 ## Overlay Keyboard Hints
 
