@@ -169,12 +169,19 @@ const initialState: DashboardUIState = {
 interface DashboardProps {
   panels: SidePanel[];
   metrics: DockerDashboardMetrics;
-  onSelectionChange?: (panelId: string, itemId: string | null) => void;
+  onViewStateChange?: (viewState: DashboardViewState) => void;
   execTriggerRef?: React.RefObject<((containerId: string, containerName: string) => void) | null>;
   onExecFallback?: (containerId: string) => void;
 }
 
-export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, onExecFallback }: DashboardProps): React.ReactElement {
+export interface DashboardViewState {
+  panelId: string;
+  itemId: string | null;
+  detailTabIndex: number;
+  sortField: SortField;
+}
+
+export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { columns, rows } = useTerminalSize();
   const toastIdRef = useRef(0);
@@ -357,13 +364,18 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
 
   const selectedItem = currentItems[clampedSelection];
 
-  useEffect(() => {
-    onSelectionChange?.(panel.id, selectedItem?.id ?? null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panel.id, selectedItem?.id]);
-
   const detailTabs = panel.detailTabs;
   const tabIdx = Math.min(state.detailTabIndex, detailTabs.length - 1);
+
+  useEffect(() => {
+    onViewStateChange?.({
+      panelId: panel.id,
+      itemId: selectedItem?.id ?? null,
+      detailTabIndex: tabIdx,
+      sortField: state.sortField,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel.id, selectedItem?.id, tabIdx, state.sortField]);
 
   // Merge log filter UI state into metrics for panel render functions
   const enrichedMetrics = {
@@ -477,7 +489,7 @@ export function Dashboard({ panels, metrics, onSelectionChange, execTriggerRef, 
             <Box flexDirection="column" flexGrow={1}>
               <DetailTabBar tabs={detailTabs} activeIndex={state.detailTabIndex} />
               <DetailPane
-                content={detailContent}
+                lines={detailLines}
                 scrollOffset={state.detailScrollOffset}
                 viewportHeight={detailViewportHeight}
                 focused={state.focusTarget === 'detail'}

@@ -10,6 +10,11 @@ export const WebviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('switchPanel'), panelIndex: z.number() }),
   z.object({ type: z.literal('selectItem'), panelId: z.string(), itemId: z.string().nullable() }),
   z.object({ type: z.literal('switchDetailTab'), tabIndex: z.number() }),
+  z.object({
+    type: z.literal('sortChanged'),
+    field: z.enum(['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids']),
+    reversed: z.boolean(),
+  }),
   z.object({ type: z.literal('action'), actionType: z.string(), itemId: z.string(), panelId: z.string() }),
   z.object({ type: z.literal('filterChange'), filter: z.string() }),
   z.object({ type: z.literal('execContainer'), containerId: z.string() }),

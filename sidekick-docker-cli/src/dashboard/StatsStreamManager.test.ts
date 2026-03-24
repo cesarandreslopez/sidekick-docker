@@ -96,7 +96,7 @@ describe('StatsStreamManager', () => {
     expect(manager.getCurrentContainerId()).toBeNull();
   });
 
-  it('drives loading interval until first stats arrive', async () => {
+  it('emits a single loading change before first stats arrive', async () => {
     let resolve: () => void;
     const delayedPromise = new Promise<void>(r => { resolve = r; });
     const client = {
@@ -109,19 +109,13 @@ describe('StatsStreamManager', () => {
     manager = new StatsStreamManager(client, collector, onChange);
     await manager.select('container-1');
 
-    // onChange should be called by the loading interval (200ms)
-    await vi.advanceTimersByTimeAsync(600);
-    const callsBefore = onChange.mock.calls.length;
-    expect(callsBefore).toBeGreaterThanOrEqual(2);
+    // onChange is called once to show the loading state
+    expect(onChange).toHaveBeenCalledTimes(1);
 
     // Resolve the stream to deliver stats
     resolve!();
     await vi.advanceTimersByTimeAsync(0);
 
-    // Loading interval should be cleared
-    const callsAfter = onChange.mock.calls.length;
-    await vi.advanceTimersByTimeAsync(600);
-    // No more loading interval calls (only the stats delivery call)
-    expect(onChange.mock.calls.length - callsAfter).toBeLessThanOrEqual(1);
+    expect(onChange.mock.calls.length).toBe(2);
   });
 });

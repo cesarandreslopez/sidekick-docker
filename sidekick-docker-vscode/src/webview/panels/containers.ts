@@ -16,8 +16,7 @@ function renderSeverityBadges(counts: SeverityCounts): string {
   if (counts.warn > 0) badges.push(`<span class="sev-badge warn">W:${counts.warn}</span>`);
   if (counts.info > 0) badges.push(`<span class="sev-badge info">I:${counts.info}</span>`);
   if (counts.debug > 0) badges.push(`<span class="sev-badge debug">D:${counts.debug}</span>`);
-  if (badges.length === 0) return '';
-  return `<div class="severity-counts">${badges.join('')}</div>`;
+  return badges.join('');
 }
 
 export const containersPanel: PanelDefinition = {
@@ -32,19 +31,18 @@ export const containersPanel: PanelDefinition = {
         const entries = state.logs.get(item.id);
         if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
 
-        let html = '';
+        let html = `<div class="log-shell" data-log-root="container" data-item-id="${escapeHtml(item.id)}" data-rendered-count="${entries.length}" data-first-key="${escapeHtml(`${entries[0]?.timestamp ?? ''}:${entries[0]?.stream ?? ''}:${entries[0]?.message ?? ''}`)}">`;
 
         // Severity counts badges
         const counts = state.logSeverityCounts.get(item.id);
-        if (counts && counts.total > 0) {
-          html += renderSeverityBadges(counts);
-        }
+        html += `<div class="severity-counts" data-log-severity>${counts && counts.total > 0 ? renderSeverityBadges(counts) : ''}</div>`;
 
         // Log filter bar
         html += `<div class="log-filter-bar">
           <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeHtml(state.logFilterString)}" data-container-id="${escapeHtml(item.id)}" />
           <span class="filter-mode" id="log-filter-mode" title="Click to toggle">${state.logFilterMode}</span>
-          <span class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</span>`;
+          <span class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</span>
+          <span class="match-count" data-log-match-count>`;
 
         // Apply log content filter
         const query = state.logFilterString;
@@ -60,15 +58,16 @@ export const containersPanel: PanelDefinition = {
               filteredHtml += colorizeLogEntry(e, result.matches);
             }
           }
-          html += `<span class="match-count">${matchCount} matches</span>`;
+          html += `${matchCount} matches`;
         } else {
           for (const e of entries) {
             filteredHtml += colorizeLogEntry(e);
           }
         }
 
+        html += `</span></div>`;
+        html += `<div class="log-content" data-log-content>${filteredHtml || '<div style="padding:8px;color:var(--vscode-descriptionForeground)">No matching logs</div>'}</div>`;
         html += `</div>`;
-        html += `<div class="log-content">${filteredHtml || '<div style="padding:8px;color:var(--vscode-descriptionForeground)">No matching logs</div>'}</div>`;
 
         return html;
       },
@@ -114,7 +113,7 @@ export const containersPanel: PanelDefinition = {
     <div class="sparkline-row severity">${renderSeveritySparkline(statsData.logSeveritySeries)}</div>
   </div>` : '';
 
-        return `<div class="stats-grid">
+        return `<div class="stats-grid" data-stats-root="container">
   <div class="stat-row">
     <div class="stat-row-label"><span class="stat-label">CPU</span><span class="stat-value">${escapeHtml(s.cpuPercent.toFixed(1))}%</span></div>
     <div class="stat-bar-track"><div class="stat-bar-fill ${barColor(s.cpuPercent)}" style="width:${cpuClamped.toFixed(1)}%"></div></div>

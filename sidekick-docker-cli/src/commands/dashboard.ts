@@ -14,6 +14,7 @@ import { StatsStreamManager } from '../dashboard/StatsStreamManager';
 import { ComposeLogStreamManager } from '../dashboard/ComposeLogStreamManager';
 import type { SidePanel } from '../dashboard/panels/types';
 import { Dashboard } from '../dashboard/ink/Dashboard';
+import type { DashboardViewState } from '../dashboard/ink/Dashboard';
 import { enableMouse, disableMouse } from '../dashboard/ink/mouse';
 
 export async function dashboardAction(_opts: Record<string, unknown>, cmd: Command): Promise<void> {
@@ -48,12 +49,29 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     console.debug('panel action failed:', msg);
   };
 
+  let logFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let composeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
   // Stream managers for logs and stats
   const logManager = new LogStreamManager(client, () => {
+    if (logFlushTimer) return;
+    logFlushTimer = setTimeout(() => {
+      logFlushTimer = null;
+      state.setSelectedLogs(logManager.getLogs());
+      logSeverityCounts = logManager.getSeverityCounts();
+      scheduleRender();
+    }, 100);
+  });
+
+  const flushLogsNow = () => {
+    if (logFlushTimer) {
+      clearTimeout(logFlushTimer);
+      logFlushTimer = null;
+    }
     state.setSelectedLogs(logManager.getLogs());
     logSeverityCounts = logManager.getSeverityCounts();
     scheduleRender();
-  });
+  };
 
   // Mutable severity counts from log stream (UI state, not domain state)
   let logSeverityCounts = logManager.getSeverityCounts();
@@ -63,19 +81,43 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   });
 
   const composeLogManager = new ComposeLogStreamManager(composeClient, () => {
+    if (composeLogFlushTimer) return;
+    composeLogFlushTimer = setTimeout(() => {
+      composeLogFlushTimer = null;
+      state.clearComposeLogs();
+      for (const entry of composeLogManager.getLogs()) {
+        state.appendComposeLog(entry);
+      }
+      scheduleRender();
+    }, 100);
+  });
+
+  const flushComposeLogsNow = () => {
+    if (composeLogFlushTimer) {
+      clearTimeout(composeLogFlushTimer);
+      composeLogFlushTimer = null;
+    }
     state.clearComposeLogs();
     for (const entry of composeLogManager.getLogs()) {
       state.appendComposeLog(entry);
     }
     scheduleRender();
-  });
+  };
 
-  // Selection-driven streaming: start/stop streams when selection changes
-  const onSelectionChange = (panelId: string, itemId: string | null) => {
+  const onViewStateChange = (viewState: DashboardViewState) => {
+    const { panelId, itemId, detailTabIndex, sortField } = viewState;
+    const wantsLiveStats = sortField === 'cpu'
+      || sortField === 'mem'
+      || sortField === 'net'
+      || sortField === 'io'
+      || sortField === 'pids';
+
     if (panelId === 'containers') {
-      logManager.select(itemId);
-      statsManager.select(itemId);
-      composeLogManager.selectCompose(null, null);
+      void logManager.select(detailTabIndex === 0 ? itemId : null);
+      void statsManager.select(itemId && (detailTabIndex === 1 || wantsLiveStats) ? itemId : null);
+      void composeLogManager.selectCompose(null, null);
+      flushLogsNow();
+      flushComposeLogsNow();
       // Fetch env vars if not cached
       if (itemId && !state.getInspectedEnv(itemId)) {
         client.getContainerEnv(itemId).then(env => {
@@ -91,19 +133,26 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
         }).catch(e => console.debug('getContainerChanges failed:', e));
       }
     } else if (panelId === 'services' && itemId) {
-      logManager.select(null);
-      statsManager.select(null);
-      // Parse service item id: "project:name" or "service:project:name"
-      const parts = itemId.split(':');
-      if (parts[0] === 'project') {
-        composeLogManager.selectCompose(parts.slice(1).join(':'), null);
-      } else if (parts[0] === 'service') {
-        composeLogManager.selectCompose(parts[1], parts.slice(2).join(':'));
+      void logManager.select(null);
+      void statsManager.select(null);
+      if (detailTabIndex === 1) {
+        const parts = itemId.split(':');
+        if (parts[0] === 'project') {
+          void composeLogManager.selectCompose(parts.slice(1).join(':'), null);
+        } else if (parts[0] === 'service') {
+          void composeLogManager.selectCompose(parts[1], parts.slice(2).join(':'));
+        }
+      } else {
+        void composeLogManager.selectCompose(null, null);
       }
+      flushLogsNow();
+      flushComposeLogsNow();
     } else if (panelId === 'images') {
-      logManager.select(null);
-      statsManager.select(null);
-      composeLogManager.selectCompose(null, null);
+      void logManager.select(null);
+      void statsManager.select(null);
+      void composeLogManager.selectCompose(null, null);
+      flushLogsNow();
+      flushComposeLogsNow();
       // Fetch image layers if not cached
       if (itemId && !state.getImageLayers(itemId)) {
         client.getImageHistory(itemId).then(layers => {
@@ -112,9 +161,11 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
         }).catch(e => console.debug('getImageHistory failed:', e));
       }
     } else {
-      logManager.select(null);
-      statsManager.select(null);
-      composeLogManager.selectCompose(null, null);
+      void logManager.select(null);
+      void statsManager.select(null);
+      void composeLogManager.selectCompose(null, null);
+      flushLogsNow();
+      flushComposeLogsNow();
     }
   };
 
@@ -162,7 +213,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       React.createElement(Dashboard, {
         panels,
         metrics: getEnrichedMetrics(),
-        onSelectionChange,
+        onViewStateChange,
         execTriggerRef,
         onExecFallback,
       }),
@@ -177,7 +228,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     React.createElement(Dashboard, {
       panels,
       metrics: getEnrichedMetrics(),
-      onSelectionChange,
+      onViewStateChange,
       execTriggerRef,
       onExecFallback,
     }),
@@ -224,7 +275,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
         React.createElement(Dashboard, {
           panels,
           metrics: getEnrichedMetrics(),
-          onSelectionChange,
+          onViewStateChange,
           execTriggerRef,
           onExecFallback,
         }),
@@ -240,6 +291,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     try { logManager.dispose(); } catch { /* ignore */ }
     try { statsManager.dispose(); } catch { /* ignore */ }
     try { composeLogManager.dispose(); } catch { /* ignore */ }
+    try { if (logFlushTimer) clearTimeout(logFlushTimer); } catch { /* ignore */ }
+    try { if (composeLogFlushTimer) clearTimeout(composeLogFlushTimer); } catch { /* ignore */ }
     try { clearInterval(refreshInterval); } catch { /* ignore */ }
     try { watcher.stop(); } catch { /* ignore */ }
     try { client.dispose(); } catch { /* ignore */ }

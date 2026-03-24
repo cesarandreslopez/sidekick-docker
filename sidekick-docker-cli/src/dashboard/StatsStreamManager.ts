@@ -11,7 +11,6 @@ import { BaseStreamManager } from './BaseStreamManager';
 export class StatsStreamManager extends BaseStreamManager<string | null, ContainerStats> {
   private client: DockerClient;
   private collector: StatsCollector;
-  private loadingInterval: ReturnType<typeof setInterval> | null = null;
 
   protected readonly streamLabel = 'stats';
 
@@ -32,7 +31,6 @@ export class StatsStreamManager extends BaseStreamManager<string | null, Contain
 
   protected processItem(id: string | null, stats: ContainerStats): void {
     this.collector.push(id!, stats);
-    this.clearLoadingInterval();
   }
 
   protected onClear(): void {
@@ -40,19 +38,8 @@ export class StatsStreamManager extends BaseStreamManager<string | null, Contain
   }
 
   protected onBeforeStream(): void {
-    // Drive rerenders during the loading gap so the spinner animates
-    this.loadingInterval = setInterval(() => this.onChange(), 200);
-  }
-
-  protected onStop(): void {
-    this.clearLoadingInterval();
-  }
-
-  private clearLoadingInterval(): void {
-    if (this.loadingInterval) {
-      clearInterval(this.loadingInterval);
-      this.loadingInterval = null;
-    }
+    // Trigger a single rerender so the UI can show a static loading state.
+    this.onChange();
   }
 
   getCollector(): StatsCollector {

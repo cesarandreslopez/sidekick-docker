@@ -36,7 +36,7 @@ export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filt
   // Re-render periodically to keep "ago" text fresh
   const [, setTick] = useState(0);
   useEffect(() => {
-    const timer = setInterval(() => setTick(t => t + 1), 5000);
+    const timer = setInterval(() => setTick(t => t + 1), 30000);
     return () => clearInterval(timer);
   }, []);
 

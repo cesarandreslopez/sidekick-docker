@@ -14,7 +14,7 @@ import { servicesPanel } from './panels/services';
 import { imagesPanel } from './panels/images';
 import { volumesPanel } from './panels/volumes';
 import { networksPanel } from './panels/networks';
-import { LogAnalytics } from 'sidekick-docker-shared/log';
+import { colorizeLogEntry } from './formatters';
 import { filterLine } from 'sidekick-docker-shared/log';
 
 const vscode = acquireVsCodeApi();
@@ -150,6 +150,38 @@ function getSelectedItem(items: PanelItem[]): PanelItem | undefined {
 function getSelectedIndex(items: PanelItem[]): number {
   const idx = items.findIndex(it => it.id === state.selectedItemId);
   return idx >= 0 ? idx : 0;
+}
+
+interface RenderDetailOptions {
+  animate?: boolean;
+  preserveScroll?: boolean;
+  restoreLogFocus?: boolean;
+}
+
+function getLogEntryKey(entry: { timestamp: string | null; stream: string; message: string } | undefined): string {
+  return entry ? `${entry.timestamp ?? ''}:${entry.stream}:${entry.message}` : '';
+}
+
+function isNearBottom(el: HTMLElement, threshold = 24): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+}
+
+function renderSeverityBadgesHtml(counts: { error: number; warn: number; info: number; debug: number; total: number }): string {
+  if (counts.total <= 0) return '';
+  const badges: string[] = [];
+  if (counts.error > 0) badges.push(`<span class="sev-badge error">E:${counts.error}</span>`);
+  if (counts.warn > 0) badges.push(`<span class="sev-badge warn">W:${counts.warn}</span>`);
+  if (counts.info > 0) badges.push(`<span class="sev-badge info">I:${counts.info}</span>`);
+  if (counts.debug > 0) badges.push(`<span class="sev-badge debug">D:${counts.debug}</span>`);
+  return badges.join('');
+}
+
+function getSelectedComposeLogKey(item: PanelItem | undefined): string | null {
+  if (!item) return null;
+  const parts = item.id.split(':');
+  if (parts[0] === 'project') return parts.slice(1).join(':');
+  if (parts[0] === 'service') return `${parts[1]}:${parts.slice(2).join(':')}`;
+  return null;
 }
 
 function addToast(message: string, severity: ToastSeverity): void {
@@ -321,17 +353,26 @@ function renderDetailTabBar(): void {
   $detailTabBar.querySelectorAll('.detail-tab').forEach(el => {
     el.addEventListener('click', () => {
       const idx = parseInt((el as HTMLElement).dataset.tab!, 10);
-      state.detailTabIndex = idx;
-      renderDetailTabBar();
-      renderDetailContent(getFilteredItems());
+      setDetailTab(idx);
     });
   });
 }
 
-function renderDetailContent(items: PanelItem[]): void {
+function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = {}): void {
   const panel = getPanel();
   const item = getSelectedItem(items);
   const tab = panel.detailTabs[state.detailTabIndex];
+  const animate = options.animate ?? true;
+  const preserveScroll = options.preserveScroll ?? false;
+  const restoreLogFocus = options.restoreLogFocus ?? false;
+  const shouldStickToBottom = tab?.autoScrollBottom ? isNearBottom($detailContent) : false;
+  const previousScrollTop = $detailContent.scrollTop;
+  const activeLogInput = restoreLogFocus && document.activeElement instanceof HTMLInputElement && document.activeElement.id === 'log-filter-input'
+    ? {
+        selectionStart: document.activeElement.selectionStart,
+        selectionEnd: document.activeElement.selectionEnd,
+      }
+    : null;
 
   if (!item || !tab) {
     $detailContent.innerHTML = renderEmptyState('\u{1F449}', 'No item selected', 'Select an item from the list');
@@ -341,15 +382,35 @@ function renderDetailContent(items: PanelItem[]): void {
   const html = tab.render(item, state);
   $detailContent.innerHTML = html;
 
-  // Trigger fade-in animation
-  $detailContent.classList.remove('fade-in');
-  void $detailContent.offsetWidth; // force reflow
-  $detailContent.classList.add('fade-in');
-
-  // Auto-scroll to bottom for log tabs
-  if (tab.autoScrollBottom) {
-    $detailContent.scrollTop = $detailContent.scrollHeight;
+  if (animate) {
+    $detailContent.classList.remove('fade-in');
+    void $detailContent.offsetWidth; // force reflow
+    $detailContent.classList.add('fade-in');
+  } else {
+    $detailContent.classList.remove('fade-in');
   }
+
+  if (tab.autoScrollBottom && (shouldStickToBottom || !preserveScroll)) {
+    $detailContent.scrollTop = $detailContent.scrollHeight;
+  } else if (preserveScroll) {
+    $detailContent.scrollTop = previousScrollTop;
+  }
+
+  if (activeLogInput) {
+    const replacement = document.getElementById('log-filter-input') as HTMLInputElement | null;
+    if (replacement) {
+      replacement.focus();
+      replacement.setSelectionRange(activeLogInput.selectionStart, activeLogInput.selectionEnd);
+    }
+  }
+}
+
+function setDetailTab(idx: number): void {
+  if (idx === state.detailTabIndex) return;
+  state.detailTabIndex = idx;
+  post({ type: 'switchDetailTab', tabIndex: idx });
+  renderDetailTabBar();
+  renderDetailContent(getFilteredItems());
 }
 
 function renderStatusBar(items: PanelItem[]): void {
@@ -506,6 +567,108 @@ function renderScrollIndicators(): void {
   $indicators.innerHTML = parts.join(' ');
 }
 
+function patchActiveContainerLogs(containerId: string): void {
+  if (state.selectedItemId !== containerId || getPanel().id !== 'containers' || state.detailTabIndex !== 0) return;
+
+  const entries = state.logs.get(containerId);
+  if (!entries || entries.length === 0) {
+    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
+    return;
+  }
+
+  const root = $detailContent.querySelector('[data-log-root="container"]') as HTMLElement | null;
+  const logContent = $detailContent.querySelector('[data-log-content]') as HTMLElement | null;
+  const severityEl = $detailContent.querySelector('[data-log-severity]') as HTMLElement | null;
+  const matchCountEl = $detailContent.querySelector('[data-log-match-count]') as HTMLElement | null;
+  if (!root || !logContent || !severityEl || !matchCountEl || root.dataset.itemId !== containerId) {
+    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
+    return;
+  }
+
+  const counts = state.logSeverityCounts.get(containerId);
+  severityEl.innerHTML = counts ? renderSeverityBadgesHtml(counts) : '';
+
+  if (state.logFilterString) {
+    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
+    return;
+  }
+
+  const previousCount = Number(root.dataset.renderedCount ?? '0');
+  const previousFirstKey = root.dataset.firstKey ?? '';
+  const currentFirstKey = getLogEntryKey(entries[0]);
+  const canAppend = entries.length >= previousCount && previousFirstKey === currentFirstKey;
+  const shouldStickToBottom = isNearBottom($detailContent);
+
+  if (!canAppend) {
+    logContent.innerHTML = entries.map(e => colorizeLogEntry(e)).join('');
+  } else if (entries.length > previousCount) {
+    logContent.insertAdjacentHTML('beforeend', entries.slice(previousCount).map(e => colorizeLogEntry(e)).join(''));
+  }
+
+  root.dataset.renderedCount = String(entries.length);
+  root.dataset.firstKey = currentFirstKey;
+  matchCountEl.textContent = '';
+
+  if (shouldStickToBottom) {
+    $detailContent.scrollTop = $detailContent.scrollHeight;
+  }
+  renderScrollIndicators();
+}
+
+function patchActiveComposeLogs(projectName: string, serviceName: string | null): void {
+  if (getPanel().id !== 'services' || state.detailTabIndex !== 1) return;
+  const key = serviceName ? `${projectName}:${serviceName}` : projectName;
+  const items = getFilteredItems();
+  const selected = getSelectedItem(items);
+  if (getSelectedComposeLogKey(selected) !== key) return;
+
+  const entries = state.composeLogs.get(key);
+  if (!entries || entries.length === 0) {
+    renderDetailContent(items, { animate: false, preserveScroll: true });
+    return;
+  }
+
+  const root = $detailContent.querySelector('[data-log-root="compose"]') as HTMLElement | null;
+  const logContent = $detailContent.querySelector('[data-log-content]') as HTMLElement | null;
+  if (!root || !logContent || root.dataset.itemId !== key) {
+    renderDetailContent(items, { animate: false, preserveScroll: true });
+    return;
+  }
+
+  const previousCount = Number(root.dataset.renderedCount ?? '0');
+  const previousFirstKey = root.dataset.firstKey ?? '';
+  const currentFirstKey = getLogEntryKey(entries[0]);
+  const canAppend = entries.length >= previousCount && previousFirstKey === currentFirstKey;
+  const shouldStickToBottom = isNearBottom($detailContent);
+
+  if (!canAppend) {
+    logContent.innerHTML = entries.map(e => colorizeLogEntry(e)).join('');
+  } else if (entries.length > previousCount) {
+    logContent.insertAdjacentHTML('beforeend', entries.slice(previousCount).map(e => colorizeLogEntry(e)).join(''));
+  }
+
+  root.dataset.renderedCount = String(entries.length);
+  root.dataset.firstKey = currentFirstKey;
+
+  if (shouldStickToBottom) {
+    $detailContent.scrollTop = $detailContent.scrollHeight;
+  }
+  renderScrollIndicators();
+}
+
+function patchActiveStats(containerId: string): void {
+  if (state.selectedItemId !== containerId || getPanel().id !== 'containers' || state.detailTabIndex !== 1) return;
+  const items = getFilteredItems();
+  const item = getSelectedItem(items);
+  const tab = getPanel().detailTabs[state.detailTabIndex];
+  const statsRoot = $detailContent.querySelector('[data-stats-root="container"]') as HTMLElement | null;
+  if (!item || !tab || !statsRoot) {
+    renderDetailContent(items, { animate: false, preserveScroll: true });
+    return;
+  }
+  statsRoot.outerHTML = tab.render(item, state);
+}
+
 // ─── Actions ─────────────────────────────────────────────────────────
 function switchPanel(idx: number): void {
   if (idx < 0 || idx >= panels.length || idx === state.activePanelIndex) return;
@@ -516,7 +679,7 @@ function switchPanel(idx: number): void {
   hideFilter();
   hideContextMenu();
   post({ type: 'switchPanel', panelIndex: idx });
-  // Deselect container streams when switching away from containers
+  post({ type: 'switchDetailTab', tabIndex: 0 });
   post({ type: 'selectItem', panelId: panels[idx].id, itemId: null });
   renderAll();
 }
@@ -525,6 +688,7 @@ function selectItem(id: string, items: PanelItem[]): void {
   if (id === state.selectedItemId) return;
   state.selectedItemId = id;
   state.detailTabIndex = 0;
+  post({ type: 'switchDetailTab', tabIndex: 0 });
   post({ type: 'selectItem', panelId: getPanel().id, itemId: id });
 
   // Notify extension about compose service selection for log streaming
@@ -723,6 +887,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
     if (e.key === 'R') {
       e.preventDefault();
       state.sortReversed = !state.sortReversed;
+      post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
       addToast(`Sort: ${state.sortReversed ? 'descending' : 'ascending'}`, 'info');
       renderSortOverlay();
       renderAll();
@@ -732,6 +897,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
       e.preventDefault();
       state.sortField = SORT_OPTIONS[state.sortMenuIndex].field;
       state.sortOverlayVisible = false;
+      post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
       addToast(`Sort: ${SORT_OPTIONS[state.sortMenuIndex].label}`, 'info');
       renderSortOverlay();
       renderAll();
@@ -827,6 +993,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
   if (e.key === 'R' && getPanel().id === 'containers') {
     e.preventDefault();
     state.sortReversed = !state.sortReversed;
+    post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
     addToast(`Sort: ${state.sortReversed ? 'descending' : 'ascending'}`, 'info');
     renderAll();
     return;
@@ -837,9 +1004,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
     e.preventDefault();
     const tabCount = getPanel().detailTabs.length;
     if (tabCount > 1) {
-      state.detailTabIndex = (state.detailTabIndex - 1 + tabCount) % tabCount;
-      renderDetailTabBar();
-      renderDetailContent(getFilteredItems());
+      setDetailTab((state.detailTabIndex - 1 + tabCount) % tabCount);
     }
     return;
   }
@@ -847,9 +1012,7 @@ document.addEventListener('keydown', (e: KeyboardEvent) => {
     e.preventDefault();
     const tabCount = getPanel().detailTabs.length;
     if (tabCount > 1) {
-      state.detailTabIndex = (state.detailTabIndex + 1) % tabCount;
-      renderDetailTabBar();
-      renderDetailContent(getFilteredItems());
+      setDetailTab((state.detailTabIndex + 1) % tabCount);
     }
     return;
   }
@@ -973,7 +1136,7 @@ $detailContent.addEventListener('input', (e: Event) => {
   const target = e.target as HTMLInputElement;
   if (target.id === 'log-filter-input') {
     state.logFilterString = target.value;
-    renderDetailContent(getFilteredItems());
+    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
   }
 });
 
@@ -981,7 +1144,7 @@ $detailContent.addEventListener('click', (e: Event) => {
   const target = e.target as HTMLElement;
   if (target.id === 'log-filter-mode') {
     state.logFilterMode = state.logFilterMode === 'exact' ? 'fuzzy' : 'exact';
-    renderDetailContent(getFilteredItems());
+    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
   }
   if (target.id === 'copy-logs-btn') {
     copyCurrentLogs();
@@ -1020,15 +1183,11 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 
     case 'updateLogs': {
       state.logs.set(msg.containerId, msg.entries);
-      // Recompute severity counts
-      const analytics = new LogAnalytics();
-      for (const e of msg.entries) {
-        analytics.push(e.message);
+      if (msg.severityCounts) {
+        state.logSeverityCounts.set(msg.containerId, msg.severityCounts);
       }
-      state.logSeverityCounts.set(msg.containerId, analytics.getCounts());
-      // Only re-render if we're viewing this container's logs
       if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 0) {
-        renderDetailContent(getFilteredItems());
+        patchActiveContainerLogs(msg.containerId);
       }
       break;
     }
@@ -1046,7 +1205,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
         logSeveritySeries: msg.logSeveritySeries,
       });
       if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 1) {
-        renderDetailContent(getFilteredItems());
+        patchActiveStats(msg.containerId);
       }
       break;
     }
@@ -1082,6 +1241,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       }
       state.selectedItemId = msg.containerId;
       state.detailTabIndex = 0;
+      post({ type: 'switchDetailTab', tabIndex: 0 });
       post({ type: 'selectItem', panelId: 'containers', itemId: msg.containerId });
       renderAll();
       break;
@@ -1108,22 +1268,8 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'updateComposeLogs': {
       const key = msg.serviceName ? `${msg.projectName}:${msg.serviceName}` : msg.projectName;
       state.composeLogs.set(key, msg.entries);
-      // Re-render if viewing this service's logs
       if (getPanel().id === 'services' && state.detailTabIndex === 1) {
-        const items = getFilteredItems();
-        const item = getSelectedItem(items);
-        if (item) {
-          const parts = item.id.split(':');
-          let itemKey = '';
-          if (parts[0] === 'project') {
-            itemKey = parts.slice(1).join(':');
-          } else if (parts[0] === 'service') {
-            itemKey = `${parts[1]}:${parts.slice(2).join(':')}`;
-          }
-          if (itemKey === key) {
-            renderDetailContent(items);
-          }
-        }
+        patchActiveComposeLogs(msg.projectName, msg.serviceName);
       }
       break;
     }

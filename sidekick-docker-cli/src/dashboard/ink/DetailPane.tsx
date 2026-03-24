@@ -2,14 +2,13 @@ import React from 'react';
 import { Box, Text } from 'ink';
 
 interface DetailPaneProps {
-  content: string;
+  lines: string[];
   scrollOffset: number;
   viewportHeight: number;
   focused: boolean;
 }
 
-export function DetailPane({ content, scrollOffset, viewportHeight, focused }: DetailPaneProps): React.ReactElement {
-  const lines = content.split('\n');
+export function DetailPane({ lines, scrollOffset, viewportHeight, focused }: DetailPaneProps): React.ReactElement {
   const visibleLines = lines.slice(scrollOffset, scrollOffset + viewportHeight);
   const hasScrollUp = scrollOffset > 0;
   const hasScrollDown = scrollOffset + viewportHeight < lines.length;

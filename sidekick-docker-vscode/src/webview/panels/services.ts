@@ -65,7 +65,8 @@ export const servicesPanel: PanelDefinition = {
         if (!entries || entries.length === 0) {
           return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the service produces output</div></div>';
         }
-        return `<div class="log-content">${entries.map(e => colorizeLogEntry(e)).join('')}</div>`;
+        const first = entries[0];
+        return `<div class="log-shell" data-log-root="compose" data-item-id="${escapeHtml(key)}" data-rendered-count="${entries.length}" data-first-key="${escapeHtml(`${first?.timestamp ?? ''}:${first?.stream ?? ''}:${first?.message ?? ''}`)}"><div class="log-content" data-log-content>${entries.map(e => colorizeLogEntry(e)).join('')}</div></div>`;
       },
       autoScrollBottom: true,
     },

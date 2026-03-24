@@ -71,6 +71,15 @@ export interface SerializedLogEntry {
   message: string;
 }
 
+export interface SerializedSeverityCounts {
+  error: number;
+  warn: number;
+  info: number;
+  debug: number;
+  other: number;
+  total: number;
+}
+
 export interface SerializedFilesystemChange {
   path: string;
   kind: 'added' | 'changed' | 'deleted';
@@ -99,7 +108,7 @@ export interface DashboardStateSnapshot {
 
 export type ExtensionMessage =
   | { type: 'updateState'; snapshot: DashboardStateSnapshot }
-  | { type: 'updateLogs'; containerId: string; entries: SerializedLogEntry[] }
+  | { type: 'updateLogs'; containerId: string; entries: SerializedLogEntry[]; severityCounts?: SerializedSeverityCounts }
   | { type: 'updateStats'; containerId: string; stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[]; networkRxRateHistory?: number[]; networkTxRateHistory?: number[]; blockReadRateHistory?: number[]; blockWriteRateHistory?: number[]; logSeveritySeries?: { severity: string; total: number }[] }
   | { type: 'updateEnv'; containerId: string; env: string[] }
   | { type: 'phraseBank'; phrases: string[] }
@@ -116,6 +125,7 @@ export type WebviewMessage =
   | { type: 'switchPanel'; panelIndex: number }
   | { type: 'selectItem'; panelId: string; itemId: string | null }
   | { type: 'switchDetailTab'; tabIndex: number }
+  | { type: 'sortChanged'; field: 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids'; reversed: boolean }
   | { type: 'action'; actionType: string; itemId: string; panelId: string }
   | { type: 'filterChange'; filter: string }
   | { type: 'execContainer'; containerId: string }

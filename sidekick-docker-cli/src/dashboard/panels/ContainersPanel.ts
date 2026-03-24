@@ -86,9 +86,7 @@ export class ContainersPanel implements SidePanel {
 
         const latest = metrics.statsCollector.getLatest(c.id);
         if (!latest) {
-          const frames = '\u280B\u2819\u2839\u2838\u283C\u2834\u2826\u2827';
-          const idx = Math.floor(Date.now() / 200) % frames.length;
-          return `${frames[idx]} Loading stats...`;
+          return 'Loading stats...';
         }
 
         const cpuSeries = metrics.statsCollector.getCpuSeries(c.id);

@@ -5,6 +5,19 @@ import { DockerService } from '../services/DockerService';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import { WebviewMessageSchema } from '../types/messageSchemas';
 
+type PanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
+
+const PANEL_IDS: PanelId[] = ['containers', 'services', 'images', 'volumes', 'networks'];
+const DEFAULT_VIEW_STATE = {
+  activePanelId: 'containers' as PanelId,
+  detailTabIndex: 0,
+  selectedItemId: null as string | null,
+  composeProjectName: null as string | null,
+  composeServiceName: null as string | null,
+  sortField: 'state' as const,
+  visible: true,
+};
+
 export class DockerDashboardProvider implements vscode.Disposable {
   private panel: vscode.WebviewPanel | undefined;
   private service: DockerService | undefined;
@@ -12,6 +25,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
   private extensionUri: vscode.Uri;
   private pendingFocusContainerId: string | null = null;
   private webviewReady = false;
+  private viewState = { ...DEFAULT_VIEW_STATE };
 
   constructor(extensionUri: vscode.Uri) {
     this.extensionUri = extensionUri;
@@ -47,6 +61,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
     );
 
     this.panel.webview.html = this._getHtmlForWebview(this.panel.webview);
+    this.viewState = { ...DEFAULT_VIEW_STATE, visible: this.panel.visible };
 
     this.panel.webview.onDidReceiveMessage(
       (raw: unknown) => {
@@ -61,6 +76,11 @@ export class DockerDashboardProvider implements vscode.Disposable {
       this._cleanup();
       this.panel = undefined;
     }, null, this.disposables);
+
+    this.panel.onDidChangeViewState(() => {
+      this.viewState.visible = this.panel?.visible ?? false;
+      void this.service?.setVisible(this.viewState.visible);
+    }, null, this.disposables);
   }
 
   private async _handleMessage(message: WebviewMessage): Promise<void> {
@@ -69,19 +89,44 @@ export class DockerDashboardProvider implements vscode.Disposable {
         await this._initializeService();
         break;
 
+      case 'switchPanel':
+        this.viewState.activePanelId = PANEL_IDS[message.panelIndex] ?? 'containers';
+        this.viewState.detailTabIndex = 0;
+        this.viewState.selectedItemId = null;
+        if (this.viewState.activePanelId !== 'services') {
+          this.viewState.composeProjectName = null;
+          this.viewState.composeServiceName = null;
+        }
+        this._syncServiceViewState();
+        break;
+
+      case 'switchDetailTab':
+        this.viewState.detailTabIndex = message.tabIndex;
+        this._syncServiceViewState();
+        break;
+
+      case 'sortChanged':
+        this.viewState.sortField = message.field;
+        this._syncServiceViewState();
+        break;
+
       case 'selectItem':
+        this.viewState.activePanelId = message.panelId as PanelId;
+        this.viewState.selectedItemId = message.itemId;
+        this.viewState.detailTabIndex = 0;
+        this._updateComposeSelection(message.panelId, message.itemId);
         if (message.panelId === 'containers') {
           await this.service?.selectContainer(message.itemId);
         } else if (message.panelId === 'images') {
-          await this.service?.selectContainer(null);
           await this.service?.selectImage(message.itemId);
-        } else {
-          await this.service?.selectContainer(null);
         }
+        this._syncServiceViewState();
         break;
 
       case 'selectComposeService':
-        await this.service?.selectComposeService(message.projectName, message.serviceName);
+        this.viewState.composeProjectName = message.projectName;
+        this.viewState.composeServiceName = message.serviceName;
+        this._syncServiceViewState();
         break;
 
       case 'action':
@@ -111,8 +156,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
       onStateChange: (snapshot) => {
         this._postMessage({ type: 'updateState', snapshot });
       },
-      onLogsChange: (containerId, entries) => {
-        this._postMessage({ type: 'updateLogs', containerId, entries });
+      onLogsChange: (containerId, entries, severityCounts) => {
+        this._postMessage({ type: 'updateLogs', containerId, entries, severityCounts });
       },
       onStatsChange: (data) => {
         this._postMessage({ type: 'updateStats', ...data });
@@ -157,6 +202,36 @@ export class DockerDashboardProvider implements vscode.Disposable {
       this._postMessage({ type: 'focusContainer', containerId: this.pendingFocusContainerId });
       this.pendingFocusContainerId = null;
     }
+
+    this.service.setViewState(this.viewState);
+    await this.service.setVisible(this.viewState.visible);
+  }
+
+  private _updateComposeSelection(panelId: string, itemId: string | null): void {
+    if (panelId !== 'services' || !itemId) {
+      this.viewState.composeProjectName = null;
+      this.viewState.composeServiceName = null;
+      return;
+    }
+
+    const parts = itemId.split(':');
+    if (parts[0] === 'project') {
+      this.viewState.composeProjectName = parts.slice(1).join(':');
+      this.viewState.composeServiceName = null;
+      return;
+    }
+    if (parts[0] === 'service') {
+      this.viewState.composeProjectName = parts[1] ?? null;
+      this.viewState.composeServiceName = parts.slice(2).join(':') || null;
+      return;
+    }
+
+    this.viewState.composeProjectName = null;
+    this.viewState.composeServiceName = null;
+  }
+
+  private _syncServiceViewState(): void {
+    this.service?.setViewState(this.viewState);
   }
 
   private async _handleAction(actionType: string, itemId: string, panelId: string): Promise<void> {
@@ -1139,6 +1214,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
     this.service = undefined;
     this.webviewReady = false;
     this.pendingFocusContainerId = null;
+    this.viewState = { ...DEFAULT_VIEW_STATE };
     for (const d of this.disposables) d.dispose();
     this.disposables = [];
   }
