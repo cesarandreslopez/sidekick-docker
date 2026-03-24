@@ -2,7 +2,7 @@
   "name": "sidekick-docker-vscode",
   "displayName": "Sidekick Docker",
   "description": "Docker management dashboard for VS Code",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "CesarAndresLopez",
   "engines": {
     "vscode": "^1.85.0"

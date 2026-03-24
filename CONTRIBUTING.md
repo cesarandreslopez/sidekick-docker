@@ -140,7 +140,7 @@ Look for issues labeled `good first issue` -- these are suitable for newcomers.
 ### Current Priorities
 
 - Test coverage improvements
-- New container actions (pause, unpause, attach)
+- New container actions (attach, inspect)
 - Remote Docker host support
 - Documentation and developer experience
 - Bug fixes

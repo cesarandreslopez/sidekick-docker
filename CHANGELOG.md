@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-03-24
+
+### Improved
+
+- Debounced log rendering with 100ms flush window, reducing re-renders during high-throughput log output
+- View-state-driven streaming — stats and log streams now activate based on which detail tab is visible and which sort field is active, instead of starting on every selection
+- VS Code extension stops all background streams when the dashboard webview is hidden, restarting on focus
+- Smart stream demand in VS Code: logs only stream on Containers panel, compose logs only on Services panel, stats only when the Stats tab is active or sorting by live metrics
+
+### Fixed
+
+- Add missing `zod` dependency to VS Code extension package for CI build
+
 ## [0.2.0] - 2026-03-14
 
 ### Added
@@ -288,6 +301,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.2.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.1
 [0.2.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.0
 [0.1.5]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.5
 [0.1.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.4

@@ -29,7 +29,7 @@ Switch between the five panels using number keys:
 
 - **`j`** / **`k`** — move up and down the list
 - **`Enter`** or **`Tab`** — focus the detail pane
-- **`[`** / **`]`** — cycle through detail tabs (Logs, Stats, Env, Config)
+- **`[`** / **`]`** — cycle through detail tabs (Logs, Stats, Env, Config, Files, Patterns)
 - **`Esc`** or **`h`** — back to the side list
 
 ## View Logs and Stats

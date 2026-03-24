@@ -54,7 +54,7 @@ npm run lint:fix           # Lint + auto-fix
 ## Areas for Contribution
 
 - Test coverage improvements
-- New container actions (pause, unpause, attach)
+- New container actions (attach, inspect)
 - Remote Docker host support
 - Documentation and developer experience
 - Bug fixes
