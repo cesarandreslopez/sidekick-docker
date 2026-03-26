@@ -83,6 +83,8 @@ The dashboard has 5 panels, each mapped to a number key:
 | `x` | Open context menu (actions for selected item) |
 | `f` | Open log filter (when on Logs tab) |
 | `/` | Open filter |
+| `m` | Pin/unpin item for log comparison (Containers/Services) |
+| `J` / `K` | Scroll compare pane (when in detail focus) |
 | `z` | Toggle expanded layout |
 | `?` | Show help overlay |
 | `V` | Show version |
@@ -112,6 +114,7 @@ The dashboard has 5 panels, each mapped to a number key:
 ## Features
 
 - **Real-time log streaming** — follows container logs with token-level syntax highlighting (HTTP methods, status codes, URLs, IPs, timestamps, JSON keys)
+- **Dual-log compare** — pin a second container or service with `m` to view both log streams side by side
 - **Log search & filter** — press `f` on the Logs tab to search within log output with exact or fuzzy matching and match highlighting
 - **Log analytics** — severity count badges, severity sparkline over time, and pattern clustering that groups similar logs into templates with `<*>` wildcards
 - **Live stats with sparklines** — CPU, memory, network I/O, block I/O, and log severity charted as inline sparklines (60-sample history)

@@ -6,6 +6,34 @@ All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-03-26
+
+### Added
+
+#### Dual-Log Compare Mode
+
+- Side-by-side log comparison — pin a second container or service to view both log streams simultaneously in left/right columns
+- `m` key pins/unpins a compare target on Containers and Services panels (CLI)
+- `Shift+J`/`Shift+K` scrolls the secondary (right) compare pane when in detail focus (CLI)
+- Pin button on side list items in VS Code extension (hover-visible) to toggle compare mode
+- Per-panel pin memory — each panel remembers its compare target independently when switching panels
+- Auto-clear compare when the selected item matches the pinned item
+- Log filter applies to both compare panes independently
+- Severity count badges shown per-pane in compare mode
+
+#### CLI
+
+- New `CompareDetailPane` component rendering two fixed-width log columns with ANSI-safe clipping
+- `clipAnsi()` utility for truncating ANSI-colored strings to a visible character width
+- Shared `renderLogLines()` helper extracted from panel log rendering, used by both primary and secondary panes
+- `m:Compare` contextual hint in status bar when on Logs tab
+
+#### VS Code Extension
+
+- Side-by-side CSS layout (`.log-compare-container`) with independently scrollable panes
+- `toggleCompareItem` webview→extension message with Zod schema validation
+- Secondary log and compose log stream lifecycle in `DockerService` (demand-driven, stops when not viewing Logs tab)
+
 ## [0.2.2] - 2026-03-24
 
 ### Fixed

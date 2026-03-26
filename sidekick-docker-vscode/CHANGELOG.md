@@ -5,6 +5,18 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-03-26
+
+### Added
+
+- **Dual-log compare mode** — pin a second container or service to view both log streams side by side in left/right columns
+- Pin button (hover-visible `📌`) on side list items to toggle compare mode
+- Side-by-side CSS layout with independently scrollable panes
+- Per-panel pin memory — each panel remembers its compare target independently
+- Auto-clear compare when the selected item matches the pinned item
+- `toggleCompareItem` webview→extension message with Zod schema validation
+- Secondary log and compose log stream lifecycle in `DockerService` (demand-driven)
+
 ## [0.2.2] - 2026-03-24
 
 ### Fixed
@@ -107,6 +119,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Container config detail view
 - Docker event watching for real-time state updates
 
+[0.2.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.3
 [0.2.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.2
 [0.2.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.1
 [0.2.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.0

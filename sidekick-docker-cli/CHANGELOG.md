@@ -5,6 +5,20 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.3] - 2026-03-26
+
+### Added
+
+- **Dual-log compare mode** — pin a second container or service with `m` to view both log streams side by side in left/right columns
+- `Shift+J`/`Shift+K` scrolls the secondary (right) compare pane when in detail focus
+- Per-panel pin memory — each panel remembers its compare target independently
+- Auto-clear compare when the selected item matches the pinned item
+- Pin indicator (`📌`) in side list for the compare target
+- `m:Compare` contextual hint in status bar when on Logs tab
+- New `CompareDetailPane` component with ANSI-safe column clipping
+- `clipAnsi()` utility for truncating ANSI-colored strings at visible character boundaries
+- Shared `renderLogLines()` helper extracted from panel log rendering
+
 ## [0.2.2] - 2026-03-24
 
 ### Fixed
@@ -129,6 +143,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sidekick-docker logs <container>` — stream container logs
 - `--socket <path>` flag for custom Docker socket
 
+[0.2.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.3
 [0.2.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.2
 [0.2.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.1
 [0.2.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.0

@@ -31,6 +31,8 @@ Logs are selection-driven — streaming starts when you select a container and s
 
 Matched text is highlighted and a match count is displayed. Press `Esc` to clear the filter.
 
+**Log compare** — press `m` on a container to pin it as a compare target. When a compare target is pinned and you're viewing the Logs tab, both log streams are displayed side by side in left/right columns. Each column scrolls independently (`j`/`k` for primary, `Shift+J`/`Shift+K` for secondary). Press `m` again on the pinned item to unpin. Each panel remembers its compare target independently.
+
 ### Stats
 
 Real-time CPU and memory usage rendered as sparkline charts. The stats collector maintains a 60-sample ring buffer, giving you a rolling view of resource usage.

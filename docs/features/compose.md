@@ -23,7 +23,7 @@ Service configuration details including image, ports, volumes, and environment v
 
 ### Logs
 
-Streamed logs for the selected service container.
+Streamed logs for the selected service container. Press `m` to pin a second service for side-by-side log comparison.
 
 ## Actions
 

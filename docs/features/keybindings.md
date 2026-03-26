@@ -32,6 +32,8 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `a` | Toggle all/running containers (Containers panel) |
 | `o` | Open sort menu (Containers panel) |
 | `R` | Reverse sort direction (Containers panel) |
+| `m` | Pin/unpin item for log comparison (Containers/Services) |
+| `J` / `K` | Scroll compare pane (when in detail focus) |
 | `z` | Cycle layout (Normal/Wide/Expanded) |
 | `?` | Show help overlay |
 | `V` | Show version |
