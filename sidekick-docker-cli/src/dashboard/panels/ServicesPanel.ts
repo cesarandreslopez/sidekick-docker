@@ -3,7 +3,7 @@ import { ComposeClient, filterLine } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { defaultOnError, panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { stateIcon, stateColor, truncate, colorizeDetailKey, colorizeState, colorizeId, colorizeLogEntry } from '../../formatters';
+import { stateIcon, stateColor, truncate, colorizeDetailKey, colorizeState, colorizeId, renderLogLines } from '../../formatters';
 
 type ServiceItemData =
   | { type: 'project'; project: ComposeProject }
@@ -69,7 +69,7 @@ export class ServicesPanel implements SidePanel {
       render: (_item, metrics) => {
         const logs = metrics.selectedComposeLogs;
         if (logs.length === 0) return 'No compose logs. Logs will appear when a service produces output.';
-        return logs.map(e => colorizeLogEntry(e)).join('\n');
+        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode).join('\n');
       },
       autoScrollBottom: true,
     },

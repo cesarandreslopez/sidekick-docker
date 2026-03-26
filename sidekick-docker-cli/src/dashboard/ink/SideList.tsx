@@ -14,6 +14,7 @@ interface SideListProps {
   panelId?: string;
   totalCount?: number;
   runningCount?: number;
+  compareItemId?: string;
 }
 
 const EMPTY_HINTS: Record<string, string[]> = {
@@ -24,7 +25,7 @@ const EMPTY_HINTS: Record<string, string[]> = {
   services: ['Start a compose project:', '  docker compose up -d'],
 };
 
-export function SideList({ items, selectedIndex, scrollOffset, focused, width, viewportHeight, panelTitle, filterString, panelId, totalCount, runningCount }: SideListProps): React.ReactElement {
+export function SideList({ items, selectedIndex, scrollOffset, focused, width, viewportHeight, panelTitle, filterString, panelId, totalCount, runningCount, compareItemId }: SideListProps): React.ReactElement {
   const hasScrollUp = scrollOffset > 0;
   const hasScrollDown = scrollOffset + viewportHeight < items.length;
   const aboveCount = scrollOffset;
@@ -65,7 +66,8 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
         const icon = segments[0] || '';
         const rest = segments.slice(1).join('');
 
-        const rightLabel = item.rightLabel || '';
+        const isPinned = compareItemId != null && item.id === compareItemId;
+        const rightLabel = isPinned ? `\u{1F4CC}${item.rightLabel ? ' ' + item.rightLabel : ''}` : (item.rightLabel || '');
         const rightLen = rightLabel.length;
 
         // Compute available width for left portion (prefix + icon + rest)

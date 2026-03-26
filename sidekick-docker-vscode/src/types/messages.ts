@@ -131,4 +131,5 @@ export type WebviewMessage =
   | { type: 'execContainer'; containerId: string }
   | { type: 'requestRefresh' }
   | { type: 'selectComposeService'; projectName: string; serviceName: string | null }
-  | { type: 'copyLogs'; text: string };
+  | { type: 'copyLogs'; text: string }
+  | { type: 'toggleCompareItem'; itemId: string | null; panelId: string };

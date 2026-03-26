@@ -19,6 +19,54 @@ function renderSeverityBadges(counts: SeverityCounts): string {
   return badges.join('');
 }
 
+function renderSingleLogPane(containerId: string, state: WebviewState, logRoot: string): string {
+  const entries = state.logs.get(containerId);
+  if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
+
+  const firstKey = `${entries[0]?.timestamp ?? ''}:${entries[0]?.stream ?? ''}:${entries[0]?.message ?? ''}`;
+  let html = `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeHtml(containerId)}" data-rendered-count="${entries.length}" data-first-key="${escapeHtml(firstKey)}">`;
+
+  const counts = state.logSeverityCounts.get(containerId);
+  html += `<div class="severity-counts" data-log-severity>${counts && counts.total > 0 ? renderSeverityBadges(counts) : ''}</div>`;
+
+  // Only show filter bar on primary pane
+  if (logRoot === 'container') {
+    html += `<div class="log-filter-bar">
+      <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeHtml(state.logFilterString)}" data-container-id="${escapeHtml(containerId)}" />
+      <span class="filter-mode" id="log-filter-mode" title="Click to toggle">${state.logFilterMode}</span>
+      <span class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</span>
+      <span class="match-count" data-log-match-count>`;
+  }
+
+  const query = state.logFilterString;
+  const mode = state.logFilterMode;
+  let filteredHtml = '';
+  let matchCount = 0;
+
+  if (query) {
+    for (const e of entries) {
+      const result = filterLine(e.message, query, mode);
+      if (result.matched) {
+        matchCount++;
+        filteredHtml += colorizeLogEntry(e, result.matches);
+      }
+    }
+    if (logRoot === 'container') html += `${matchCount} matches`;
+  } else {
+    for (const e of entries) {
+      filteredHtml += colorizeLogEntry(e);
+    }
+  }
+
+  if (logRoot === 'container') {
+    html += `</span></div>`;
+  }
+
+  html += `<div class="log-content" data-log-content>${filteredHtml || '<div style="padding:8px;color:var(--vscode-descriptionForeground)">No matching logs</div>'}</div>`;
+  html += `</div>`;
+  return html;
+}
+
 export const containersPanel: PanelDefinition = {
   id: 'containers',
   title: 'Containers',
@@ -28,48 +76,28 @@ export const containersPanel: PanelDefinition = {
     {
       label: 'Logs',
       render: (item: PanelItem, state: WebviewState): string => {
-        const entries = state.logs.get(item.id);
-        if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
+        const compareItemId = state.compareItemIds['containers'] ?? null;
 
-        let html = `<div class="log-shell" data-log-root="container" data-item-id="${escapeHtml(item.id)}" data-rendered-count="${entries.length}" data-first-key="${escapeHtml(`${entries[0]?.timestamp ?? ''}:${entries[0]?.stream ?? ''}:${entries[0]?.message ?? ''}`)}">`;
-
-        // Severity counts badges
-        const counts = state.logSeverityCounts.get(item.id);
-        html += `<div class="severity-counts" data-log-severity>${counts && counts.total > 0 ? renderSeverityBadges(counts) : ''}</div>`;
-
-        // Log filter bar
-        html += `<div class="log-filter-bar">
-          <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeHtml(state.logFilterString)}" data-container-id="${escapeHtml(item.id)}" />
-          <span class="filter-mode" id="log-filter-mode" title="Click to toggle">${state.logFilterMode}</span>
-          <span class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</span>
-          <span class="match-count" data-log-match-count>`;
-
-        // Apply log content filter
-        const query = state.logFilterString;
-        const mode = state.logFilterMode;
-        let filteredHtml = '';
-        let matchCount = 0;
-
-        if (query) {
-          for (const e of entries) {
-            const result = filterLine(e.message, query, mode);
-            if (result.matched) {
-              matchCount++;
-              filteredHtml += colorizeLogEntry(e, result.matches);
-            }
-          }
-          html += `${matchCount} matches`;
-        } else {
-          for (const e of entries) {
-            filteredHtml += colorizeLogEntry(e);
-          }
+        // Single-pane mode (no compare)
+        if (!compareItemId) {
+          return renderSingleLogPane(item.id, state, 'container');
         }
 
-        html += `</span></div>`;
-        html += `<div class="log-content" data-log-content>${filteredHtml || '<div style="padding:8px;color:var(--vscode-descriptionForeground)">No matching logs</div>'}</div>`;
-        html += `</div>`;
+        // Compare mode: side-by-side
+        const primaryName = state.snapshot?.containers.find(c => c.id === item.id)?.name ?? item.id.slice(0, 12);
+        const secondaryName = state.snapshot?.containers.find(c => c.id === compareItemId)?.name ?? compareItemId.slice(0, 12);
 
-        return html;
+        return `<div class="log-compare-container">
+          <div class="log-compare-pane" data-compare="primary">
+            <div class="compare-label">${escapeHtml(primaryName)}</div>
+            ${renderSingleLogPane(item.id, state, 'container')}
+          </div>
+          <div class="log-compare-divider"></div>
+          <div class="log-compare-pane" data-compare="secondary">
+            <div class="compare-label">${escapeHtml(secondaryName)}</div>
+            ${renderSingleLogPane(compareItemId, state, 'container-compare')}
+          </div>
+        </div>`;
       },
       autoScrollBottom: true,
     },

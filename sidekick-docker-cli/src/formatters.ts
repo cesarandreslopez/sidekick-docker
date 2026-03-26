@@ -1,5 +1,5 @@
-import type { LogEntry, SeverityLevel } from 'sidekick-docker-shared';
-import { tokenizeLogLine, formatTimestampTime } from 'sidekick-docker-shared';
+import type { LogEntry, SeverityLevel, FilterMode, SeverityCounts } from 'sidekick-docker-shared';
+import { tokenizeLogLine, formatTimestampTime, filterLine } from 'sidekick-docker-shared';
 import type { LogTokenType, FilterMatch } from 'sidekick-docker-shared';
 
 // Re-export pure formatters from shared package
@@ -244,4 +244,86 @@ export function stripCursorEscapes(text: string): string {
     .replace(/\x1b[78]/g, '')
     .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')
     .replace(/\r/g, '');
+}
+
+/**
+ * Render log entries into an array of colorized lines, applying an optional filter.
+ * Shared by primary and secondary log rendering.
+ */
+export function renderLogLines(
+  logs: LogEntry[],
+  filterString: string,
+  filterMode: FilterMode,
+  severityCounts?: SeverityCounts | null,
+): string[] {
+  const lines: string[] = [];
+
+  // Severity counts header
+  if (severityCounts && severityCounts.total > 0) {
+    const parts: string[] = [];
+    if (severityCounts.error > 0) parts.push(`\x1b[31mE:${severityCounts.error}\x1b[39m`);
+    if (severityCounts.warn > 0) parts.push(`\x1b[33mW:${severityCounts.warn}\x1b[39m`);
+    if (severityCounts.info > 0) parts.push(`\x1b[38;2;43;76;126mI:${severityCounts.info}\x1b[39m`);
+    if (severityCounts.debug > 0) parts.push(`\x1b[90mD:${severityCounts.debug}\x1b[39m`);
+    if (parts.length > 0) lines.push(parts.join('  '));
+  }
+
+  if (filterString) {
+    let matchCount = 0;
+    for (const l of logs) {
+      const result = filterLine(l.message, filterString, filterMode);
+      if (result.matched) {
+        matchCount++;
+        lines.push(colorizeLogEntry(l, result.matches));
+      }
+    }
+    if (lines.length <= (severityCounts ? 1 : 0)) {
+      lines.push(`\x1b[90mNo logs matching "${filterString}"\x1b[39m`);
+    } else {
+      const headerIdx = severityCounts ? 1 : 0;
+      lines.splice(headerIdx, 0, `\x1b[90m${matchCount} matches (f to filter, Tab to toggle mode)\x1b[39m`);
+    }
+  } else {
+    for (const l of logs) {
+      lines.push(colorizeLogEntry(l));
+    }
+  }
+
+  return lines;
+}
+
+/**
+ * Clip an ANSI-colored string to a maximum visible width.
+ * Preserves escape sequences, truncates at visible character boundary, pads if shorter.
+ */
+export function clipAnsi(str: string, maxWidth: number): string {
+  let visible = 0;
+  let i = 0;
+  let result = '';
+
+  while (i < str.length && visible < maxWidth) {
+    if (str[i] === '\x1b') {
+      // Consume entire ANSI escape sequence
+      const start = i;
+      i++; // skip ESC
+      if (i < str.length && str[i] === '[') {
+        i++;
+        while (i < str.length && str[i] !== 'm' && !/[A-Za-z]/.test(str[i])) i++;
+        if (i < str.length) i++; // skip terminator
+      }
+      result += str.slice(start, i);
+    } else {
+      result += str[i];
+      visible++;
+      i++;
+    }
+  }
+
+  // Reset any open ANSI sequences and pad
+  if (visible < maxWidth) {
+    result += ' '.repeat(maxWidth - visible);
+  }
+  result += '\x1b[0m';
+
+  return result;
 }

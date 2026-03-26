@@ -40,6 +40,9 @@ export interface DashboardUIState {
   sortField: SortField;
   sortReversed: boolean;
   sortMenuIndex: number;
+  /** Per-panel pinned item IDs for compare mode, keyed by panel ID. */
+  compareItemIds: Record<string, string | null>;
+  secondaryDetailScrollOffset: number;
 }
 
 export type Action =
@@ -67,4 +70,7 @@ export type Action =
   | { type: 'TOGGLE_SHOW_ALL' }
   | { type: 'SET_SORT_FIELD'; field: SortField }
   | { type: 'TOGGLE_SORT_REVERSE' }
-  | { type: 'SORT_MENU_NAV'; delta: number };
+  | { type: 'SORT_MENU_NAV'; delta: number }
+  | { type: 'PIN_COMPARE'; panelId: string; itemId: string }
+  | { type: 'SCROLL_SECONDARY_DETAIL'; offset: number }
+  | { type: 'SCROLL_SECONDARY_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number };

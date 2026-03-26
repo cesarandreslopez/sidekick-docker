@@ -24,6 +24,8 @@ export interface DockerDashboardMetrics {
   imageLayers: Map<string, ImageLayer[]>;
   selectedContainerLogs: LogEntry[];
   selectedComposeLogs: LogEntry[];
+  secondaryContainerLogs: LogEntry[];
+  secondaryComposeLogs: LogEntry[];
   lastRefresh: Date | null;
   daemonConnected: boolean;
   logFilterString: string;
@@ -31,6 +33,8 @@ export interface DockerDashboardMetrics {
   logSeverityCounts: SeverityCounts | null;
   logSeverityTimeSeries: { severity: SeverityLevel; total: number }[];
   logTemplates: LogTemplate[];
+  secondaryLogSeverityCounts: SeverityCounts | null;
+  secondaryLogSeverityTimeSeries: { severity: SeverityLevel; total: number }[];
 }
 
 export class DockerState {
@@ -47,6 +51,8 @@ export class DockerState {
   private composeProjects: ComposeProject[] = [];
   private selectedLogs: LogEntry[] = [];
   private selectedComposeLogs: LogEntry[] = [];
+  private secondaryLogs: LogEntry[] = [];
+  private secondaryComposeLogs: LogEntry[] = [];
   private inspectedEnv = new Map<string, string[]>();
   private containerChanges = new Map<string, FilesystemChange[]>();
   private imageLayers = new Map<string, ImageLayer[]>();
@@ -184,6 +190,22 @@ export class DockerState {
     this.selectedComposeLogs = [];
   }
 
+  setSecondaryLogs(logs: LogEntry[]): void {
+    this.secondaryLogs = logs;
+  }
+
+  clearSecondaryLogs(): void {
+    this.secondaryLogs = [];
+  }
+
+  setSecondaryComposeLogs(logs: LogEntry[]): void {
+    this.secondaryComposeLogs = logs;
+  }
+
+  clearSecondaryComposeLogs(): void {
+    this.secondaryComposeLogs = [];
+  }
+
   getStatsCollector(): StatsCollector {
     return this.statsCollector;
   }
@@ -225,6 +247,8 @@ export class DockerState {
       imageLayers: this.imageLayers,
       selectedContainerLogs: [...this.selectedLogs],
       selectedComposeLogs: [...this.selectedComposeLogs],
+      secondaryContainerLogs: [...this.secondaryLogs],
+      secondaryComposeLogs: [...this.secondaryComposeLogs],
       lastRefresh: this.lastRefresh,
       daemonConnected: this.daemonConnected,
       logFilterString: '',
@@ -232,6 +256,8 @@ export class DockerState {
       logSeverityCounts: null,
       logSeverityTimeSeries: [],
       logTemplates: [],
+      secondaryLogSeverityCounts: null,
+      secondaryLogSeverityTimeSeries: [],
     };
   }
 }

@@ -3,7 +3,7 @@ import { DockerClient, filterLine, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { defaultOnError, panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeLogEntry, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, coloredSparkline, severitySparkline } from '../../formatters';
+import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
 
 export class ContainersPanel implements SidePanel {
   readonly id = 'containers';
@@ -34,47 +34,10 @@ export class ContainersPanel implements SidePanel {
   readonly detailTabs: DetailTab[] = [
     {
       label: 'Logs',
-      render: (item, metrics) => {
+      render: (_item, metrics) => {
         const logs = metrics.selectedContainerLogs;
         if (logs.length === 0) return 'No logs available. Select a container to view logs.';
-
-        const lines: string[] = [];
-
-        // Severity counts header
-        if (metrics.logSeverityCounts && metrics.logSeverityCounts.total > 0) {
-          const c = metrics.logSeverityCounts;
-          const parts: string[] = [];
-          if (c.error > 0) parts.push(`\x1b[31mE:${c.error}\x1b[39m`);
-          if (c.warn > 0) parts.push(`\x1b[33mW:${c.warn}\x1b[39m`);
-          if (c.info > 0) parts.push(`\x1b[38;2;43;76;126mI:${c.info}\x1b[39m`);
-          if (c.debug > 0) parts.push(`\x1b[90mD:${c.debug}\x1b[39m`);
-          if (parts.length > 0) lines.push(parts.join('  '));
-        }
-
-        // Apply log content filter
-        const query = metrics.logFilterString;
-        const mode = metrics.logFilterMode;
-        if (query) {
-          let matchCount = 0;
-          for (const l of logs) {
-            const result = filterLine(l.message, query, mode);
-            if (result.matched) {
-              matchCount++;
-              lines.push(colorizeLogEntry(l, result.matches));
-            }
-          }
-          if (lines.length <= 1) {
-            lines.push(`\x1b[90mNo logs matching "${query}"\x1b[39m`);
-          } else {
-            lines.splice(1, 0, `\x1b[90m${matchCount} matches (f to filter, Tab to toggle mode)\x1b[39m`);
-          }
-        } else {
-          for (const l of logs) {
-            lines.push(colorizeLogEntry(l));
-          }
-        }
-
-        return lines.join('\n');
+        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode, metrics.logSeverityCounts).join('\n');
       },
       autoScrollBottom: true,
     },

@@ -69,6 +69,9 @@ export interface DashboardViewState {
   composeServiceName: string | null;
   sortField: 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids';
   visible: boolean;
+  compareItemId: string | null;
+  compareComposeProjectName: string | null;
+  compareComposeServiceName: string | null;
 }
 
 export class DockerService {
@@ -109,6 +112,19 @@ export class DockerService {
   private composeLogs: LogEntry[] = [];
   private composeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Secondary log streaming (compare mode)
+  private secondaryLogContainerId: string | null = null;
+  private secondaryLogAborted = false;
+  private secondaryLogs: LogEntry[] = [];
+  private secondaryLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  // Secondary compose log streaming (compare mode)
+  private secondaryComposeLogProject: string | null = null;
+  private secondaryComposeLogService: string | null = null;
+  private secondaryComposeLogAborted = false;
+  private secondaryComposeLogs: LogEntry[] = [];
+  private secondaryComposeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private callbacks: DockerServiceCallbacks;
@@ -123,6 +139,9 @@ export class DockerService {
     composeServiceName: null,
     sortField: 'state',
     visible: true,
+    compareItemId: null,
+    compareComposeProjectName: null,
+    compareComposeServiceName: null,
   };
 
   constructor(callbacks: DockerServiceCallbacks, socketPath?: string) {
@@ -160,6 +179,8 @@ export class DockerService {
       this.stopLogStream();
       this.stopStatsStream();
       this.stopComposeLogStream();
+      this.stopSecondaryLogStream();
+      this.stopSecondaryComposeLogStream();
       return;
     }
 
@@ -301,6 +322,8 @@ export class DockerService {
       this.stopLogStream();
       this.stopStatsStream();
       this.stopComposeLogStream();
+      this.stopSecondaryLogStream();
+      this.stopSecondaryComposeLogStream();
       return;
     }
 
@@ -315,11 +338,20 @@ export class DockerService {
       && this.viewState.detailTabIndex === 1
       && this.viewState.composeProjectName !== null;
 
+    // Secondary compare streams: only when on Logs tab and a compare item is pinned
+    const wantsSecondaryContainerLogs = wantsContainerLogs && this.viewState.compareItemId !== null;
+    const wantsSecondaryComposeLogs = wantsComposeLogs && this.viewState.compareComposeProjectName !== null;
+
     this.ensureLogStream(wantsContainerLogs ? selectedItemId : null);
     this.ensureStatsStream(wantsContainerStats ? selectedItemId : null);
     this.ensureComposeLogStream(
       wantsComposeLogs ? this.viewState.composeProjectName : null,
       wantsComposeLogs ? this.viewState.composeServiceName : null,
+    );
+    this.ensureSecondaryLogStream(wantsSecondaryContainerLogs ? this.viewState.compareItemId : null);
+    this.ensureSecondaryComposeLogStream(
+      wantsSecondaryComposeLogs ? this.viewState.compareComposeProjectName : null,
+      wantsSecondaryComposeLogs ? this.viewState.compareComposeServiceName : null,
     );
   }
 
@@ -507,6 +539,122 @@ export class DockerService {
     }
   }
 
+  // ─── Secondary log streaming (compare mode) ──────────────────────
+
+  private ensureSecondaryLogStream(containerId: string | null): void {
+    if (containerId === this.secondaryLogContainerId) return;
+    this.stopSecondaryLogStream();
+    if (!containerId) return;
+
+    this.secondaryLogContainerId = containerId;
+    this.secondaryLogAborted = false;
+    this.secondaryLogs = [];
+    void this.streamSecondaryLogs(containerId);
+  }
+
+  private async streamSecondaryLogs(containerId: string): Promise<void> {
+    try {
+      for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 })) {
+        if (this.secondaryLogAborted || this.secondaryLogContainerId !== containerId) break;
+        this.secondaryLogs.push(entry);
+        if (this.secondaryLogs.length > MAX_LOG_LINES) this.secondaryLogs.shift();
+        this.scheduleSecondaryLogFlush(containerId);
+      }
+      this.flushSecondaryLogs(containerId);
+    } catch { /* stream ended */ }
+  }
+
+  private stopSecondaryLogStream(): void {
+    if (this.secondaryLogContainerId) {
+      this.flushSecondaryLogs(this.secondaryLogContainerId);
+    }
+    this.secondaryLogAborted = true;
+    this.secondaryLogContainerId = null;
+    this.secondaryLogs = [];
+    if (this.secondaryLogFlushTimer) {
+      clearTimeout(this.secondaryLogFlushTimer);
+      this.secondaryLogFlushTimer = null;
+    }
+  }
+
+  private scheduleSecondaryLogFlush(containerId: string): void {
+    if (this.secondaryLogFlushTimer || this.disposed) return;
+    this.secondaryLogFlushTimer = setTimeout(() => {
+      this.secondaryLogFlushTimer = null;
+      this.flushSecondaryLogs(containerId);
+    }, 100);
+  }
+
+  private flushSecondaryLogs(containerId: string): void {
+    if (this.disposed || this.secondaryLogContainerId !== containerId) return;
+    const analytics = new LogAnalytics();
+    for (const entry of this.secondaryLogs) {
+      analytics.push(entry.message);
+    }
+    // Reuse the same onLogsChange callback — secondary logs land in the webview's
+    // logs map under the compare container's ID, just like primary logs.
+    this.callbacks.onLogsChange(
+      containerId,
+      this.secondaryLogs.map(serializeLogEntry),
+      analytics.getCounts(),
+    );
+  }
+
+  private ensureSecondaryComposeLogStream(projectName: string | null, serviceName: string | null): void {
+    if (projectName === this.secondaryComposeLogProject && serviceName === this.secondaryComposeLogService) return;
+    this.stopSecondaryComposeLogStream();
+    if (!projectName) return;
+
+    this.secondaryComposeLogProject = projectName;
+    this.secondaryComposeLogService = serviceName;
+    this.secondaryComposeLogAborted = false;
+    this.secondaryComposeLogs = [];
+    void this.streamSecondaryComposeLogs(projectName, serviceName);
+  }
+
+  private async streamSecondaryComposeLogs(projectName: string, serviceName: string | null): Promise<void> {
+    try {
+      for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined)) {
+        if (this.secondaryComposeLogAborted || this.secondaryComposeLogProject !== projectName) break;
+        this.secondaryComposeLogs.push(entry);
+        if (this.secondaryComposeLogs.length > MAX_LOG_LINES) this.secondaryComposeLogs.shift();
+        this.scheduleSecondaryComposeLogFlush(projectName, serviceName);
+      }
+      this.flushSecondaryComposeLogs(projectName, serviceName);
+    } catch { /* stream ended */ }
+  }
+
+  private stopSecondaryComposeLogStream(): void {
+    if (this.secondaryComposeLogProject) {
+      this.flushSecondaryComposeLogs(this.secondaryComposeLogProject, this.secondaryComposeLogService);
+    }
+    this.secondaryComposeLogAborted = true;
+    this.secondaryComposeLogProject = null;
+    this.secondaryComposeLogService = null;
+    this.secondaryComposeLogs = [];
+    if (this.secondaryComposeLogFlushTimer) {
+      clearTimeout(this.secondaryComposeLogFlushTimer);
+      this.secondaryComposeLogFlushTimer = null;
+    }
+  }
+
+  private scheduleSecondaryComposeLogFlush(projectName: string, serviceName: string | null): void {
+    if (this.secondaryComposeLogFlushTimer || this.disposed) return;
+    this.secondaryComposeLogFlushTimer = setTimeout(() => {
+      this.secondaryComposeLogFlushTimer = null;
+      this.flushSecondaryComposeLogs(projectName, serviceName);
+    }, 100);
+  }
+
+  private flushSecondaryComposeLogs(projectName: string, serviceName: string | null): void {
+    if (this.disposed || this.secondaryComposeLogProject !== projectName || this.secondaryComposeLogService !== serviceName) return;
+    this.callbacks.onComposeLogs(
+      projectName,
+      serviceName,
+      this.secondaryComposeLogs.map(serializeLogEntry),
+    );
+  }
+
   private scheduleLogFlush(containerId: string): void {
     if (this.logFlushTimer || this.disposed) return;
     this.logFlushTimer = setTimeout(() => {
@@ -657,6 +805,8 @@ export class DockerService {
     this.stopLogStream();
     this.stopStatsStream();
     this.stopComposeLogStream();
+    this.stopSecondaryLogStream();
+    this.stopSecondaryComposeLogStream();
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.stopLiveInfrastructure();
     this.client.dispose();

@@ -27,6 +27,7 @@ interface KeyboardContext {
   addToast: (message: string, severity: ToastSeverity, duration?: number) => number;
   removeToast: (id: number) => void;
   rotatePhrase: () => void;
+  secondaryDetailLineCount: number;
 }
 
 function isPromise(value: unknown): value is Promise<void> {
@@ -100,7 +101,7 @@ function handleFilterInput(
 
 export function useKeyboardHandler(ctx: KeyboardContext): void {
   const { exit } = useApp();
-  const { state, dispatch, panels, panel, selectedItem, contextActions, clampedSelection, currentItems, detailLines, detailViewportHeight, detailTabs, tabIdx, panelActions, sideScroll, addToast, removeToast, rotatePhrase } = ctx;
+  const { state, dispatch, panels, panel, selectedItem, contextActions, clampedSelection, currentItems, detailLines, detailViewportHeight, detailTabs, tabIdx, panelActions, sideScroll, addToast, removeToast, rotatePhrase, secondaryDetailLineCount } = ctx;
 
   useInput((input, key) => {
     if (state.overlay === 'exec') return;
@@ -296,6 +297,21 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
       return;
     }
 
+    // Pin/unpin compare item
+    if (input === 'm' && selectedItem && (panel.id === 'containers' || panel.id === 'services')) {
+      const currentCompare = state.compareItemIds[panel.id] ?? null;
+      if (currentCompare === selectedItem.id) {
+        // Unpin
+        dispatch({ type: 'PIN_COMPARE', panelId: panel.id, itemId: selectedItem.id });
+        addToast('Unpinned comparison', 'info');
+      } else {
+        dispatch({ type: 'PIN_COMPARE', panelId: panel.id, itemId: selectedItem.id });
+        const label = selectedItem.label.replace(/^[^\w]*/, '').trim();
+        addToast(`Pinned ${label} for comparison`, 'info');
+      }
+      return;
+    }
+
     if (input === 'x') {
       if (selectedItem && panelActions.length > 0) {
         dispatch({ type: 'SET_OVERLAY', overlay: 'context-menu' });
@@ -345,6 +361,15 @@ export function useKeyboardHandler(ctx: KeyboardContext): void {
     }
 
     if (state.focusTarget === 'detail') {
+      // Shift+J/K: scroll secondary compare pane
+      if (input === 'J' && secondaryDetailLineCount > 0) {
+        dispatch({ type: 'SCROLL_SECONDARY_DETAIL_DELTA', delta: 1, totalLines: secondaryDetailLineCount, viewportHeight: detailViewportHeight });
+        return;
+      }
+      if (input === 'K' && secondaryDetailLineCount > 0) {
+        dispatch({ type: 'SCROLL_SECONDARY_DETAIL_DELTA', delta: -1, totalLines: secondaryDetailLineCount, viewportHeight: detailViewportHeight });
+        return;
+      }
       if (input === 'j' || key.downArrow) {
         dispatch({ type: 'SCROLL_DETAIL_DELTA', delta: 1, totalLines: detailLines.length, viewportHeight: detailViewportHeight });
         return;

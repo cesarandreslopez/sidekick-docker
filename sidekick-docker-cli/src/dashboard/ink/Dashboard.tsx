@@ -10,6 +10,7 @@ import { TabBar } from './TabBar';
 import { SideList } from './SideList';
 import { DetailTabBar } from './DetailTabBar';
 import { DetailPane } from './DetailPane';
+import { CompareDetailPane } from './CompareDetailPane';
 import { StatusBar } from './StatusBar';
 import type { ActionHint } from './StatusBar';
 import { HelpOverlay } from './HelpOverlay';
@@ -26,7 +27,7 @@ import { VersionOverlay } from './VersionOverlay';
 import { SortOverlay } from './SortOverlay';
 import { getRandomPhrase } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
-import { stripCursorEscapes } from '../../formatters';
+import { stripCursorEscapes, renderLogLines } from '../../formatters';
 import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
 
 const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
@@ -56,7 +57,7 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
         detailScrollPerTab: {},
       };
     case 'SELECT_ITEM':
-      return { ...state, selectedItemIndex: action.index, detailTabIndex: 0, detailScrollOffset: 0, detailScrollPerTab: {} };
+      return { ...state, selectedItemIndex: action.index, detailTabIndex: 0, detailScrollOffset: 0, detailScrollPerTab: {}, secondaryDetailScrollOffset: 0 };
     case 'SET_DETAIL_TAB': {
       const saved = { ...state.detailScrollPerTab, [state.detailTabIndex]: state.detailScrollOffset };
       return { ...state, detailTabIndex: action.index, detailScrollOffset: saved[action.index] ?? 0, detailScrollPerTab: saved };
@@ -135,6 +136,22 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
       const next = (state.sortMenuIndex + action.delta + SORT_FIELDS.length) % SORT_FIELDS.length;
       return { ...state, sortMenuIndex: next };
     }
+    case 'PIN_COMPARE': {
+      const current = state.compareItemIds[action.panelId] ?? null;
+      const newId = current === action.itemId ? null : action.itemId;
+      return {
+        ...state,
+        compareItemIds: { ...state.compareItemIds, [action.panelId]: newId },
+        secondaryDetailScrollOffset: 0,
+      };
+    }
+    case 'SCROLL_SECONDARY_DETAIL':
+      return { ...state, secondaryDetailScrollOffset: action.offset };
+    case 'SCROLL_SECONDARY_DETAIL_DELTA': {
+      const maxOffset = Math.max(0, action.totalLines - action.viewportHeight);
+      const next = Math.max(0, Math.min(state.secondaryDetailScrollOffset + action.delta, maxOffset));
+      return { ...state, secondaryDetailScrollOffset: next };
+    }
     default:
       return state;
   }
@@ -164,6 +181,8 @@ const initialState: DashboardUIState = {
   sortField: 'state' as SortField,
   sortReversed: false,
   sortMenuIndex: 0,
+  compareItemIds: {},
+  secondaryDetailScrollOffset: 0,
 };
 
 interface DashboardProps {
@@ -179,6 +198,7 @@ export interface DashboardViewState {
   itemId: string | null;
   detailTabIndex: number;
   sortField: SortField;
+  compareItemId: string | null;
 }
 
 export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback }: DashboardProps): React.ReactElement {
@@ -367,15 +387,26 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const detailTabs = panel.detailTabs;
   const tabIdx = Math.min(state.detailTabIndex, detailTabs.length - 1);
 
+  const compareItemId = state.compareItemIds[panel.id] ?? null;
+
+  // Auto-clear compare when selected item equals pinned item
+  useEffect(() => {
+    if (compareItemId && selectedItem?.id === compareItemId) {
+      dispatch({ type: 'PIN_COMPARE', panelId: panel.id, itemId: compareItemId });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedItem?.id, compareItemId, panel.id]);
+
   useEffect(() => {
     onViewStateChange?.({
       panelId: panel.id,
       itemId: selectedItem?.id ?? null,
       detailTabIndex: tabIdx,
       sortField: state.sortField,
+      compareItemId,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panel.id, selectedItem?.id, tabIdx, state.sortField]);
+  }, [panel.id, selectedItem?.id, tabIdx, state.sortField, compareItemId]);
 
   // Merge log filter UI state into metrics for panel render functions
   const enrichedMetrics = {
@@ -402,6 +433,37 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       dispatch({ type: 'SCROLL_DETAIL', offset: detailLines.length - detailViewportHeight });
     }
   }, [shouldAutoScroll, detailLines.length, detailViewportHeight]);
+
+  // Compare mode: compute secondary log lines
+  const isCompareActive = compareItemId != null && shouldAutoScroll;
+  const secondaryDetailLines = React.useMemo(() => {
+    if (!isCompareActive) return [];
+    if (panel.id === 'containers') {
+      const logs = enrichedMetrics.secondaryContainerLogs;
+      if (logs.length === 0) return ['Waiting for logs...'];
+      return renderLogLines(logs, state.logFilterString, state.logFilterMode, enrichedMetrics.secondaryLogSeverityCounts);
+    }
+    if (panel.id === 'services') {
+      const logs = enrichedMetrics.secondaryComposeLogs;
+      if (logs.length === 0) return ['Waiting for logs...'];
+      return renderLogLines(logs, state.logFilterString, state.logFilterMode);
+    }
+    return [];
+  }, [isCompareActive, panel.id, enrichedMetrics.secondaryContainerLogs, enrichedMetrics.secondaryComposeLogs, enrichedMetrics.secondaryLogSeverityCounts, state.logFilterString, state.logFilterMode]);
+
+  // Auto-scroll secondary pane
+  useEffect(() => {
+    if (isCompareActive && secondaryDetailLines.length > detailViewportHeight) {
+      dispatch({ type: 'SCROLL_SECONDARY_DETAIL', offset: secondaryDetailLines.length - detailViewportHeight });
+    }
+  }, [isCompareActive, secondaryDetailLines.length, detailViewportHeight]);
+
+  // Find the compare item's label for the pane header
+  const compareItemLabel = React.useMemo(() => {
+    if (!compareItemId) return '';
+    const item = currentItems.find(it => it.id === compareItemId);
+    return item ? item.label.replace(/^[^\w]*/, '').trim() : compareItemId.slice(0, 12);
+  }, [compareItemId, currentItems]);
 
   // Panel actions — computed once, used by context menu, keyboard handler, and status bar
   const panelActions = panel.getActions();
@@ -436,6 +498,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     state, dispatch, panels, panel, selectedItem, contextActions,
     clampedSelection, currentItems, detailLines, detailViewportHeight,
     detailTabs, tabIdx, panelActions, sideScroll, addToast, removeToast, rotatePhrase,
+    secondaryDetailLineCount: secondaryDetailLines.length,
   });
 
   // Render
@@ -454,9 +517,16 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const contextHint = (() => {
     if (panel.id === 'containers') {
       const parts: string[] = [];
-      if (tabIdx === 0) parts.push('f:Filter', 'c:Copy');
+      if (tabIdx === 0) {
+        parts.push('f:Filter', 'c:Copy', 'm:Compare');
+      }
       parts.push(state.showAllContainers ? 'a:All' : 'a:Running');
       parts.push(`o:\u2195${state.sortField}`);
+      return parts.join('  ');
+    }
+    if (panel.id === 'services') {
+      const parts: string[] = [];
+      if (tabIdx === 1) parts.push('m:Compare');
       return parts.join('  ');
     }
     return '';
@@ -484,16 +554,31 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                 panelId={panel.id}
                 totalCount={totalItemCount}
                 runningCount={panel.id === 'containers' ? runningCount : undefined}
+                compareItemId={compareItemId || undefined}
               />
             )}
             <Box flexDirection="column" flexGrow={1}>
               <DetailTabBar tabs={detailTabs} activeIndex={state.detailTabIndex} />
-              <DetailPane
-                lines={detailLines}
-                scrollOffset={state.detailScrollOffset}
-                viewportHeight={detailViewportHeight}
-                focused={state.focusTarget === 'detail'}
-              />
+              {isCompareActive ? (
+                <CompareDetailPane
+                  primaryLines={detailLines}
+                  secondaryLines={secondaryDetailLines}
+                  primaryScrollOffset={state.detailScrollOffset}
+                  secondaryScrollOffset={state.secondaryDetailScrollOffset}
+                  viewportHeight={detailViewportHeight}
+                  totalWidth={columns - sideWidth}
+                  focused={state.focusTarget === 'detail'}
+                  primaryLabel={selectedItem?.label.replace(/^[^\w]*/, '').trim() ?? ''}
+                  secondaryLabel={compareItemLabel}
+                />
+              ) : (
+                <DetailPane
+                  lines={detailLines}
+                  scrollOffset={state.detailScrollOffset}
+                  viewportHeight={detailViewportHeight}
+                  focused={state.focusTarget === 'detail'}
+                />
+              )}
             </Box>
           </Box>
         )}

@@ -58,6 +58,9 @@ export interface WebviewState {
   // Layout
   layoutMode: LayoutMode;
 
+  // Compare mode
+  compareItemIds: Record<string, string | null>;
+
   // Overlay state
   confirmVisible: boolean;
   confirmMessage: string;
@@ -102,5 +105,6 @@ export function createInitialState(): WebviewState {
     contextMenuIndex: 0,
     helpOverlayVisible: false,
     versionOverlayVisible: false,
+    compareItemIds: {},
   };
 }

@@ -21,4 +21,5 @@ export const WebviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('requestRefresh') }),
   z.object({ type: z.literal('selectComposeService'), projectName: z.string(), serviceName: z.string().nullable() }),
   z.object({ type: z.literal('copyLogs'), text: z.string() }),
+  z.object({ type: z.literal('toggleCompareItem'), itemId: z.string().nullable(), panelId: z.string() }),
 ]);

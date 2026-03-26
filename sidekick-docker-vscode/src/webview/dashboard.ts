@@ -321,9 +321,15 @@ function renderSideList(items: PanelItem[]): void {
       lastGroup = item.group;
     }
     const selected = item.id === state.selectedItemId ? ' selected' : '';
+    const panelId = getPanel().id;
+    const isPinned = state.compareItemIds[panelId] === item.id;
+    const pinClass = isPinned ? ' pinned' : '';
     const iconHtml = item.icon ? `<span style="color:${item.iconColor};margin-right:4px;flex-shrink:0;">${item.icon}</span>` : '';
     const badgeHtml = item.badge ? `<span class="side-badge">${escapeHtml(item.badge)}</span>` : '';
-    html += `<div class="side-item${selected}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${badgeHtml}</div>`;
+    const pinBtnHtml = (panelId === 'containers' || panelId === 'services')
+      ? `<span class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}">\u{1F4CC}</span>`
+      : '';
+    html += `<div class="side-item${selected}${pinClass}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${pinBtnHtml}${badgeHtml}</div>`;
   }
   $sideList.innerHTML = html;
 
@@ -332,6 +338,21 @@ function renderSideList(items: PanelItem[]): void {
     el.addEventListener('click', () => {
       const id = (el as HTMLElement).dataset.id;
       if (id !== undefined) selectItem(id, getFilteredItems());
+    });
+  });
+
+  // Pin button click handlers
+  $sideList.querySelectorAll('.pin-btn').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation(); // Don't trigger the parent side-item click
+      const id = (el as HTMLElement).dataset.pinId;
+      if (id !== undefined) {
+        const panelId = getPanel().id;
+        const current = state.compareItemIds[panelId] ?? null;
+        state.compareItemIds[panelId] = current === id ? null : id;
+        post({ type: 'toggleCompareItem', itemId: state.compareItemIds[panelId], panelId });
+        renderAll();
+      }
     });
   });
 

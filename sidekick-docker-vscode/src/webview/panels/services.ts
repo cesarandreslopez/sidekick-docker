@@ -3,6 +3,25 @@ import type { DashboardStateSnapshot } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { stateIcon, stateColor, escapeHtml, colorizeState, colorizeId, renderKvGrid, colorizeLogEntry } from '../formatters';
 
+function getComposeLogKey(itemId: string): string {
+  const parts = itemId.split(':');
+  if (parts[0] === 'project') return parts.slice(1).join(':');
+  if (parts[0] === 'service') return `${parts[1]}:${parts.slice(2).join(':')}`;
+  return '';
+}
+
+function renderComposeLogPane(itemId: string, state: WebviewState, logRoot: string): string {
+  const key = getComposeLogKey(itemId);
+  if (!key) return 'Select a project or service to view logs.';
+
+  const entries = state.composeLogs.get(key);
+  if (!entries || entries.length === 0) {
+    return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the service produces output</div></div>';
+  }
+  const first = entries[0];
+  return `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeHtml(key)}" data-rendered-count="${entries.length}" data-first-key="${escapeHtml(`${first?.timestamp ?? ''}:${first?.stream ?? ''}:${first?.message ?? ''}`)}"><div class="log-content" data-log-content>${entries.map(e => colorizeLogEntry(e)).join('')}</div></div>`;
+}
+
 export const servicesPanel: PanelDefinition = {
   id: 'services',
   title: 'Services',
@@ -52,21 +71,27 @@ export const servicesPanel: PanelDefinition = {
     {
       label: 'Logs',
       render: (item: PanelItem, state: WebviewState): string => {
-        const parts = item.id.split(':');
-        let key = '';
-        if (parts[0] === 'project') {
-          key = parts.slice(1).join(':');
-        } else if (parts[0] === 'service') {
-          key = `${parts[1]}:${parts.slice(2).join(':')}`;
-        }
-        if (!key) return 'Select a project or service to view logs.';
+        const compareItemId = state.compareItemIds['services'] ?? null;
 
-        const entries = state.composeLogs.get(key);
-        if (!entries || entries.length === 0) {
-          return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the service produces output</div></div>';
+        if (!compareItemId) {
+          return renderComposeLogPane(item.id, state, 'compose');
         }
-        const first = entries[0];
-        return `<div class="log-shell" data-log-root="compose" data-item-id="${escapeHtml(key)}" data-rendered-count="${entries.length}" data-first-key="${escapeHtml(`${first?.timestamp ?? ''}:${first?.stream ?? ''}:${first?.message ?? ''}`)}"><div class="log-content" data-log-content>${entries.map(e => colorizeLogEntry(e)).join('')}</div></div>`;
+
+        // Compare mode: side-by-side
+        const primaryLabel = item.label.trim();
+        const secondaryLabel = compareItemId.replace(/^(project|service):/, '').replace(/:/g, '/');
+
+        return `<div class="log-compare-container">
+          <div class="log-compare-pane" data-compare="primary">
+            <div class="compare-label">${escapeHtml(primaryLabel)}</div>
+            ${renderComposeLogPane(item.id, state, 'compose')}
+          </div>
+          <div class="log-compare-divider"></div>
+          <div class="log-compare-pane" data-compare="secondary">
+            <div class="compare-label">${escapeHtml(secondaryLabel)}</div>
+            ${renderComposeLogPane(compareItemId, state, 'compose-compare')}
+          </div>
+        </div>`;
       },
       autoScrollBottom: true,
     },

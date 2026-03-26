@@ -14,6 +14,9 @@ const DEFAULT_VIEW_STATE = {
   selectedItemId: null as string | null,
   composeProjectName: null as string | null,
   composeServiceName: null as string | null,
+  compareItemId: null as string | null,
+  compareComposeProjectName: null as string | null,
+  compareComposeServiceName: null as string | null,
   sortField: 'state' as const,
   visible: true,
 };
@@ -145,6 +148,28 @@ export class DockerDashboardProvider implements vscode.Disposable {
         await vscode.env.clipboard.writeText(message.text);
         this._postMessage({ type: 'toast', message: 'Logs copied to clipboard', severity: 'info' });
         break;
+
+      case 'toggleCompareItem': {
+        const currentCompare = this.viewState.compareItemId;
+        const newCompare = currentCompare === message.itemId ? null : message.itemId;
+        this.viewState.compareItemId = newCompare;
+        // Parse compose fields if on services panel
+        if (message.panelId === 'services' && newCompare) {
+          const parts = newCompare.split(':');
+          if (parts[0] === 'project') {
+            this.viewState.compareComposeProjectName = parts.slice(1).join(':');
+            this.viewState.compareComposeServiceName = null;
+          } else if (parts[0] === 'service') {
+            this.viewState.compareComposeProjectName = parts[1];
+            this.viewState.compareComposeServiceName = parts.slice(2).join(':');
+          }
+        } else {
+          this.viewState.compareComposeProjectName = null;
+          this.viewState.compareComposeServiceName = null;
+        }
+        this._syncServiceViewState();
+        break;
+      }
     }
   }
 
@@ -466,6 +491,24 @@ export class DockerDashboardProvider implements vscode.Disposable {
       color: var(--vscode-list-activeSelectionForeground);
       opacity: 0.7;
     }
+    #side-list .side-item .pin-btn {
+      display: none;
+      margin-left: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      opacity: 0.5;
+      flex-shrink: 0;
+    }
+    #side-list .side-item:hover .pin-btn,
+    #side-list .side-item .pin-btn.active {
+      display: inline;
+    }
+    #side-list .side-item .pin-btn.active {
+      opacity: 1;
+    }
+    #side-list .side-item.pinned {
+      border-left-color: var(--vscode-textLink-foreground, #3794ff);
+    }
 
     /* ─── Detail pane ──────────────────────────────────────────── */
     #detail-pane {
@@ -514,6 +557,39 @@ export class DockerDashboardProvider implements vscode.Disposable {
     .log-content {
       white-space: pre;
       overflow-x: auto;
+    }
+
+    /* ─── Compare layout ─────────────────────────────────────────── */
+    .log-compare-container {
+      display: flex;
+      flex-direction: row;
+      height: 100%;
+      gap: 0;
+    }
+    .log-compare-pane {
+      flex: 1;
+      overflow-y: auto;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+    }
+    .log-compare-divider {
+      width: 1px;
+      background: var(--vscode-panel-border, rgba(128,128,128,0.35));
+      flex-shrink: 0;
+    }
+    .compare-label {
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+      padding: 2px 8px;
+      background: var(--vscode-sideBar-background);
+      border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.35));
+      flex-shrink: 0;
+      font-weight: 600;
+    }
+    .log-compare-pane .log-shell {
+      flex: 1;
+      overflow-y: auto;
     }
 
     /* ─── Custom scrollbars ──────────────────────────────────────── */

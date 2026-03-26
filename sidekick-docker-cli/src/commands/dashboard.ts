@@ -51,6 +51,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   let logFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let composeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let secondaryLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  let secondaryComposeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Stream managers for logs and stats
   const logManager = new LogStreamManager(client, () => {
@@ -75,6 +77,29 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Mutable severity counts from log stream (UI state, not domain state)
   let logSeverityCounts = logManager.getSeverityCounts();
+
+  // Secondary stream managers for compare mode
+  const secondaryLogManager = new LogStreamManager(client, () => {
+    if (secondaryLogFlushTimer) return;
+    secondaryLogFlushTimer = setTimeout(() => {
+      secondaryLogFlushTimer = null;
+      state.setSecondaryLogs(secondaryLogManager.getLogs());
+      secondaryLogSeverityCounts = secondaryLogManager.getSeverityCounts();
+      scheduleRender();
+    }, 100);
+  });
+
+  const flushSecondaryLogsNow = () => {
+    if (secondaryLogFlushTimer) {
+      clearTimeout(secondaryLogFlushTimer);
+      secondaryLogFlushTimer = null;
+    }
+    state.setSecondaryLogs(secondaryLogManager.getLogs());
+    secondaryLogSeverityCounts = secondaryLogManager.getSeverityCounts();
+    scheduleRender();
+  };
+
+  let secondaryLogSeverityCounts = secondaryLogManager.getSeverityCounts();
 
   const statsManager = new StatsStreamManager(client, state.getStatsCollector(), () => {
     scheduleRender();
@@ -104,8 +129,26 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     scheduleRender();
   };
 
+  const secondaryComposeLogManager = new ComposeLogStreamManager(composeClient, () => {
+    if (secondaryComposeLogFlushTimer) return;
+    secondaryComposeLogFlushTimer = setTimeout(() => {
+      secondaryComposeLogFlushTimer = null;
+      state.setSecondaryComposeLogs(secondaryComposeLogManager.getLogs());
+      scheduleRender();
+    }, 100);
+  });
+
+  const flushSecondaryComposeLogsNow = () => {
+    if (secondaryComposeLogFlushTimer) {
+      clearTimeout(secondaryComposeLogFlushTimer);
+      secondaryComposeLogFlushTimer = null;
+    }
+    state.setSecondaryComposeLogs(secondaryComposeLogManager.getLogs());
+    scheduleRender();
+  };
+
   const onViewStateChange = (viewState: DashboardViewState) => {
-    const { panelId, itemId, detailTabIndex, sortField } = viewState;
+    const { panelId, itemId, detailTabIndex, sortField, compareItemId } = viewState;
     const wantsLiveStats = sortField === 'cpu'
       || sortField === 'mem'
       || sortField === 'net'
@@ -116,8 +159,13 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       void logManager.select(detailTabIndex === 0 ? itemId : null);
       void statsManager.select(itemId && (detailTabIndex === 1 || wantsLiveStats) ? itemId : null);
       void composeLogManager.selectCompose(null, null);
+      // Secondary compare stream: only when on Logs tab and a compare item is pinned
+      void secondaryLogManager.select(detailTabIndex === 0 && compareItemId ? compareItemId : null);
+      void secondaryComposeLogManager.selectCompose(null, null);
       flushLogsNow();
       flushComposeLogsNow();
+      flushSecondaryLogsNow();
+      flushSecondaryComposeLogsNow();
       // Fetch env vars if not cached
       if (itemId && !state.getInspectedEnv(itemId)) {
         client.getContainerEnv(itemId).then(env => {
@@ -135,6 +183,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     } else if (panelId === 'services' && itemId) {
       void logManager.select(null);
       void statsManager.select(null);
+      void secondaryLogManager.select(null);
       if (detailTabIndex === 1) {
         const parts = itemId.split(':');
         if (parts[0] === 'project') {
@@ -142,17 +191,35 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
         } else if (parts[0] === 'service') {
           void composeLogManager.selectCompose(parts[1], parts.slice(2).join(':'));
         }
+        // Secondary compose compare stream
+        if (compareItemId) {
+          const cParts = compareItemId.split(':');
+          if (cParts[0] === 'project') {
+            void secondaryComposeLogManager.selectCompose(cParts.slice(1).join(':'), null);
+          } else if (cParts[0] === 'service') {
+            void secondaryComposeLogManager.selectCompose(cParts[1], cParts.slice(2).join(':'));
+          }
+        } else {
+          void secondaryComposeLogManager.selectCompose(null, null);
+        }
       } else {
         void composeLogManager.selectCompose(null, null);
+        void secondaryComposeLogManager.selectCompose(null, null);
       }
       flushLogsNow();
       flushComposeLogsNow();
+      flushSecondaryLogsNow();
+      flushSecondaryComposeLogsNow();
     } else if (panelId === 'images') {
       void logManager.select(null);
       void statsManager.select(null);
       void composeLogManager.selectCompose(null, null);
+      void secondaryLogManager.select(null);
+      void secondaryComposeLogManager.selectCompose(null, null);
       flushLogsNow();
       flushComposeLogsNow();
+      flushSecondaryLogsNow();
+      flushSecondaryComposeLogsNow();
       // Fetch image layers if not cached
       if (itemId && !state.getImageLayers(itemId)) {
         client.getImageHistory(itemId).then(layers => {
@@ -164,8 +231,12 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       void logManager.select(null);
       void statsManager.select(null);
       void composeLogManager.selectCompose(null, null);
+      void secondaryLogManager.select(null);
+      void secondaryComposeLogManager.selectCompose(null, null);
       flushLogsNow();
       flushComposeLogsNow();
+      flushSecondaryLogsNow();
+      flushSecondaryComposeLogsNow();
     }
   };
 
@@ -265,6 +336,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     m.logSeverityCounts = logSeverityCounts;
     m.logSeverityTimeSeries = logManager.getSeverityTimeSeries();
     m.logTemplates = logManager.getTemplates();
+    m.secondaryLogSeverityCounts = secondaryLogSeverityCounts;
+    m.secondaryLogSeverityTimeSeries = secondaryLogManager.getSeverityTimeSeries();
     return m;
   }
   function scheduleRender() {
@@ -289,10 +362,14 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     if (stopped) return;
     stopped = true;
     try { logManager.dispose(); } catch { /* ignore */ }
+    try { secondaryLogManager.dispose(); } catch { /* ignore */ }
     try { statsManager.dispose(); } catch { /* ignore */ }
     try { composeLogManager.dispose(); } catch { /* ignore */ }
+    try { secondaryComposeLogManager.dispose(); } catch { /* ignore */ }
     try { if (logFlushTimer) clearTimeout(logFlushTimer); } catch { /* ignore */ }
+    try { if (secondaryLogFlushTimer) clearTimeout(secondaryLogFlushTimer); } catch { /* ignore */ }
     try { if (composeLogFlushTimer) clearTimeout(composeLogFlushTimer); } catch { /* ignore */ }
+    try { if (secondaryComposeLogFlushTimer) clearTimeout(secondaryComposeLogFlushTimer); } catch { /* ignore */ }
     try { clearInterval(refreshInterval); } catch { /* ignore */ }
     try { watcher.stop(); } catch { /* ignore */ }
     try { client.dispose(); } catch { /* ignore */ }
