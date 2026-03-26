@@ -1,6 +1,6 @@
 {
   "name": "sidekick-docker-monorepo",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "Docker management TUI/CLI + VSCode extension",
   "author": "Cesar Andres Lopez <cesarandreslopez@gmail.com>",

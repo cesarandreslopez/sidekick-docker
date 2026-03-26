@@ -54,6 +54,24 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   let secondaryLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let secondaryComposeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // Re-render bridge: throttled (must be declared before stream managers that call scheduleRender)
+  let renderTimer: ReturnType<typeof setTimeout> | null = null;
+  function scheduleRender() {
+    if (renderTimer) return;
+    renderTimer = setTimeout(() => {
+      renderTimer = null;
+      instance.rerender(
+        React.createElement(Dashboard, {
+          panels,
+          metrics: getEnrichedMetrics(),
+          onViewStateChange,
+          execTriggerRef,
+          onExecFallback,
+        }),
+      );
+    }, 100);
+  }
+
   // Stream managers for logs and stats
   const logManager = new LogStreamManager(client, () => {
     if (logFlushTimer) return;
@@ -329,8 +347,6 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     copyToClipboard(text);
   });
 
-  // Re-render bridge: throttled
-  let renderTimer: ReturnType<typeof setTimeout> | null = null;
   function getEnrichedMetrics() {
     const m = state.getMetrics();
     m.logSeverityCounts = logSeverityCounts;
@@ -339,21 +355,6 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     m.secondaryLogSeverityCounts = secondaryLogSeverityCounts;
     m.secondaryLogSeverityTimeSeries = secondaryLogManager.getSeverityTimeSeries();
     return m;
-  }
-  function scheduleRender() {
-    if (renderTimer) return;
-    renderTimer = setTimeout(() => {
-      renderTimer = null;
-      instance.rerender(
-        React.createElement(Dashboard, {
-          panels,
-          metrics: getEnrichedMetrics(),
-          onViewStateChange,
-          execTriggerRef,
-          onExecFallback,
-        }),
-      );
-    }, 100);
   }
 
   // Cleanup
