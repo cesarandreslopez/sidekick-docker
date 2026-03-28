@@ -87,6 +87,15 @@ export class StatsCollector {
     this.histories.delete(containerId);
   }
 
+  /** Remove history entries for containers not in the active set. */
+  prune(activeContainerIds: Set<string>): void {
+    for (const id of this.histories.keys()) {
+      if (!activeContainerIds.has(id)) {
+        this.histories.delete(id);
+      }
+    }
+  }
+
   clear(): void {
     this.histories.clear();
   }

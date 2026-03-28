@@ -7,6 +7,12 @@ export interface LogTemplate {
   tokenCount: number;
 }
 
+export interface TemplateDiagnostics {
+  groupCount: number;
+  droppedGroups: number;
+  totalLines: number;
+}
+
 // Tokens that look like variable data (hex IDs, numbers, UUIDs, IPs, etc.)
 const VARIABLE_PATTERNS = [
   /^[0-9a-f]{8,}$/i,          // hex strings (hashes, IDs)
@@ -24,6 +30,8 @@ function isVariable(token: string): boolean {
   return VARIABLE_PATTERNS.some(p => p.test(token));
 }
 
+const DEFAULT_MAX_GROUPS = 500;
+
 /**
  * Simplified Drain-like log template engine.
  *
@@ -39,6 +47,13 @@ export class LogTemplateEngine {
   // Group templates by token count for efficient lookup
   private groups = new Map<number, TemplateGroup[]>();
   private totalLines = 0;
+  private groupCount = 0;
+  private droppedGroups = 0;
+  private readonly maxGroups: number;
+
+  constructor(maxGroups = DEFAULT_MAX_GROUPS) {
+    this.maxGroups = maxGroups;
+  }
 
   /**
    * Process a log line and update templates.
@@ -50,7 +65,12 @@ export class LogTemplateEngine {
 
     const groups = this.groups.get(tokens.length);
     if (!groups) {
+      if (this.groupCount >= this.maxGroups) {
+        this.droppedGroups++;
+        return;
+      }
       this.groups.set(tokens.length, [{ tokens: tokens.map(t => isVariable(t) ? '<*>' : t), count: 1 }]);
+      this.groupCount++;
       return;
     }
 
@@ -80,9 +100,12 @@ export class LogTemplateEngine {
           bestMatch.tokens[i] = '<*>';
         }
       }
-    } else {
+    } else if (this.groupCount < this.maxGroups) {
       // New template group
       groups.push({ tokens: tokens.map(t => isVariable(t) ? '<*>' : t), count: 1 });
+      this.groupCount++;
+    } else {
+      this.droppedGroups++;
     }
   }
 
@@ -108,9 +131,19 @@ export class LogTemplateEngine {
     return this.totalLines;
   }
 
+  getDiagnostics(): TemplateDiagnostics {
+    return {
+      groupCount: this.groupCount,
+      droppedGroups: this.droppedGroups,
+      totalLines: this.totalLines,
+    };
+  }
+
   reset(): void {
     this.groups.clear();
     this.totalLines = 0;
+    this.groupCount = 0;
+    this.droppedGroups = 0;
   }
 }
 

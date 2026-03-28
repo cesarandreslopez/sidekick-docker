@@ -36,8 +36,8 @@ export class ContainersPanel implements SidePanel {
       label: 'Logs',
       render: (_item, metrics) => {
         const logs = metrics.selectedContainerLogs;
-        if (logs.length === 0) return 'No logs available. Select a container to view logs.';
-        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode, metrics.logSeverityCounts).join('\n');
+        if (logs.length === 0) return ['No logs available. Select a container to view logs.'];
+        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode, metrics.logSeverityCounts);
       },
       autoScrollBottom: true,
     },

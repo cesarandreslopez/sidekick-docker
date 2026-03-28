@@ -5,6 +5,41 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-03-28
+
+### Fixed
+
+#### CLI
+
+- Fix JavaScript heap out-of-memory crash after extended use (~2-3 hours) caused by multiple memory leaks
+- Clean up `inspectedEnv`, `containerChanges`, and `imageLayers` caches on container destroy and periodic refresh — previously entries were never removed, leaking indefinitely
+- Cap `LogTemplateEngine` at 500 template groups globally — previously unbounded, accumulating thousands of groups for containers with highly variable log patterns
+- Prune `StatsCollector` history entries for non-running containers on periodic refresh
+- Deterministic stream teardown using `AbortSignal` — switching containers or stopping streams now immediately destroys the underlying Docker HTTP connection instead of waiting for the next chunk
+- Eliminate unnecessary shallow array copies in `getMetrics()` called every render cycle — return direct references since consumers never mutate
+- Cache colorized log output with `WeakMap` — avoids re-tokenizing and re-colorizing all 1000 log lines every render, reducing per-render allocations from ~100K objects to near zero
+- Eliminate `join('\n')` → `split('\n')` round-trip in log tab rendering — log tabs now return `string[]` directly
+
+#### Shared
+
+- Add `signal?: AbortSignal` parameter to `DockerClient.streamLogs()`, `DockerClient.streamStats()`, and `ComposeClient.streamLogs()` for immediate stream teardown
+- Add `StatsCollector.prune()` method to remove history for non-active containers
+- Add `LogTemplateEngine.getDiagnostics()` for group count, dropped groups, and total lines
+
+### Changed
+
+#### CLI
+
+- Render throttle increased from 100ms to 200ms (10fps → 5fps) — still smooth for a TUI and halves GC pressure
+- `DetailTab.render()` return type widened to `string | string[]` to avoid wasteful string conversions
+- `BaseStreamManager` now uses `AbortController` per stream with a generation counter to prevent stale reconnects
+
+### Added
+
+#### CLI
+
+- `SIDEKICK_DEBUG_STREAMS=1` environment variable enables periodic memory and template diagnostics (every 60s) for debugging long-running sessions
+
 ## [0.2.4] - 2026-03-26
 
 ### Fixed

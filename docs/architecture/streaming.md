@@ -4,20 +4,22 @@ Sidekick Docker uses `AsyncIterable` (async generators) throughout for streaming
 
 ## Pattern
 
-All streaming methods in `DockerClient` return `AsyncIterable`:
+All streaming methods in `DockerClient` return `AsyncIterable` and accept an optional `AbortSignal` for immediate teardown:
 
 ```typescript
-streamLogs(id: string, opts?: LogStreamOptions): AsyncIterable<LogEntry>
-streamStats(id: string): AsyncIterable<ContainerStats>
-streamEvents(filters?: Record<string, string[]>): AsyncIterable<DockerEvent>
+streamLogs(id: string, opts?: LogStreamOptions, signal?: AbortSignal): AsyncIterable<LogEntry>
+streamStats(id: string, signal?: AbortSignal): AsyncIterable<ContainerStats>
+streamEvents(filters?: Record<string, string[]>, signal?: AbortSignal): AsyncIterable<DockerEvent>
 ```
 
 Consumers iterate with `for await`:
 
 ```typescript
-for await (const entry of client.streamLogs(containerId)) {
+const controller = new AbortController();
+for await (const entry of client.streamLogs(containerId, {}, controller.signal)) {
   // process each log entry
 }
+// controller.abort() immediately destroys the underlying stream
 ```
 
 ## Stream Managers
@@ -50,9 +52,11 @@ The dashboard uses manager classes to control when streaming starts and stops. S
 
 All stream managers use `ReconnectScheduler` for fault-tolerant streaming:
 
+- **Immediate teardown** — each stream manager owns an `AbortController` that is aborted on `stop()`, immediately destroying the underlying Docker HTTP connection or child process
+- **Generation counter** — monotonically increasing counter invalidates stale reconnect callbacks when selections change rapidly
 - **Exponential backoff** — retry delays increase on consecutive failures, preventing rapid retry storms
 - **Bounded retries** — streams give up after a maximum number of attempts on permanent failures
-- **Error logging** — all stream errors are logged for debugging (previously silent)
+- **Error logging** — all stream errors are logged for debugging
 - **Resource cleanup** — try/finally blocks ensure proper teardown on failure
 
 ### EventWatcher
@@ -72,6 +76,7 @@ A per-container ring buffer (default 60 samples) that stores stats history:
 - `getLatest(id)` — returns the most recent stats sample
 - `getNetworkRxRateSeries(id)` / `getNetworkTxRateSeries(id)` — compute network bytes/sec from consecutive cumulative sample deltas
 - `getBlockReadRateSeries(id)` / `getBlockWriteRateSeries(id)` — compute block I/O bytes/sec from consecutive cumulative sample deltas
+- `prune(activeIds)` — remove history entries for containers not in the active set (called during periodic refresh to prevent memory leaks)
 
 The rate series methods derive per-second rates from Docker's cumulative counters by computing the delta between consecutive samples and dividing by elapsed time.
 

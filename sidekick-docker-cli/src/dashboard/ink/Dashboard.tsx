@@ -415,14 +415,13 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     logFilterMode: state.logFilterMode,
   };
 
-  let detailContent = '';
+  let detailLines: string[] = [];
   if (selectedItem && detailTabs.length > 0 && tabIdx >= 0) {
-    detailContent = detailTabs[tabIdx].render(selectedItem, enrichedMetrics);
+    const result = detailTabs[tabIdx].render(selectedItem, enrichedMetrics);
+    detailLines = Array.isArray(result) ? result : result.split('\n');
   } else if (!selectedItem) {
-    detailContent = '(no item selected)';
+    detailLines = ['(no item selected)'];
   }
-
-  const detailLines = detailContent.split('\n');
   const detailViewportHeight = Math.max(1, rows - RESERVED_UI_ROWS);
 
   // Auto-scroll to bottom when the active tab requests it (e.g. Logs)

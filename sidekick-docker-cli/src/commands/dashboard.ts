@@ -69,7 +69,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           onExecFallback,
         }),
       );
-    }, 100);
+    }, 200);
   }
 
   // Stream managers for logs and stats
@@ -284,6 +284,19 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     state.refresh().then(() => scheduleRender()).catch(e => console.debug('periodic refresh failed:', e));
   }, 30_000);
 
+  // Optional memory/stream diagnostics (SIDEKICK_DEBUG_STREAMS=1)
+  let debugInterval: ReturnType<typeof setInterval> | null = null;
+  if (process.env.SIDEKICK_DEBUG_STREAMS === '1') {
+    debugInterval = setInterval(() => {
+      const mem = process.memoryUsage();
+      const heapMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
+      const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
+      const templateDiag = logManager.getTemplateDiagnostics();
+      const secondaryDiag = secondaryLogManager.getTemplateDiagnostics();
+      console.debug(`[sidekick-debug] heap=${heapMB}MB rss=${rssMB}MB templates=${JSON.stringify(templateDiag)} secondary=${JSON.stringify(secondaryDiag)}`);
+    }, 60_000);
+  }
+
   // Exec trigger ref: Dashboard populates this with a function to start exec overlay
   const execTriggerRef: React.RefObject<((containerId: string, containerName: string) => void) | null> = { current: null };
 
@@ -372,6 +385,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     try { if (composeLogFlushTimer) clearTimeout(composeLogFlushTimer); } catch { /* ignore */ }
     try { if (secondaryComposeLogFlushTimer) clearTimeout(secondaryComposeLogFlushTimer); } catch { /* ignore */ }
     try { clearInterval(refreshInterval); } catch { /* ignore */ }
+    try { if (debugInterval) clearInterval(debugInterval); } catch { /* ignore */ }
     try { watcher.stop(); } catch { /* ignore */ }
     try { client.dispose(); } catch { /* ignore */ }
     for (const panel of panels) {

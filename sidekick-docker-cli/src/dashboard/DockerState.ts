@@ -91,6 +91,21 @@ export class DockerState {
       this.composeProjects = this.composeDetector.detect(containers, fileConfig);
       this.lastRefresh = new Date();
       this.daemonConnected = true;
+
+      // Prune stale cache entries for removed containers/images
+      const currentContainerIds = new Set(containers.map(c => c.id));
+      for (const id of this.inspectedEnv.keys()) {
+        if (!currentContainerIds.has(id)) this.inspectedEnv.delete(id);
+      }
+      for (const id of this.containerChanges.keys()) {
+        if (!currentContainerIds.has(id)) this.containerChanges.delete(id);
+      }
+      const currentImageIds = new Set(images.map(i => i.id));
+      for (const id of this.imageLayers.keys()) {
+        if (!currentImageIds.has(id)) this.imageLayers.delete(id);
+      }
+      const runningIds = new Set(containers.filter(c => c.state === 'running').map(c => c.id));
+      this.statsCollector.prune(runningIds);
     } catch {
       this.daemonConnected = false;
     }
@@ -147,6 +162,8 @@ export class DockerState {
       case 'destroy':
         this.containers = this.containers.filter(c => c.id !== resourceId);
         this.statsCollector.remove(resourceId);
+        this.inspectedEnv.delete(resourceId);
+        this.containerChanges.delete(resourceId);
         break;
       case 'create':
         // New container — refresh to get full info
@@ -236,19 +253,19 @@ export class DockerState {
 
   getMetrics(): DockerDashboardMetrics {
     return {
-      containers: [...this.containers],
-      images: [...this.images],
-      volumes: [...this.volumes],
-      networks: [...this.networks],
-      composeProjects: [...this.composeProjects],
+      containers: this.containers,
+      images: this.images,
+      volumes: this.volumes,
+      networks: this.networks,
+      composeProjects: this.composeProjects,
       statsCollector: this.statsCollector,
       inspectedEnv: this.inspectedEnv,
       containerChanges: this.containerChanges,
       imageLayers: this.imageLayers,
-      selectedContainerLogs: [...this.selectedLogs],
-      selectedComposeLogs: [...this.selectedComposeLogs],
-      secondaryContainerLogs: [...this.secondaryLogs],
-      secondaryComposeLogs: [...this.secondaryComposeLogs],
+      selectedContainerLogs: this.selectedLogs,
+      selectedComposeLogs: this.selectedComposeLogs,
+      secondaryContainerLogs: this.secondaryLogs,
+      secondaryComposeLogs: this.secondaryComposeLogs,
       lastRefresh: this.lastRefresh,
       daemonConnected: this.daemonConnected,
       logFilterString: '',

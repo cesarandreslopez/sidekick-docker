@@ -123,7 +123,7 @@ export class DockerClient {
     return validated.Config.Env ?? [];
   }
 
-  async *streamLogs(id: string, opts: LogStreamOptions = {}): AsyncIterable<LogEntry> {
+  async *streamLogs(id: string, opts: LogStreamOptions = {}, signal?: AbortSignal): AsyncIterable<LogEntry> {
     const container = this.docker.getContainer(id);
     const logOpts = {
       follow: true as const,
@@ -152,40 +152,51 @@ export class DockerClient {
     }
 
     const readable = stream as unknown as NodeJS.ReadableStream;
+    const destroy = () => (readable as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
+
+    if (signal) {
+      signal.addEventListener('abort', destroy, { once: true });
+    }
+
     const buffer: Buffer[] = [];
 
-    for await (const chunk of readable) {
-      const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
-      buffer.push(data);
-      const combined = Buffer.concat(buffer);
-      buffer.length = 0;
+    try {
+      for await (const chunk of readable) {
+        if (signal?.aborted) break;
+        const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
+        buffer.push(data);
+        const combined = Buffer.concat(buffer);
+        buffer.length = 0;
 
-      let offset = 0;
-      while (offset + 8 <= combined.length) {
-        const streamType = combined[offset];
-        const size = combined.readUInt32BE(offset + 4);
+        let offset = 0;
+        while (offset + 8 <= combined.length) {
+          const streamType = combined[offset];
+          const size = combined.readUInt32BE(offset + 4);
 
-        if (offset + 8 + size > combined.length) {
-          // Incomplete frame, save remainder
-          buffer.push(combined.subarray(offset));
-          break;
-        }
-
-        const payload = combined.subarray(offset + 8, offset + 8 + size).toString('utf8');
-        const streamName: 'stdout' | 'stderr' = streamType === 2 ? 'stderr' : 'stdout';
-
-        for (const line of payload.split('\n')) {
-          if (line.trim()) {
-            yield parseLogLine(line, streamName);
+          if (offset + 8 + size > combined.length) {
+            // Incomplete frame, save remainder
+            buffer.push(combined.subarray(offset));
+            break;
           }
+
+          const payload = combined.subarray(offset + 8, offset + 8 + size).toString('utf8');
+          const streamName: 'stdout' | 'stderr' = streamType === 2 ? 'stderr' : 'stdout';
+
+          for (const line of payload.split('\n')) {
+            if (line.trim()) {
+              yield parseLogLine(line, streamName);
+            }
+          }
+
+          offset += 8 + size;
         }
 
-        offset += 8 + size;
+        if (offset < combined.length && buffer.length === 0) {
+          buffer.push(combined.subarray(offset));
+        }
       }
-
-      if (offset < combined.length && buffer.length === 0) {
-        buffer.push(combined.subarray(offset));
-      }
+    } finally {
+      destroy();
     }
   }
 
@@ -258,7 +269,7 @@ export class DockerClient {
     };
   }
 
-  async *streamStats(id: string): AsyncIterable<ContainerStats> {
+  async *streamStats(id: string, signal?: AbortSignal): AsyncIterable<ContainerStats> {
     const container = this.docker.getContainer(id);
 
     // One-shot fetch for instant first sample (stream:false returns immediately)
@@ -275,22 +286,34 @@ export class DockerClient {
       // Fall through — stream will provide data
     }
 
-    const stream = await container.stats({ stream: true });
+    if (signal?.aborted) return;
 
-    for await (const chunk of stream as AsyncIterable<Buffer>) {
-      const lines = chunk.toString('utf8').split('\n').filter(Boolean);
-      for (const line of lines) {
-        try {
-          const raw: unknown = JSON.parse(line);
-          const validated = DockerStatsRawSchema.parse(raw);
-          const { stats, cpuTotal, systemTotal } = this.parseStats(validated, prevCpu, prevSystem);
-          prevCpu = cpuTotal;
-          prevSystem = systemTotal;
-          yield stats;
-        } catch {
-          continue;
+    const stream = await container.stats({ stream: true });
+    const destroy = () => (stream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
+
+    if (signal) {
+      signal.addEventListener('abort', destroy, { once: true });
+    }
+
+    try {
+      for await (const chunk of stream as AsyncIterable<Buffer>) {
+        if (signal?.aborted) break;
+        const lines = chunk.toString('utf8').split('\n').filter(Boolean);
+        for (const line of lines) {
+          try {
+            const raw: unknown = JSON.parse(line);
+            const validated = DockerStatsRawSchema.parse(raw);
+            const { stats, cpuTotal, systemTotal } = this.parseStats(validated, prevCpu, prevSystem);
+            prevCpu = cpuTotal;
+            prevSystem = systemTotal;
+            yield stats;
+          } catch {
+            continue;
+          }
         }
       }
+    } finally {
+      destroy();
     }
   }
 

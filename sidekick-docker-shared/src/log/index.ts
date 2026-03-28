@@ -14,4 +14,4 @@ export { LogSeverityTimeSeries } from './LogSeverityTimeSeries';
 export type { SeverityBucket } from './LogSeverityTimeSeries';
 
 export { LogTemplateEngine } from './LogTemplateEngine';
-export type { LogTemplate } from './LogTemplateEngine';
+export type { LogTemplate, TemplateDiagnostics } from './LogTemplateEngine';

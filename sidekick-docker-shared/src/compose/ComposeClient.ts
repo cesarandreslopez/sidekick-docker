@@ -72,7 +72,7 @@ export class ComposeClient {
     return this.exec(['-p', project, 'ps', '--format', 'json']);
   }
 
-  async *streamLogs(project: string, service?: string, tail = 100): AsyncIterable<LogEntry> {
+  async *streamLogs(project: string, service?: string, tail = 100, signal?: AbortSignal): AsyncIterable<LogEntry> {
     const args = ['-p', project, 'logs', '--follow', '--tail', String(tail), '--timestamps'];
     if (service) args.push(service);
 
@@ -120,6 +120,16 @@ export class ComposeClient {
       resolve?.();
     };
 
+    const kill = () => {
+      done = true;
+      resolve?.();
+      proc.kill();
+    };
+
+    if (signal) {
+      signal.addEventListener('abort', kill, { once: true });
+    }
+
     proc.stdout.on('data', (data: Buffer) => {
       stdoutBuffer += data.toString();
       const lines = stdoutBuffer.split('\n');
@@ -161,6 +171,9 @@ export class ComposeClient {
         }
       }
     } finally {
+      proc.stdout.removeAllListeners();
+      proc.stderr.removeAllListeners();
+      proc.removeAllListeners();
       proc.kill();
     }
   }

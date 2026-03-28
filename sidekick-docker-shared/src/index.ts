@@ -27,7 +27,7 @@ export type { LogFormat, ParsedLogLine } from './log/LogParser';
 export { LogSeverityTimeSeries } from './log/LogSeverityTimeSeries';
 export type { SeverityBucket } from './log/LogSeverityTimeSeries';
 export { LogTemplateEngine } from './log/LogTemplateEngine';
-export type { LogTemplate } from './log/LogTemplateEngine';
+export type { LogTemplate, TemplateDiagnostics } from './log/LogTemplateEngine';
 
 // Events
 export { EventWatcher } from './events/EventWatcher';

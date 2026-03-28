@@ -31,8 +31,8 @@ export class ComposeLogStreamManager extends BaseStreamManager<ComposeStreamId, 
   protected isValidId(id: ComposeStreamId): boolean { return id.project !== null; }
   protected idLabel(id: ComposeStreamId): string { return id.project ?? '(none)'; }
 
-  protected createStream(id: ComposeStreamId): AsyncIterable<LogEntry> {
-    return this.composeClient.streamLogs(id.project!, id.service ?? undefined);
+  protected createStream(id: ComposeStreamId, signal: AbortSignal): AsyncIterable<LogEntry> {
+    return this.composeClient.streamLogs(id.project!, id.service ?? undefined, 100, signal);
   }
 
   protected processItem(_id: ComposeStreamId, entry: LogEntry): void {

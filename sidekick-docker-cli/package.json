@@ -1,6 +1,6 @@
 {
   "name": "sidekick-docker",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Docker management TUI dashboard",
   "author": "Cesar Andres Lopez <cesarandreslopez@gmail.com>",
   "repository": {

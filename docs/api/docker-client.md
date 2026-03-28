@@ -28,8 +28,8 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 | `inspectContainer` | `(id: string) => Promise<ContainerInspectInfo>` | Get full container details |
 | `getContainerEnv` | `(id: string) => Promise<string[]>` | Get container environment variables |
 | `getContainerChanges` | `(id: string) => Promise<FilesystemChange[]>` | Get filesystem changes vs base image |
-| `streamLogs` | `(id: string, opts?: LogStreamOptions) => AsyncIterable<LogEntry>` | Stream container logs |
-| `streamStats` | `(id: string) => AsyncIterable<ContainerStats>` | Stream live container stats |
+| `streamLogs` | `(id: string, opts?: LogStreamOptions, signal?: AbortSignal) => AsyncIterable<LogEntry>` | Stream container logs |
+| `streamStats` | `(id: string, signal?: AbortSignal) => AsyncIterable<ContainerStats>` | Stream live container stats |
 
 ## Image Methods
 

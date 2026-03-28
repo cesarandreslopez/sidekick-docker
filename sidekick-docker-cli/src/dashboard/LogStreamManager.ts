@@ -28,8 +28,8 @@ export class LogStreamManager extends BaseStreamManager<string | null, LogEntry>
   protected isValidId(id: string | null): boolean { return id !== null; }
   protected idLabel(id: string | null): string { return id ?? '(none)'; }
 
-  protected createStream(id: string | null): AsyncIterable<LogEntry> {
-    return this.client.streamLogs(id!, { follow: true, tail: 100 });
+  protected createStream(id: string | null, signal: AbortSignal): AsyncIterable<LogEntry> {
+    return this.client.streamLogs(id!, { follow: true, tail: 100 }, signal);
   }
 
   protected processItem(_id: string | null, entry: LogEntry): void {
@@ -67,5 +67,9 @@ export class LogStreamManager extends BaseStreamManager<string | null, LogEntry>
 
   getCurrentContainerId(): string | null {
     return this.currentId;
+  }
+
+  getTemplateDiagnostics() {
+    return this.templateEngine.getDiagnostics();
   }
 }

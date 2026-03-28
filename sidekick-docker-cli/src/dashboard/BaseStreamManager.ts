@@ -14,6 +14,9 @@ export abstract class BaseStreamManager<TId, TItem> {
   protected reconnect = new ReconnectScheduler();
   protected onChange: () => void;
 
+  private streamController: AbortController | null = null;
+  private streamGeneration = 0;
+
   constructor(onChange: () => void) {
     this.onChange = onChange;
     this.currentId = this.emptyId();
@@ -31,27 +34,31 @@ export abstract class BaseStreamManager<TId, TItem> {
 
     this.aborted = false;
     this.reconnect.reset();
+    this.streamController = new AbortController();
+    this.streamGeneration++;
     this.onBeforeStream();
-    this.streamPromise = this.runStream(id);
+    this.streamPromise = this.runStream(id, this.streamController.signal, this.streamGeneration);
   }
 
-  private async runStream(id: TId): Promise<void> {
+  private async runStream(id: TId, signal: AbortSignal, generation: number): Promise<void> {
     try {
-      for await (const item of this.createStream(id)) {
-        if (this.aborted || !this.isSameId(id, this.currentId)) break;
+      for await (const item of this.createStream(id, signal)) {
+        if (signal.aborted || this.aborted || !this.isSameId(id, this.currentId)) break;
         this.processItem(id, item);
         this.onChange();
       }
       this.reconnect.reset();
     } catch (err) {
+      if (signal.aborted) return;
       console.debug(`${this.streamLabel} stream error:`, errorMessage(err));
     }
 
-    if (!this.aborted && this.isSameId(id, this.currentId)) {
+    if (!signal.aborted && !this.aborted && this.isSameId(id, this.currentId) && generation === this.streamGeneration) {
       const scheduled = this.reconnect.schedule(() => {
-        if (!this.aborted && this.isSameId(id, this.currentId)) {
+        if (!this.aborted && this.isSameId(id, this.currentId) && generation === this.streamGeneration) {
+          this.streamController = new AbortController();
           this.onBeforeStream();
-          this.streamPromise = this.runStream(id);
+          this.streamPromise = this.runStream(id, this.streamController.signal, generation);
         }
       });
       if (!scheduled) {
@@ -63,6 +70,8 @@ export abstract class BaseStreamManager<TId, TItem> {
   stop(): void {
     this.aborted = true;
     this.currentId = this.emptyId();
+    this.streamController?.abort();
+    this.streamController = null;
     this.streamPromise = null;
     this.reconnect.clear();
     this.onStop();
@@ -90,7 +99,7 @@ export abstract class BaseStreamManager<TId, TItem> {
   protected abstract idLabel(id: TId): string;
 
   /** Create the async iterable that produces stream items. */
-  protected abstract createStream(id: TId): AsyncIterable<TItem>;
+  protected abstract createStream(id: TId, signal: AbortSignal): AsyncIterable<TItem>;
 
   /** Process a single item from the stream. */
   protected abstract processItem(id: TId, item: TItem): void;

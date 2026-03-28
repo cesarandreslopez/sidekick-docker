@@ -68,8 +68,8 @@ export class ServicesPanel implements SidePanel {
       label: 'Logs',
       render: (_item, metrics) => {
         const logs = metrics.selectedComposeLogs;
-        if (logs.length === 0) return 'No compose logs. Logs will appear when a service produces output.';
-        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode).join('\n');
+        if (logs.length === 0) return ['No compose logs. Logs will appear when a service produces output.'];
+        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode);
       },
       autoScrollBottom: true,
     },

@@ -39,6 +39,7 @@ const collector = new StatsCollector(bufferSize?: number);
 | `getNetworkTxRateSeries` | `(id: string) => number[]` | Get network transmit rate (bytes/sec) from consecutive sample deltas |
 | `getBlockReadRateSeries` | `(id: string) => number[]` | Get block read rate (bytes/sec) from consecutive sample deltas |
 | `getBlockWriteRateSeries` | `(id: string) => number[]` | Get block write rate (bytes/sec) from consecutive sample deltas |
+| `prune` | `(activeContainerIds: Set<string>) => void` | Remove history entries for containers not in the active set |
 
 ## Ring Buffer
 

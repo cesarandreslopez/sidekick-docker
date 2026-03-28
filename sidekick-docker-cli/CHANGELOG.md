@@ -5,6 +5,29 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.5] - 2026-03-28
+
+### Fixed
+
+- Fix JavaScript heap out-of-memory crash after extended use (~2-3 hours) caused by multiple memory leaks:
+  - Clean up `inspectedEnv`, `containerChanges`, and `imageLayers` caches on container destroy and periodic refresh
+  - Cap `LogTemplateEngine` at 500 template groups globally (was unbounded)
+  - Prune `StatsCollector` history entries for non-running containers on periodic refresh
+  - Deterministic stream teardown using `AbortSignal` — switching containers now immediately destroys underlying Docker connections
+  - Eliminate unnecessary shallow array copies in `getMetrics()` (9 arrays copied every 100ms render)
+  - Cache colorized log output with `WeakMap` to avoid re-tokenizing all 1000 log lines per render
+  - Eliminate `join('\n')` → `split('\n')` round-trip in log tab rendering
+
+### Changed
+
+- Render throttle increased from 100ms to 200ms — still smooth for TUI, halves GC pressure
+- `DetailTab.render()` return type widened to `string | string[]`
+- `BaseStreamManager` refactored to use `AbortController` per stream with generation counter
+
+### Added
+
+- `SIDEKICK_DEBUG_STREAMS=1` environment variable enables periodic memory and template diagnostics (every 60s)
+
 ## [0.2.4] - 2026-03-26
 
 ### Fixed

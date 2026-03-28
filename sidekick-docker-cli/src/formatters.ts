@@ -139,22 +139,34 @@ function colorizeTokens(message: string): string {
   }).join('');
 }
 
+const colorizedCache = new WeakMap<LogEntry, string>();
+
 export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[]): string {
+  // Cache unfiltered output (filtered highlighting varies per query)
+  if (!filterMatches) {
+    const cached = colorizedCache.get(entry);
+    if (cached !== undefined) return cached;
+  }
+
   const ts = entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
   const tsColored = ts ? ansi.dim(ansi.gray(ts)) + ' ' : '';
 
+  let result: string;
   if (entry.stream === 'stderr') {
     const msg = filterMatches
       ? highlightMatches(entry.message, filterMatches, ansi.red)
       : ansi.red(entry.message);
-    return tsColored + msg;
+    result = tsColored + msg;
+  } else if (filterMatches && filterMatches.length > 0) {
+    result = tsColored + highlightMatches(entry.message, filterMatches);
+  } else {
+    result = tsColored + colorizeTokens(entry.message);
   }
 
-  if (filterMatches && filterMatches.length > 0) {
-    return tsColored + highlightMatches(entry.message, filterMatches);
+  if (!filterMatches) {
+    colorizedCache.set(entry, result);
   }
-
-  return tsColored + colorizeTokens(entry.message);
+  return result;
 }
 
 /** Apply ANSI highlight background to matched regions within a string. */

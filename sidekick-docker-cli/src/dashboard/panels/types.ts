@@ -42,7 +42,7 @@ export interface KeyBinding {
 /** A tab in the detail pane for a selected item. */
 export interface DetailTab {
   label: string;
-  render: (item: PanelItem, metrics: DockerDashboardMetrics) => string;
+  render: (item: PanelItem, metrics: DockerDashboardMetrics) => string | string[];
   autoScrollBottom?: boolean;
 }
 

@@ -25,8 +25,8 @@ export class StatsStreamManager extends BaseStreamManager<string | null, Contain
   protected isValidId(id: string | null): boolean { return id !== null; }
   protected idLabel(id: string | null): string { return id ?? '(none)'; }
 
-  protected createStream(id: string | null): AsyncIterable<ContainerStats> {
-    return this.client.streamStats(id!);
+  protected createStream(id: string | null, signal: AbortSignal): AsyncIterable<ContainerStats> {
+    return this.client.streamStats(id!, signal);
   }
 
   protected processItem(id: string | null, stats: ContainerStats): void {
