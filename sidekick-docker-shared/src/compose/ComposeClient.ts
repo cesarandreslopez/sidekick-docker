@@ -112,11 +112,13 @@ export class ComposeClient {
     let stderrBuffer = '';
     let done = false;
 
+    const MAX_QUEUE = 1000;
     const entries: LogEntry[] = [];
     let resolve: (() => void) | null = null;
 
     const push = (entry: LogEntry) => {
       entries.push(entry);
+      if (entries.length > MAX_QUEUE) entries.shift();
       resolve?.();
     };
 

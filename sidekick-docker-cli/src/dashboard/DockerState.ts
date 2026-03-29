@@ -59,10 +59,27 @@ export class DockerState {
   private lastRefresh: Date | null = null;
   private daemonConnected = false;
   private cachedFileConfig: ComposeFileConfig | null = null;
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(client: DockerClient, cwd?: string) {
     this.client = client;
     this.cwd = cwd;
+  }
+
+  /** Debounced refresh — coalesces rapid event-driven refreshes into a single call. */
+  private scheduleRefresh(): void {
+    if (this.refreshTimer) return;
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = null;
+      this.refresh().catch(e => console.debug('refresh failed:', e));
+    }, 500);
+  }
+
+  dispose(): void {
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = null;
+    }
   }
 
   async refresh(): Promise<void> {
@@ -120,9 +137,8 @@ export class DockerState {
       case 'image':
       case 'volume':
       case 'network':
-        // For non-container resources, trigger a full refresh
-        // These events are less frequent, so the overhead is acceptable
-        this.refresh().catch(e => console.debug('refresh failed:', e));
+        // For non-container resources, trigger a debounced refresh
+        this.scheduleRefresh();
         break;
     }
   }
@@ -139,8 +155,8 @@ export class DockerState {
           existing.state = 'running';
           existing.status = 'Up just now';
         }
-        // Trigger full refresh for accurate data
-        this.refresh().catch(e => console.debug('refresh failed:', e));
+        // Debounced refresh for accurate data
+        this.scheduleRefresh();
         break;
       }
       case 'stop':
@@ -166,13 +182,13 @@ export class DockerState {
         this.containerChanges.delete(resourceId);
         break;
       case 'create':
-        // New container — refresh to get full info
-        this.refresh().catch(e => console.debug('refresh failed:', e));
+        // New container — debounced refresh to get full info
+        this.scheduleRefresh();
         break;
       default:
-        // rename, update, etc. — refresh
+        // rename, update, health_status, etc. — debounced refresh
         if (name) {
-          this.refresh().catch(e => console.debug('refresh failed:', e));
+          this.scheduleRefresh();
         }
         break;
     }

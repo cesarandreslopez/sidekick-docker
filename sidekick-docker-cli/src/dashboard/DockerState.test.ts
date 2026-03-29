@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DockerState } from './DockerState';
 import type { DockerClient } from 'sidekick-docker-shared';
 import type { DockerEvent } from 'sidekick-docker-shared';
@@ -35,8 +35,14 @@ describe('DockerState', () => {
   let state: DockerState;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     client = makeMockClient();
     state = new DockerState(client);
+  });
+
+  afterEach(() => {
+    state.dispose();
+    vi.useRealTimers();
   });
 
   describe('refresh', () => {
@@ -129,7 +135,7 @@ describe('DockerState', () => {
       expect(state.getMetrics().containers).toHaveLength(0);
     });
 
-    it('triggers refresh for image events', () => {
+    it('triggers debounced refresh for image events', async () => {
       const event: DockerEvent = {
         type: 'pull',
         resourceType: 'image',
@@ -138,8 +144,28 @@ describe('DockerState', () => {
         attributes: {},
       };
       state.processEvent(event);
-      // refresh is called fire-and-forget; verify it was called
-      expect(client.listContainers).toHaveBeenCalledTimes(2); // initial + event
+      // Refresh is debounced — not called yet
+      expect(client.listContainers).toHaveBeenCalledTimes(1); // only initial
+      // Advance past the 500ms debounce window
+      await vi.advanceTimersByTimeAsync(500);
+      expect(client.listContainers).toHaveBeenCalledTimes(2); // initial + debounced
+    });
+
+    it('coalesces multiple events into one refresh', async () => {
+      const makeEvent = (type: string, resourceType: string): DockerEvent => ({
+        type,
+        resourceType: resourceType as DockerEvent['resourceType'],
+        resourceId: 'abc123',
+        timestamp: new Date(),
+        attributes: { name: 'test' },
+      });
+      state.processEvent(makeEvent('start', 'container'));
+      state.processEvent(makeEvent('pull', 'image'));
+      state.processEvent(makeEvent('create', 'container'));
+      // All coalesced — only the initial refresh so far
+      expect(client.listContainers).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(500);
+      expect(client.listContainers).toHaveBeenCalledTimes(2); // one debounced refresh
     });
   });
 

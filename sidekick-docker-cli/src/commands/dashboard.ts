@@ -60,6 +60,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     if (renderTimer) return;
     renderTimer = setTimeout(() => {
       renderTimer = null;
+      // Skip render if stdout can't keep up — next tick will catch up with latest state
+      if (process.stdout.writableLength > process.stdout.writableHighWaterMark) return;
       instance.rerender(
         React.createElement(Dashboard, {
           panels,
@@ -291,9 +293,13 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       const mem = process.memoryUsage();
       const heapMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
       const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
+      const extMB = (mem.external / 1024 / 1024).toFixed(1);
+      const bufMB = (mem.arrayBuffers / 1024 / 1024).toFixed(1);
+      const stdoutBuf = process.stdout.writableLength;
+      const stdoutHWM = process.stdout.writableHighWaterMark;
       const templateDiag = logManager.getTemplateDiagnostics();
       const secondaryDiag = secondaryLogManager.getTemplateDiagnostics();
-      console.debug(`[sidekick-debug] heap=${heapMB}MB rss=${rssMB}MB templates=${JSON.stringify(templateDiag)} secondary=${JSON.stringify(secondaryDiag)}`);
+      console.debug(`[sidekick-debug] heap=${heapMB}MB rss=${rssMB}MB ext=${extMB}MB bufs=${bufMB}MB stdout=${stdoutBuf}/${stdoutHWM} templates=${JSON.stringify(templateDiag)} secondary=${JSON.stringify(secondaryDiag)}`);
     }, 60_000);
   }
 
@@ -387,6 +393,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     try { clearInterval(refreshInterval); } catch { /* ignore */ }
     try { if (debugInterval) clearInterval(debugInterval); } catch { /* ignore */ }
     try { watcher.stop(); } catch { /* ignore */ }
+    try { state.dispose(); } catch { /* ignore */ }
     try { client.dispose(); } catch { /* ignore */ }
     for (const panel of panels) {
       panel.dispose?.();

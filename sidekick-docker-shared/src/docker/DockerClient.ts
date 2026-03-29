@@ -174,8 +174,8 @@ export class DockerClient {
           const size = combined.readUInt32BE(offset + 4);
 
           if (offset + 8 + size > combined.length) {
-            // Incomplete frame, save remainder
-            buffer.push(combined.subarray(offset));
+            // Incomplete frame, save remainder (copy to release combined buffer)
+            buffer.push(Buffer.from(combined.subarray(offset)));
             break;
           }
 
@@ -192,7 +192,7 @@ export class DockerClient {
         }
 
         if (offset < combined.length && buffer.length === 0) {
-          buffer.push(combined.subarray(offset));
+          buffer.push(Buffer.from(combined.subarray(offset)));
         }
       }
     } finally {
