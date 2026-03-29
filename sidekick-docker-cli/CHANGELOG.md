@@ -5,6 +5,18 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-03-29
+
+### Fixed
+
+- Fix persistent heap OOM crash when running in slow terminals (e.g. VSCode integrated terminal) — stdout backpressure from Ink renders now skips frames when the write buffer exceeds the high-water mark
+- Debounce event-driven refreshes in `DockerState` (500ms) — rapid Docker events (health_status, start, create) no longer trigger overlapping `refresh()` calls
+- Bound the compose log entries queue at 1000 (previously unbounded)
+
+### Changed
+
+- `SIDEKICK_DEBUG_STREAMS=1` diagnostics now include stdout buffer fill, external memory, and array buffer usage
+
 ## [0.2.5] - 2026-03-28
 
 ### Fixed

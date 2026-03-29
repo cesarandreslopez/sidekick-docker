@@ -5,6 +5,10 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-03-29
+
+_No changes — CLI/shared memory fix release._
+
 ## [0.2.5] - 2026-03-28
 
 _No changes — CLI memory leak fix release. Shared package updated with `AbortSignal` support for stream methods and `StatsCollector.prune()`._

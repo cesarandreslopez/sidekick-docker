@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.6] - 2026-03-29
+
+### Fixed
+
+#### CLI
+
+- Fix persistent heap OOM crash when running in slow terminals (e.g. VSCode integrated terminal) — stdout backpressure from Ink renders now skips frames when the write buffer exceeds the high-water mark instead of accumulating indefinitely
+- Debounce event-driven refreshes in `DockerState` (500ms) — health_status, start, create, and other rapid Docker events no longer each trigger their own overlapping `refresh()` call
+- Bound the compose log entries queue at 1000 — previously unbounded, the queue between the `docker compose logs` child process and the async generator could grow without limit
+
+#### Shared
+
+- Copy `Buffer` remainder instead of `subarray` view in `DockerClient.streamLogs()` — `subarray()` kept the entire parent buffer alive; now uses `Buffer.from()` to create an independent copy so the large combined buffer can be GC'd immediately
+
+### Changed
+
+#### CLI
+
+- `SIDEKICK_DEBUG_STREAMS=1` diagnostics now include stdout buffer fill level (`writableLength`/`writableHighWaterMark`), external memory, and array buffer usage
+
 ## [0.2.5] - 2026-03-28
 
 ### Fixed
