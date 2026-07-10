@@ -1,5 +1,7 @@
 export interface ComposeProject {
   name: string;
+  /** Directory the project was started from (`com.docker.compose.project.working_dir` label). */
+  workingDir?: string;
   configFile?: string;
   services: ComposeService[];
   status: 'running' | 'partial' | 'stopped';

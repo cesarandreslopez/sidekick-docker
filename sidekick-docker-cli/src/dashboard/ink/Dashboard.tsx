@@ -457,14 +457,17 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const activeTab = detailTabs[tabIdx];
   const shouldAutoScroll = activeTab?.autoScrollBottom ?? false;
   const followPaused = shouldAutoScroll && !state.logFollow;
-  useEffect(() => {
-    if (shouldAutoScroll && state.logFollow && detailLines.length > detailViewportHeight) {
-      dispatch({ type: 'SCROLL_DETAIL', offset: maxScrollOffset(detailLines.length, detailViewportHeight) });
-    }
-  }, [shouldAutoScroll, state.logFollow, detailLines.length, detailViewportHeight]);
 
-  // Compare mode: compute secondary log lines
+  // Compare mode spends one viewport row on its column-header; every scroll
+  // clamp must budget it or the newest lines become unreachable.
   const isCompareActive = compareItemId != null && shouldAutoScroll;
+  const scrollViewportHeight = isCompareActive ? Math.max(1, detailViewportHeight - 1) : detailViewportHeight;
+
+  useEffect(() => {
+    if (shouldAutoScroll && state.logFollow && detailLines.length > scrollViewportHeight) {
+      dispatch({ type: 'SCROLL_DETAIL', offset: maxScrollOffset(detailLines.length, scrollViewportHeight) });
+    }
+  }, [shouldAutoScroll, state.logFollow, detailLines.length, scrollViewportHeight]);
   const secondaryDetailLines = React.useMemo(() => {
     if (!isCompareActive) return [];
     if (panel.id === 'containers') {
@@ -482,10 +485,10 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
 
   // Auto-scroll secondary pane (compare panes follow together with the primary)
   useEffect(() => {
-    if (isCompareActive && state.logFollow && secondaryDetailLines.length > detailViewportHeight) {
-      dispatch({ type: 'SCROLL_SECONDARY_DETAIL', offset: maxScrollOffset(secondaryDetailLines.length, detailViewportHeight) });
+    if (isCompareActive && state.logFollow && secondaryDetailLines.length > scrollViewportHeight) {
+      dispatch({ type: 'SCROLL_SECONDARY_DETAIL', offset: maxScrollOffset(secondaryDetailLines.length, scrollViewportHeight) });
     }
-  }, [isCompareActive, state.logFollow, secondaryDetailLines.length, detailViewportHeight]);
+  }, [isCompareActive, state.logFollow, secondaryDetailLines.length, scrollViewportHeight]);
 
   // Find the compare item's label for the pane header
   const compareItemLabel = React.useMemo(() => {
@@ -518,14 +521,14 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   // Mouse input (extracted hook)
   const handleMouse = useMouseHandler({
     state, dispatch, panels, panelCounts, currentItems, clampedSelection,
-    selectedItem, applicableActions, sideWidth, sideScroll, detailLines,
-    detailViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast,
+    selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines,
+    detailViewportHeight: scrollViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast,
   });
 
   // Shared context for global keybindings, help rendering, and status-bar hints
   const keyCtx: KeyContext = {
     state, dispatch, panels, panel, selectedItem, applicableActions,
-    clampedSelection, currentItems, detailLines, detailViewportHeight,
+    clampedSelection, currentItems, detailLines, detailViewportHeight: scrollViewportHeight,
     detailTabs, tabIdx, sideScroll, addToast, exit,
     secondaryDetailLineCount: secondaryDetailLines.length,
   };
@@ -591,7 +594,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                   secondaryLines={secondaryDetailLines}
                   primaryScrollOffset={state.detailScrollOffset}
                   secondaryScrollOffset={state.secondaryDetailScrollOffset}
-                  viewportHeight={detailViewportHeight}
+                  viewportHeight={scrollViewportHeight}
                   totalWidth={columns - sideWidth}
                   focused={state.focusTarget === 'detail'}
                   primaryLabel={selectedItem?.label.replace(/^[^\w]*/, '').trim() ?? ''}

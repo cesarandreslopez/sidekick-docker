@@ -1,7 +1,7 @@
 import React from 'react';
 import { spawnSync } from 'child_process';
 import type { Command } from 'commander';
-import { ComposeClient, EventWatcher, shortId } from 'sidekick-docker-shared';
+import { ComposeClient, EventWatcher, dockerCliEnv, shortId } from 'sidekick-docker-shared';
 import { connectOrExit } from '../utils/connect';
 import { copyToClipboard } from '../utils/clipboard';
 import { DockerState } from '../dashboard/DockerState';
@@ -22,15 +22,17 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   const globalOpts = cmd.optsWithGlobals();
 
   // Create Docker client and verify the daemon is reachable
-  const client = await connectOrExit({ socket: globalOpts.socket as string | undefined });
+  const socket = globalOpts.socket as string | undefined;
+  const client = await connectOrExit({ socket });
 
   // Create state and do initial refresh
   const cwd = process.cwd();
   const state = new DockerState(client, cwd);
   await state.refresh();
 
-  // Create compose client
-  const composeClient = new ComposeClient();
+  // Create compose client targeting the same daemon as the API client —
+  // spawned `docker compose` processes don't see --socket on their own.
+  const composeClient = new ComposeClient(socket ? dockerCliEnv(socket) : undefined);
 
   // Action callback — refresh state after any mutation
   const onAction = () => {

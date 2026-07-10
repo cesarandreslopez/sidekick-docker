@@ -32,11 +32,12 @@ export function CompareDetailPane({
   const headerLeft = clipAnsi(`\x1b[1m${primaryLabel}\x1b[22m`, colWidth);
   const headerRight = clipAnsi(`\x1b[1m${secondaryLabel}\x1b[22m`, colWidth);
 
-  // Budget content rows so header + shared indicator rows fit inside viewportHeight.
+  // viewportHeight excludes the column-header row (the parent budgets it via
+  // scrollViewportHeight so scroll clamps agree); indicator rows fit inside.
   const leftHasUp = primaryScrollOffset > 0;
   const rightHasUp = secondaryScrollOffset > 0;
   const anyUp = leftHasUp || rightHasUp;
-  let contentBudget = Math.max(1, viewportHeight - 1 - (anyUp ? 1 : 0));
+  let contentBudget = Math.max(1, viewportHeight - (anyUp ? 1 : 0));
   const anyDownTentative =
     primaryScrollOffset + contentBudget < primaryLines.length ||
     secondaryScrollOffset + contentBudget < secondaryLines.length;

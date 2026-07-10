@@ -215,4 +215,15 @@ describe('streamLogs (non-follow buffer path)', () => {
     expect(entries.map(e => e.message)).toEqual(['plain tty line', 'second line']);
     expect(entries.every(e => e.stream === 'stdout')).toBe(true);
   });
+
+  it('strips CRLF from TTY output so timestamps still parse and no \\r leaks', async () => {
+    const buf = Buffer.from('2024-01-15T10:30:00.483306929Z tty-a\r\n2024-01-15T10:30:01.000000000Z tty-b\r\n', 'utf8');
+    const c = new DockerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (c as any).docker.getContainer = vi.fn().mockReturnValue({ logs: vi.fn().mockResolvedValue(buf) });
+    const entries = [];
+    for await (const entry of c.streamLogs('abc', { follow: false })) entries.push(entry);
+    expect(entries.map(e => e.message)).toEqual(['tty-a', 'tty-b']);
+    expect(entries.every(e => e.timestamp !== null)).toBe(true);
+  });
 });

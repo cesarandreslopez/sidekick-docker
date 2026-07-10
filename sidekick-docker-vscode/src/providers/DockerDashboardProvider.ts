@@ -33,6 +33,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
   private extensionUri: vscode.Uri;
   private pendingFocusContainerId: string | null = null;
   private webviewReady = false;
+  /** Monotonic guard making _initializeService single-flight (newest run wins). */
+  private initGeneration = 0;
   private viewState = { ...DEFAULT_VIEW_STATE };
   private workspaceFoldersSubscription: vscode.Disposable;
 
@@ -175,7 +177,13 @@ export class DockerDashboardProvider implements vscode.Disposable {
         break;
 
       case 'requestRefresh':
-        await this.service?.forceRefresh();
+        if (this.service) {
+          await this.service.forceRefresh();
+        } else {
+          // No live service (e.g. the initial connect failed): treat F5 as
+          // a retry instead of a silent no-op.
+          await this._initializeService();
+        }
         break;
 
       case 'retryConnect':
@@ -221,13 +229,21 @@ export class DockerDashboardProvider implements vscode.Disposable {
   }
 
   private async _initializeService(): Promise<void> {
+    // Single-flight: each call claims a new generation; after every await an
+    // older (stale) run must dispose whatever it created locally and bail,
+    // so overlapping calls (double retry click, settings change mid-init,
+    // panel closed mid-init) never orphan a polling service or dispose a
+    // newer run's service.
+    const generation = ++this.initGeneration;
     this.service?.dispose();
+    this.service = undefined;
     this.webviewReady = true;
 
     const settings = getSettings();
     const cwd = await resolveComposeCwd(new ComposeFileReader());
+    if (generation !== this.initGeneration) return;
 
-    this.service = new DockerService({
+    const service = new DockerService({
       onStateChange: (snapshot) => {
         this._postMessage({ type: 'updateState', snapshot });
       },
@@ -258,10 +274,15 @@ export class DockerDashboardProvider implements vscode.Disposable {
       cwd,
     });
 
-    const ok = await this.service.initialize();
+    const ok = await service.initialize();
+    if (generation !== this.initGeneration) {
+      // Superseded while connecting: only the newest run may own
+      // this.service or post connection messages.
+      service.dispose();
+      return;
+    }
     if (!ok) {
-      this.service.dispose();
-      this.service = undefined;
+      service.dispose();
       this._postMessage({ type: 'connectionState', state: 'disconnected' });
       this._postMessage({
         type: 'toast',
@@ -271,8 +292,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
       return;
     }
 
+    this.service = service;
     this._postMessage({ type: 'connectionState', state: 'connected' });
-    this._postMessage({ type: 'updateState', snapshot: this.service.getStateSnapshot() });
+    this._postMessage({ type: 'updateState', snapshot: service.getStateSnapshot() });
 
     // Send phrase bank for local rotation in webview
     const phrases = Array.from({ length: 50 }, () => getRandomPhrase());
@@ -284,17 +306,17 @@ export class DockerDashboardProvider implements vscode.Disposable {
       this.pendingFocusContainerId = null;
     }
 
-    this.service.setViewState(this.viewState);
+    service.setViewState(this.viewState);
     // Re-trigger one-shot fetches (env/changes/layers) for a selection that was
     // restored or made before the service finished (re)initializing.
     if (this.viewState.selectedItemId) {
       if (this.viewState.activePanelId === 'containers') {
-        void this.service.selectContainer(this.viewState.selectedItemId);
+        void service.selectContainer(this.viewState.selectedItemId);
       } else if (this.viewState.activePanelId === 'images') {
-        void this.service.selectImage(this.viewState.selectedItemId);
+        void service.selectImage(this.viewState.selectedItemId);
       }
     }
-    await this.service.setVisible(this.viewState.visible);
+    await service.setVisible(this.viewState.visible);
   }
 
   private _updateComposeSelection(panelId: string, itemId: string | null): void {
@@ -425,6 +447,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
   }
 
   private _cleanup(): void {
+    // Invalidate any in-flight _initializeService run so it disposes its
+    // service instead of committing it after the panel is gone.
+    this.initGeneration++;
     this.service?.dispose();
     this.service = undefined;
     this.webviewReady = false;

@@ -4,6 +4,7 @@ import type { TerminalMouseEvent } from './mouse';
 import type { DashboardUIState, Action, AddToast } from './dashboardTypes';
 import { executeAction } from './executeAction';
 import { contextMenuHit, confirmHit, sortHit } from './overlayHitTest';
+import { windowLines } from './windowLines';
 import type { SortField } from './dashboardTypes';
 
 const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
@@ -19,6 +20,7 @@ interface MouseContext {
   /** Condition-filtered actions for the selected item (context menu contents). */
   applicableActions: PanelAction[];
   sideWidth: number;
+  sideViewportHeight: number;
   sideScroll: {
     scrollOffset: number;
     setSelected(index: number): void;
@@ -33,7 +35,7 @@ interface MouseContext {
 }
 
 export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) => void {
-  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast } = ctx;
+  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast } = ctx;
 
   return useCallback((event: TerminalMouseEvent) => {
     // Text-entry overlays: ignore all mouse events (raw escape bytes leak into the input)
@@ -53,10 +55,12 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
         case 'context-menu': {
           const idx = contextMenuHit(x, y, applicableActions);
+          // Close the menu BEFORE executing: executeAction may open the
+          // confirm overlay, which a later SET_OVERLAY:null would clobber.
+          dispatch({ type: 'SET_OVERLAY', overlay: null });
           if (idx !== null && selectedItem) {
             executeAction(applicableActions[idx], selectedItem, dispatch, addToast, removeToast);
           }
-          dispatch({ type: 'SET_OVERLAY', overlay: null });
           return;
         }
         case 'sort': {
@@ -102,7 +106,10 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
       if (x < sideWidth && sideWidth > 0) {
         const itemRow = y - 3 - (sideScroll.scrollOffset > 0 ? 1 : 0);
         const itemIndex = sideScroll.scrollOffset + itemRow;
-        if (itemRow >= 0 && itemIndex < currentItems.length) {
+        // Bound by the rows actually rendered (windowLines budgets ▲/▼ rows),
+        // so clicks on the ▼ indicator or blank rows don't hit off-screen items.
+        const rendered = windowLines(currentItems, sideScroll.scrollOffset, sideViewportHeight).visible.length;
+        if (itemRow >= 0 && itemRow < rendered) {
           dispatch({ type: 'SET_FOCUS', target: 'side' });
           dispatch({ type: 'SELECT_ITEM', index: itemIndex });
           sideScroll.setSelected(itemIndex);
@@ -148,7 +155,8 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
       const hasScrollUp = sideScroll.scrollOffset > 0;
       const itemRow = y - 3 - (hasScrollUp ? 1 : 0);
       const itemIndex = sideScroll.scrollOffset + itemRow;
-      if (itemRow >= 0 && itemIndex < currentItems.length) {
+      const rendered = windowLines(currentItems, sideScroll.scrollOffset, sideViewportHeight).visible.length;
+      if (itemRow >= 0 && itemRow < rendered) {
         dispatch({ type: 'SELECT_ITEM', index: itemIndex });
         sideScroll.setSelected(itemIndex);
       }
@@ -169,5 +177,5 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
       }
     }
-  }, [state.overlay, state.activePanelIndex, state.confirmAction, state.confirmSeverity, sideWidth, currentItems.length, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, addToast, removeToast, dispatch]);
+  }, [state.overlay, state.activePanelIndex, state.confirmAction, state.confirmSeverity, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, addToast, removeToast, dispatch]);
 }

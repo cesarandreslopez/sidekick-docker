@@ -12,10 +12,22 @@ export interface ComposeExecResult {
  * Docker API has no native compose concept, so we shell out.
  */
 export class ComposeClient {
+  /**
+   * @param extraEnv Environment overrides for every spawned `docker compose`
+   *   process (e.g. DOCKER_HOST so compose targets the same daemon as the API
+   *   client — see `dockerCliEnv`). Merged over the inherited environment.
+   */
+  constructor(private readonly extraEnv?: Record<string, string>) {}
+
+  private spawnEnv(): NodeJS.ProcessEnv | undefined {
+    return this.extraEnv ? { ...process.env, ...this.extraEnv } : undefined;
+  }
+
   private async exec(args: string[], cwd?: string): Promise<ComposeExecResult> {
     return new Promise((resolve, reject) => {
       const proc = spawn('docker', ['compose', ...args], {
         cwd,
+        env: this.spawnEnv(),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -77,6 +89,7 @@ export class ComposeClient {
     if (service) args.push(service);
 
     const proc = spawn('docker', ['compose', ...args], {
+      env: this.spawnEnv(),
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 

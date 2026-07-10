@@ -4,10 +4,11 @@ export * from './types';
 // Docker client
 export { DockerClient } from './docker/DockerClient';
 export type { DockerClientOptions, LogStreamOptions, PingResult } from './docker/DockerClient';
-export { parseDockerEndpoint, describeDockerEndpoint } from './docker/endpoint';
+export { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv } from './docker/endpoint';
 
 // Compose
 export { ComposeDetector } from './compose/ComposeDetector';
+export type { ComposeProjectSource } from './compose/ComposeDetector';
 export { ComposeClient } from './compose/ComposeClient';
 export type { ComposeExecResult } from './compose/ComposeClient';
 export { ComposeFileReader } from './compose/ComposeFileReader';

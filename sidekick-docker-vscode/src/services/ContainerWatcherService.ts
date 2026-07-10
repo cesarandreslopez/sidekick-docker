@@ -2,7 +2,8 @@ import { DockerClient, EventWatcher } from 'sidekick-docker-shared';
 import type { ContainerInfo, DockerClientOptions } from 'sidekick-docker-shared';
 
 export interface ContainerWatcherCallbacks {
-  onContainersChanged: (containers: ContainerInfo[]) => void;
+  /** Fired with the containers AND the real connection state they were observed under. */
+  onContainersChanged: (containers: ContainerInfo[], connected: boolean) => void;
   onConnectionChanged: (connected: boolean) => void;
 }
 
@@ -21,6 +22,7 @@ export class ContainerWatcherService {
   private watcher: EventWatcher | null = null;
   private containers: ContainerInfo[] = [];
   private connected = false;
+  private connectionNotified = false;
   private disposed = false;
 
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
@@ -87,11 +89,11 @@ export class ContainerWatcherService {
     try {
       this.containers = await this.client.listContainers(true);
       this.setConnected(true);
-      this.callbacks.onContainersChanged(this.containers);
+      this.callbacks.onContainersChanged(this.containers, true);
     } catch {
       this.setConnected(false);
       this.containers = [];
-      this.callbacks.onContainersChanged(this.containers);
+      this.callbacks.onContainersChanged(this.containers, false);
       this.stopWatcher();
       this.startReconnectPolling();
     }
@@ -126,7 +128,7 @@ export class ContainerWatcherService {
         this.containers = this.containers.filter(c => c.id !== event.resourceId);
         break;
     }
-    this.callbacks.onContainersChanged(this.containers);
+    this.callbacks.onContainersChanged(this.containers, this.connected);
   }
 
   private scheduleRefresh(): void {
@@ -138,8 +140,13 @@ export class ContainerWatcherService {
   }
 
   private setConnected(value: boolean): void {
-    if (this.connected !== value) {
-      this.connected = value;
+    // Notify on every change, plus once for the initial state: `connected`
+    // starts out false, so a failed first connect would otherwise never
+    // reach the callbacks and the daemon-down UI would stay unreachable.
+    const changed = this.connected !== value;
+    this.connected = value;
+    if (changed || !this.connectionNotified) {
+      this.connectionNotified = true;
       this.callbacks.onConnectionChanged(value);
     }
   }

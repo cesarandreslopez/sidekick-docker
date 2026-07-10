@@ -12,7 +12,9 @@ const DEFAULT_SOCKET = '/var/run/docker.sock';
  * - `unix:///path/to/socket`
  * - `tcp://host[:port]`, `http://host[:port]`, `https://host[:port]`
  *
- * Protocol is `https` iff the scheme is `https://` or the port is 2376.
+ * Protocol is `https` iff the scheme is `https://`, or the scheme-ambiguous
+ * `tcp://` is used with the conventional TLS port 2376. An explicit `http://`
+ * always stays plain HTTP.
  */
 export function parseDockerEndpoint(value: string): DockerClientOptions {
   const trimmed = value.trim();
@@ -47,7 +49,7 @@ export function parseDockerEndpoint(value: string): DockerClientOptions {
     if (!Number.isInteger(port) || port <= 0 || port > 65535) {
       throw new Error(`Invalid Docker endpoint "${value}": bad port`);
     }
-    const protocol = scheme === 'https' || port === DEFAULT_TLS_PORT ? 'https' : 'http';
+    const protocol = scheme === 'https' || (scheme === 'tcp' && port === DEFAULT_TLS_PORT) ? 'https' : 'http';
     return { host: url.hostname, port, protocol };
   }
 
@@ -56,6 +58,27 @@ export function parseDockerEndpoint(value: string): DockerClientOptions {
   }
 
   return { socketPath: trimmed };
+}
+
+/**
+ * Environment overrides that make a spawned `docker` CLI (e.g. `docker
+ * compose`) target the same endpoint as an API client built from
+ * `parseDockerEndpoint(value)`. Without this, spawned CLI processes inherit
+ * the ambient DOCKER_HOST (or the default socket) and mutating compose
+ * actions land on a different daemon than the one the UI shows.
+ */
+export function dockerCliEnv(value: string): Record<string, string> {
+  const opts = parseDockerEndpoint(value);
+  if (opts.socketPath) {
+    // The docker CLI wants npipe:////./pipe/name for Windows named pipes.
+    return opts.socketPath.startsWith('\\\\.\\pipe\\')
+      ? { DOCKER_HOST: `npipe://${opts.socketPath.replace(/\\/g, '/')}` }
+      : { DOCKER_HOST: `unix://${opts.socketPath}` };
+  }
+  const env: Record<string, string> = { DOCKER_HOST: `tcp://${opts.host}:${opts.port}` };
+  // tcp:// is plain HTTP to the docker CLI unless TLS verification is on.
+  if (opts.protocol === 'https') env.DOCKER_TLS_VERIFY = '1';
+  return env;
 }
 
 /**

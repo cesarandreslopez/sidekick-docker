@@ -781,36 +781,55 @@ export class DockerService {
   }
 
   /**
-   * Working directory for a compose action: prefer the directory of the
-   * compose file Docker recorded for the project (correct regardless of
-   * workspace), falling back to the injected workspace cwd.
+   * Working directory for a compose action: prefer the source location
+   * Docker recorded for the project (`com.docker.compose.project.working_dir`
+   * / `.config_files` labels — correct regardless of workspace), falling
+   * back to the injected workspace cwd. listContainers does not thread
+   * labels through, so when detection could not capture the location we
+   * inspect one of the project's containers to recover it.
    */
-  private composeCwd(projectName: string): string | undefined {
-    const configFile = this.composeProjects.find(p => p.name === projectName)?.configFile;
+  private async composeCwd(projectName: string): Promise<string | undefined> {
+    const project = this.composeProjects.find(p => p.name === projectName);
+    let workingDir = project?.workingDir;
+    let configFile = project?.configFile;
+
+    if (!workingDir && !configFile) {
+      const containerId = project?.services.find(s => s.containerId)?.containerId;
+      if (containerId) {
+        try {
+          const info = await this.client.inspectContainer(containerId);
+          ({ workingDir, configFile } = ComposeDetector.projectSourceFromLabels(info.Config?.Labels));
+        } catch {
+          // Container vanished or inspect failed — fall back to the workspace cwd.
+        }
+      }
+    }
+
+    if (workingDir && existsSync(workingDir)) return workingDir;
     if (configFile && existsSync(configFile)) return dirname(configFile);
     return this.cwd;
   }
 
   async composeUp(projectName: string): Promise<void> {
-    await this.composeClient.up(projectName, this.composeCwd(projectName));
+    await this.composeClient.up(projectName, await this.composeCwd(projectName));
     await this.refresh();
     this.scheduleStateUpdate();
   }
 
   async composeDown(projectName: string): Promise<void> {
-    await this.composeClient.down(projectName, this.composeCwd(projectName));
+    await this.composeClient.down(projectName, await this.composeCwd(projectName));
     await this.refresh();
     this.scheduleStateUpdate();
   }
 
   async composeRestart(projectName: string, serviceName?: string): Promise<void> {
-    await this.composeClient.restart(projectName, serviceName, this.composeCwd(projectName));
+    await this.composeClient.restart(projectName, serviceName, await this.composeCwd(projectName));
     await this.refresh();
     this.scheduleStateUpdate();
   }
 
   async composeStop(projectName: string, serviceName?: string): Promise<void> {
-    await this.composeClient.stop(projectName, serviceName, this.composeCwd(projectName));
+    await this.composeClient.stop(projectName, serviceName, await this.composeCwd(projectName));
     await this.refresh();
     this.scheduleStateUpdate();
   }

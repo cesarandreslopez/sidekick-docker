@@ -16,6 +16,8 @@ export interface ContainerInfo {
   composeProject?: string;
   composeService?: string;
   healthStatus?: 'healthy' | 'unhealthy' | 'starting';
+  /** Raw Docker labels, when the producer threads them through (optional). */
+  labels?: Record<string, string>;
 }
 
 export interface ContainerStats {

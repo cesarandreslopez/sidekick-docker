@@ -124,6 +124,33 @@ describe('context menu overlay input', () => {
     OVERLAY_INPUT_HANDLERS['context-menu']('j', bareKey(), ctx);
     expect(ctx.dispatched).toContainEqual({ type: 'CONTEXT_MENU_NAV', delta: 1, itemCount: 2 });
   });
+
+  // Regression: the menu-close dispatch used to come AFTER executeAction, so
+  // the reducer applied SET_CONFIRM (overlay='confirm') then SET_OVERLAY:null —
+  // the confirm modal never appeared and destructive actions silently no-oped.
+  it('confirm-requiring actions open the confirm modal after the menu closes (Enter)', () => {
+    const ctx = makeCtx({ overlay: 'context-menu', contextMenuIndex: 0 });
+    ctx.contextActions = [{ key: 'd', label: 'Remove', handler: vi.fn(), confirm: true, confirmMessage: 'Remove "web"?' }];
+    OVERLAY_INPUT_HANDLERS['context-menu']('', bareKey({ return: true }), ctx);
+
+    const types = ctx.dispatched.map(a => (a as { type: string }).type);
+    const closeIdx = types.indexOf('SET_OVERLAY');
+    const confirmIdx = types.indexOf('SET_CONFIRM');
+    expect(closeIdx).toBeGreaterThanOrEqual(0);
+    expect(confirmIdx).toBeGreaterThan(closeIdx);
+    const confirm = ctx.dispatched[confirmIdx] as { action: unknown; message: string };
+    expect(confirm.message).toBe('Remove "web"?');
+    expect(typeof confirm.action).toBe('function');
+  });
+
+  it('confirm-requiring actions open the confirm modal after the menu closes (shortcut key)', () => {
+    const ctx = makeCtx({ overlay: 'context-menu' });
+    ctx.contextActions = [{ key: 'd', label: 'Remove', handler: vi.fn(), confirm: true, confirmMessage: 'Remove "web"?' }];
+    OVERLAY_INPUT_HANDLERS['context-menu']('d', bareKey(), ctx);
+
+    const types = ctx.dispatched.map(a => (a as { type: string }).type);
+    expect(types.indexOf('SET_CONFIRM')).toBeGreaterThan(types.indexOf('SET_OVERLAY'));
+  });
 });
 
 describe('sort overlay input', () => {

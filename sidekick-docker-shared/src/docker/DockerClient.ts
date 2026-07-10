@@ -52,7 +52,14 @@ export class DockerClient {
   private docker: Dockerode;
 
   constructor(opts?: DockerClientOptions) {
-    this.docker = new Dockerode(opts);
+    // docker-modem merges DOCKER_HOST-derived defaults under these options and
+    // prefers host over socketPath, so an explicit socketPath would silently
+    // lose to an ambient DOCKER_HOST. Explicit undefined keys survive the
+    // Object.assign merge and pin the requested socket.
+    const pinned = opts?.socketPath && !opts.host
+      ? { ...opts, host: undefined, port: undefined, protocol: undefined }
+      : opts;
+    this.docker = new Dockerode(pinned);
   }
 
   async ping(): Promise<boolean> {
@@ -92,6 +99,7 @@ export class DockerClient {
         created: new Date(c.Created * 1000),
         composeProject: c.Labels?.['com.docker.compose.project'],
         composeService: c.Labels?.['com.docker.compose.service'],
+        labels: c.Labels,
         healthStatus,
       };
     });
@@ -155,14 +163,16 @@ export class DockerClient {
       const buf = Buffer.isBuffer(stream) ? stream : Buffer.from(stream, 'utf8');
       if (looksMultiplexed(buf)) {
         for (const frame of demuxFrames(buf).frames) {
-          for (const line of frame.payload.split('\n')) {
+          for (const line of frame.payload.split(/\r?\n/)) {
             if (line.trim()) {
               yield parseLogLine(line, frame.stream);
             }
           }
         }
       } else {
-        for (const line of buf.toString('utf8').split('\n')) {
+        // TTY containers emit CRLF; a trailing \r breaks parseLogLine's
+        // timestamp match and leaks raw CRs into piped output.
+        for (const line of buf.toString('utf8').split(/\r?\n/)) {
           if (line) {
             yield parseLogLine(line, 'stdout');
           }
@@ -190,7 +200,7 @@ export class DockerClient {
 
         const { frames, rest } = demuxFrames(combined);
         for (const frame of frames) {
-          for (const line of frame.payload.split('\n')) {
+          for (const line of frame.payload.split(/\r?\n/)) {
             if (line.trim()) {
               yield parseLogLine(line, frame.stream);
             }

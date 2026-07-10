@@ -48,6 +48,7 @@ export interface SerializedComposeService {
 
 export interface SerializedComposeProject {
   name: string;
+  workingDir?: string;
   configFile?: string;
   services: SerializedComposeService[];
   status: 'running' | 'partial' | 'stopped';

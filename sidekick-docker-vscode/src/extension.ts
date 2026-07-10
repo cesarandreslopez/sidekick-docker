@@ -50,10 +50,10 @@ async function runContainerCommand(
 
 function createWatcherService(settings: SidekickSettings): ContainerWatcherService {
   return new ContainerWatcherService({
-    onContainersChanged: (containers) => {
-      treeProvider!.update(containers, true);
+    onContainersChanged: (containers, connected) => {
+      treeProvider!.update(containers, connected);
       updateBadge(containers);
-      updateStatusBar(containers, true);
+      updateStatusBar(containers, connected);
     },
     onConnectionChanged: (connected) => {
       if (!connected) {

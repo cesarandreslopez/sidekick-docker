@@ -4,4 +4,4 @@
  */
 export { DockerClient } from './DockerClient';
 export type { DockerClientOptions, LogStreamOptions, PingResult } from './DockerClient';
-export { parseDockerEndpoint, describeDockerEndpoint } from './endpoint';
+export { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv } from './endpoint';

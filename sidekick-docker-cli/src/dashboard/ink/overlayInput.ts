@@ -99,15 +99,17 @@ const contextMenu: OverlayInputHandler = (input, key, ctx) => {
   if (key.return) {
     const action = contextActions[state.contextMenuIndex];
     if (action && selectedItem) {
-      executeAction(action, selectedItem, dispatch, addToast, removeToast);
+      // Close the menu BEFORE executing: executeAction may open the confirm
+      // overlay, which a later SET_OVERLAY:null would silently clobber.
       dispatch({ type: 'SET_OVERLAY', overlay: null });
+      executeAction(action, selectedItem, dispatch, addToast, removeToast);
     }
     return;
   }
   const match = contextActions.find(a => a.key === input);
   if (match && selectedItem) {
-    executeAction(match, selectedItem, dispatch, addToast, removeToast);
     dispatch({ type: 'SET_OVERLAY', overlay: null });
+    executeAction(match, selectedItem, dispatch, addToast, removeToast);
   }
 };
 
