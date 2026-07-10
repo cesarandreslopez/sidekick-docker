@@ -5,6 +5,46 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-10
+
+### Added
+
+- `ps --format <table|json>` and `-q`/`--quiet` for scripting; table output is width-aware on a TTY and uses natural widths when piped
+- `logs --no-follow`; `-f` now defaults on only when attached to a terminal, so piped `logs` output terminates instead of hanging — non-follow output is demultiplexed with correct stderr tagging
+- Root `--no-color` flag; colored output honors `NO_COLOR`, `FORCE_COLOR`, and TTY detection — no more raw escape codes in piped/CI output
+- Root `--verbose` flag — errors print one friendly line by default, full details with `--verbose` or `DEBUG`
+- `--socket` accepts `unix://` and `tcp://`/`http://`/`https://` URLs in addition to bare socket paths, and is now honored by `ps` and `logs` (previously silently ignored outside the dashboard)
+- Paging keys: `PgUp`/`PgDn` scroll a full page, `Ctrl+D`/`Ctrl+U` a half page; `l`/`→` enters the detail pane (vim symmetry with `h`)
+- Log follow-pause — scrolling up on a logs tab pauses tailing (`⏸ follow paused — G to resume`); reaching the bottom or `G` resumes
+- Stacked toasts — up to 3 recent toasts render below the tab bar instead of overwriting each other; failure toasts carry the actual Docker error text
+- Mouse support — click to select items and switch panel/detail tabs, clickable overlay buttons (confirm Yes/No, menu and sort rows), right-click opens the actions menu; clicking outside cancels
+- Connection-aware empty states (`Connecting to Docker…`, `Docker daemon unreachable`) and actionable daemon-unreachable hints mapped from `EACCES`/`ENOENT`/`ECONNREFUSED`/`ETIMEDOUT`
+- Pressing a global key that isn't available in the current context shows a `Not available here` toast instead of silently doing nothing
+- `--help` includes usage examples and an environment section (`DOCKER_HOST`, `NO_COLOR`, `FORCE_COLOR`)
+
+### Changed
+
+- Confirm modals are safe by default — `Enter` and `q` cancel, No is the visually-safe default, the destructive Yes button is red; confirms name their target (`Remove container "web-1"?`) and prune confirms show live counts
+- Prune actions report results (`Pruned — 1.2 GB reclaimed`); Copy Logs reports the copied line count; toast lifetimes tuned (info 2.5s, errors 6s)
+- `z` cycles three layout modes (Normal → Wide → Expanded); Wide adapts to terminal width instead of starving the detail pane
+- Log filter (`f`) works on any tailing logs tab including Services; pinning a compare target (`m`) jumps to the logs tab so the split view appears immediately
+- Help overlay and status-bar hints are generated from the keybinding registry (`ink/keyRegistry.ts`), so they can no longer drift from the actual bindings
+- Dependency refresh — TypeScript 5.9, React 19.2, esbuild 0.28, node-pty 1.1; `npm audit` reports 0 known vulnerabilities
+
+### Fixed
+
+- Actions-menu confirmations — choosing a destructive action from the `x`/right-click menu now shows the confirm modal; previously the menu close clobbered it and the action silently did nothing
+- Dashboard compose actions (up/down/restart/stop) run against the `--socket` daemon via `DOCKER_HOST` instead of always the local default context
+- An explicit `--socket` socket path pins the endpoint even when `DOCKER_HOST` is set in the environment (the env host silently won before)
+- Compare mode can reach the newest log lines — the column-header row was double-budgeted against the viewport, permanently hiding the last two lines
+- Clicks and right-clicks on the `▼` indicator row or blank rows below the side list no longer select or act on off-screen items
+- `q` can finally be typed into the filter and log-filter inputs (`rabbitmq`, `sqlite`, …); `Ctrl+C` always quits, even with an overlay open
+- Dual-stack port bindings no longer listed twice (`18080:80/tcp, 18080:80/tcp` collapses to one entry) in `ps` and the TUI
+- `--tail` is validated up front; `ps --format json | head` exits 0 on a closed pipe instead of printing a stack trace
+- TTY container logs with `--no-follow` parse timestamps and no longer leak trailing carriage returns into piped output
+- Side-list click off-by-one (the panel title row was a live click target); status bar no longer wraps on 60–80-column terminals; `▲`/`▼` indicator rows are budgeted inside bordered panes
+- `x` no longer opens an empty actions menu for items with no applicable actions
+
 ## [0.2.6] - 2026-03-29
 
 ### Fixed

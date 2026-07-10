@@ -2,7 +2,7 @@
   "name": "sidekick-docker-vscode",
   "displayName": "Sidekick Docker",
   "description": "Docker management dashboard for VS Code",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "publisher": "CesarAndresLopez",
   "engines": {
     "vscode": "^1.85.0"
@@ -150,7 +150,6 @@
       {
         "command": "sidekick-docker.openDashboard",
         "key": "ctrl+alt+d",
-        "mac": "cmd+alt+d",
         "when": "!terminalFocus"
       },
       {

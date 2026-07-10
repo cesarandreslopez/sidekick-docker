@@ -5,6 +5,44 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-10
+
+### Added
+
+- **Extension settings** — `sidekick-docker.socketPath` (socket path, `unix://`, or `tcp://host:port`; `DOCKER_HOST` is used when empty), `sidekick-docker.refreshIntervalSeconds` (min 5s), `sidekick-docker.statusBar.visible`, and `sidekick-docker.exec.defaultShell` (was hardcoded `/bin/sh`); socket/refresh changes apply live without a reload, and an invalid `socketPath` warns instead of silently connecting to the default socket
+- Dashboard survives window reloads — active panel, selection, detail tab, sort, layout mode, and the all/running filter are restored (stale saved state is validated and clamped)
+- `Sidekick Docker: Open Dashboard to the Side` command — opens the dashboard in a split editor column
+- Default keybindings — `Ctrl+Alt+D` opens the dashboard (all platforms; macOS reserves `Cmd+Opt+D` for Dock hiding), `Ctrl/Cmd+Alt+R` refreshes containers while the tree has focus
+- Tree view context menus per container state — Restart, Pause, Unpause, and Remove (paused and restarting containers previously had no actions); Remove asks with a modal naming the container
+- Compose project sub-groups in the container tree, with container counts
+- Tree welcome states — "Docker daemon is not reachable" with a Retry Connection button when the daemon is down, and a real "No containers found" view
+- Mouse action path in the dashboard — right-click a row or click its `⋯` button to open the actions menu anchored at the pointer; clickable status-bar hint chips (`/ filter`, `x actions`, `? help`, `↻ refresh`); overlays close on outside click
+- Keyboard parity with the TUI — `m` pins/unpins the compare pane, `f` focuses the log filter, `Shift+J`/`Shift+K` scroll the compare pane, `F5` refreshes, `PgUp`/`PgDn` full-page and `Ctrl+D`/`Ctrl+U` half-page scrolling
+- Connection-aware dashboard — skeleton rows and a pulsing `connecting…` dot while connecting; a persistent banner with a Retry button when the daemon is down
+- Health badges on container rows in the side list (`✓` healthy, `✗` unhealthy, `◌` starting), with health in the hover tooltip
+- Sticky error toasts — errors stay until dismissed and gain Copy and dismiss buttons (previously vanished after 4 seconds)
+- Accessibility — ARIA roles and selection states for tabs, lists, menus, and dialogs; `aria-live` toasts and connection status; visible focus outlines; `Enter`/`Space` activates a focused tab; `prefers-reduced-motion` disables pulse/skeleton animations; stat bars add a `high` text band so color is not the only overload signal
+
+### Changed
+
+- One feedback voice for all Docker actions — slow operations run inside progress notifications that survive switching tabs; success toasts name the item ("Stopped web-1"); error toasts include the item name and the real error message; uniform across the tree view, quick picks, and the dashboard
+- Confirmation dialogs name their target ("Remove container \"web-1\"?"), destructive and batch (prune) confirms are styled red, and `Enter` activates the focused button — Cancel by default
+- All commands are categorized under "Sidekick Docker"; tree-only container commands are hidden from the palette (invoking them there silently did nothing)
+- Clicking a container in the tree no longer force-opens the dashboard — an inline icon opens it instead; tree items have stable identities so collapse state survives refreshes
+- Services panel shows a real empty state instead of a fake "No compose projects found" row
+- Keyboard-opened actions menu (`x`) anchors at the selected row instead of screen center; info toast lifetime aligned with the TUI (2.5s)
+
+### Fixed
+
+- Global shortcuts no longer fire while an input has focus — typing in the log filter previously switched panels on digits and could start/stop/remove containers or open an exec terminal on letter keys; `Escape` blurs and `Enter` commits
+- Compose actions (up/down/restart/stop) run in the compose project's own directory — resolved from the working dir and compose files Docker recorded for the project, falling back to the workspace folder — instead of whatever directory the extension host started in; compose file detection likewise scans workspace folders
+- Daemon-down state is reported correctly at startup and mid-session — the tree shows the retry welcome instead of "No containers found" with a healthy status bar count
+- Rapid Retry clicks or live settings changes can no longer leak a duplicate Docker connection (orphaned event stream and refresh timer) or crash the dashboard initialization — init is single-flight, and closing the panel mid-init disposes the in-flight connection
+- `F5`/refresh retries the connection when the dashboard is disconnected instead of silently doing nothing
+- No more red `disconnected` flash on first paint and no misleading "No containers" empty state while the first connection attempt is in flight
+- Log filter text containing double quotes no longer breaks the filter input — attribute escaping applied to all HTML attribute interpolations
+- Info-toned UI (log severities, JSON keys, detail labels, sparklines) uses one theme-derived `--sd-info` color instead of inconsistent low-contrast fallbacks
+
 ## [0.2.6] - 2026-03-29
 
 _No changes — CLI/shared memory fix release._

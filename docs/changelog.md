@@ -6,6 +6,95 @@ All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-07-10
+
+### Added
+
+#### CLI
+
+- `ps --format <table|json>` and `-q`/`--quiet` for scripting; table output is width-aware on a TTY and uses natural widths when piped
+- `logs --no-follow`; `-f` now defaults on only when attached to a terminal, so piped `logs` output terminates instead of hanging — non-follow output is demultiplexed with correct stderr tagging
+- Root `--no-color` flag; colored output honors `NO_COLOR`, `FORCE_COLOR`, and TTY detection — no more raw escape codes in piped/CI output
+- Root `--verbose` flag — errors print one friendly line by default, full details with `--verbose` or `DEBUG`
+- `--socket` accepts `unix://` and `tcp://`/`http://`/`https://` URLs in addition to bare socket paths, and is now honored by `ps` and `logs` (previously silently ignored outside the dashboard)
+- Paging keys: `PgUp`/`PgDn` scroll a full page, `Ctrl+D`/`Ctrl+U` a half page; `l`/`→` enters the detail pane (vim symmetry with `h`)
+- Log follow-pause — scrolling up on a logs tab pauses tailing (`⏸ follow paused — G to resume`); reaching the bottom or `G` resumes
+- Stacked toasts — up to 3 recent toasts render below the tab bar instead of overwriting each other; failure toasts carry the actual Docker error text
+- Mouse support — click to select items and switch panel/detail tabs, clickable overlay buttons (confirm Yes/No, menu and sort rows), right-click opens the actions menu; clicking outside cancels
+- Connection-aware empty states (`Connecting to Docker…`, `Docker daemon unreachable`) and actionable daemon-unreachable hints mapped from `EACCES`/`ENOENT`/`ECONNREFUSED`/`ETIMEDOUT`
+- Pressing a global key that isn't available in the current context shows a `Not available here` toast instead of silently doing nothing
+
+#### VSCode
+
+- Extension settings — `sidekick-docker.socketPath` (socket path, `unix://`, or `tcp://host:port`), `refreshIntervalSeconds`, `statusBar.visible`, and `exec.defaultShell`; socket/refresh changes apply live without a reload, and an invalid `socketPath` warns instead of silently connecting to the default
+- Dashboard survives window reloads — active panel, selection, detail tab, sort, layout, and filter are restored
+- `Sidekick Docker: Open Dashboard to the Side` command; default keybindings — `Ctrl+Alt+D` opens the dashboard (all platforms), `Ctrl/Cmd+Alt+R` refreshes the tree
+- Tree view: per-state context menus (Restart, Pause, Unpause, Remove with a naming modal), compose project sub-groups with container counts, and welcome states — "Docker daemon is not reachable" with a Retry button, and a real "No containers found" view
+- Dashboard mouse actions — right-click a row or click its `⋯` button to open the actions menu at the pointer; clickable status-bar hint chips; overlays close on outside click
+- Keyboard parity with the TUI — `m` pins the compare pane, `f` focuses the log filter, `Shift+J`/`Shift+K` scroll the compare pane, `F5` refreshes, `PgUp`/`PgDn` and `Ctrl+D`/`Ctrl+U` page
+- Connection-aware dashboard — skeleton rows and a pulsing `connecting…` dot while connecting; a persistent banner with Retry when the daemon is down
+- Health badges on container rows (`✓`/`✗`/`◌`); sticky error toasts with Copy and dismiss buttons
+- Accessibility — ARIA roles and selection states, `aria-live` toasts and connection status, visible focus outlines, `prefers-reduced-motion` support, and a text band on stat bars so color is not the only overload signal
+
+#### Shared
+
+- `parseDockerEndpoint()` — parses bare socket paths, `unix://`, and `tcp://`/`http://`/`https://` URLs into client options; `https` is selected for the `https://` scheme or the scheme-ambiguous `tcp://` on port 2376
+- `describeDockerEndpoint()` and `explainDockerUnreachable()` — human-readable endpoint descriptions and errno-mapped one-line hints for connection failures
+- `DockerClient.pingDetailed()` — preserves the underlying error so callers can explain why the daemon is unreachable; `errorCode()` extracts Node errno codes
+- `dockerCliEnv()` — `DOCKER_HOST`/`DOCKER_TLS_VERIFY` overrides so spawned `docker` CLI processes (compose) target the same endpoint as the API client
+- `ComposeClient` accepts environment overrides for spawned `docker compose` processes; `ComposeDetector` records each project's source directory and config files from compose labels
+- `protocol?: 'http' | 'https'` option on `DockerClientOptions` for TLS connections to remote daemons
+
+### Changed
+
+#### CLI
+
+- Confirm modals are safe by default — `Enter` and `q` cancel, No is the visually-safe default, the destructive Yes button is red; confirms name their target (`Remove container "web-1"?`) and prune confirms show live counts
+- Prune actions report results (`Pruned — 1.2 GB reclaimed`); Copy Logs reports the copied line count; toast lifetimes tuned (info 2.5s, errors 6s)
+- `z` cycles three layout modes (Normal → Wide → Expanded); Wide adapts to terminal width instead of starving the detail pane
+- Log filter (`f`) works on any tailing logs tab including Services; pinning a compare target (`m`) jumps to the logs tab so the split view appears immediately
+- Help overlay and status-bar hints are generated from the keybinding registry (`ink/keyRegistry.ts`), so they can no longer drift from the actual bindings
+- Dependency refresh — TypeScript 5.9, React 19.2, esbuild 0.28, node-pty 1.1; `npm audit` reports 0 known vulnerabilities
+
+#### VSCode
+
+- One feedback voice for all Docker actions — progress notifications for slow operations, success toasts naming the item, error toasts with the real message; uniform across tree, quick picks, and dashboard
+- Confirmation dialogs name their target, destructive/batch confirms are styled red, and `Enter` activates the focused button (Cancel by default)
+- All commands categorized under "Sidekick Docker"; tree-only commands hidden from the palette
+- Clicking a container in the tree no longer force-opens the dashboard (an inline icon does); tree items keep stable identities so collapse state survives refreshes
+- Keyboard-opened actions menu (`x`) anchors at the selected row instead of screen center
+
+### Fixed
+
+#### CLI
+
+- Actions-menu confirmations — choosing a destructive action from the `x`/right-click menu now shows the confirm modal; previously the menu close clobbered it and the action silently did nothing
+- Dashboard compose actions (up/down/restart/stop) run against the `--socket` daemon via `DOCKER_HOST` instead of always the local default context
+- Compare mode can reach the newest log lines — the column-header row was double-budgeted against the viewport, permanently hiding the last two lines
+- Clicks and right-clicks on the `▼` indicator row or blank rows below the side list no longer select or act on off-screen items
+- `q` can finally be typed into the filter and log-filter inputs (`rabbitmq`, `sqlite`, …); `Ctrl+C` always quits, even with an overlay open
+- Dual-stack port bindings no longer listed twice (`18080:80/tcp, 18080:80/tcp` collapses to one entry) in `ps` and the TUI
+- `--tail` is validated up front; `ps --format json | head` exits 0 on a closed pipe instead of printing a stack trace
+- Side-list click off-by-one (the panel title row was a live click target); status bar no longer wraps on 60–80-column terminals; `▲`/`▼` indicator rows are budgeted inside bordered panes
+- `x` no longer opens an empty actions menu for items with no applicable actions
+
+#### VSCode
+
+- Global shortcuts no longer fire while an input has focus — typing in the log filter previously switched panels on digits and could start/stop/remove containers on letter keys
+- Compose actions run in the compose project's own directory (resolved from the working dir and config files Docker recorded for the project), falling back to the workspace folder — instead of whatever directory the extension host started in
+- Daemon-down state is reported correctly at startup and mid-session — the tree shows the retry welcome instead of "No containers found" with a healthy status bar
+- Rapid Retry clicks or live settings changes can no longer leak a duplicate Docker connection (orphaned event stream + refresh timer) or crash the dashboard initialization — init is now single-flight
+- `F5`/refresh retries the connection when the dashboard is disconnected instead of silently doing nothing
+- No more red `disconnected` flash on first paint and no misleading "No containers" empty state while the first connection attempt is in flight
+- Log filter text containing double quotes no longer breaks the filter input (attribute escaping applied to all HTML attribute interpolations)
+
+#### Shared
+
+- An explicit `socketPath` pins the endpoint even when `DOCKER_HOST` is set — docker-modem silently preferred the environment host, so `--socket /path` and the VSCode `socketPath` setting targeted the wrong daemon
+- An explicit `http://` endpoint on port 2376 stays plain HTTP (TLS is only inferred for the scheme-ambiguous `tcp://` form)
+- `formatPorts()` deduplicates mappings Docker reports once per bind address (IPv4 + IPv6)
+- Non-follow log fetches from non-TTY containers demultiplex Docker's frame format (no leaked headers, correct stderr tagging); TTY output with CRLF line endings parses timestamps and strips trailing carriage returns
+
 ## [0.2.6] - 2026-03-29
 
 ### Fixed

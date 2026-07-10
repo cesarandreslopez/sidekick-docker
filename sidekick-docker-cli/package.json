@@ -1,6 +1,6 @@
 {
   "name": "sidekick-docker",
-  "version": "0.2.6",
+  "version": "0.3.0",
   "description": "Interactive Docker dashboard (TUI), plus scriptable ps and logs commands",
   "author": "Cesar Andres Lopez <cesarandreslopez@gmail.com>",
   "repository": {
