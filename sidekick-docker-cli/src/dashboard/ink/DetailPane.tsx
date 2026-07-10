@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { windowLines } from './windowLines';
 
 interface DetailPaneProps {
   lines: string[];
@@ -9,22 +10,18 @@ interface DetailPaneProps {
 }
 
 export function DetailPane({ lines, scrollOffset, viewportHeight, focused }: DetailPaneProps): React.ReactElement {
-  const visibleLines = lines.slice(scrollOffset, scrollOffset + viewportHeight);
-  const hasScrollUp = scrollOffset > 0;
-  const hasScrollDown = scrollOffset + viewportHeight < lines.length;
-  const aboveCount = scrollOffset;
-  const belowCount = Math.max(0, lines.length - scrollOffset - viewportHeight);
+  const win = windowLines(lines, scrollOffset, viewportHeight);
 
   return (
     <Box flexDirection="column" flexGrow={1} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? '#2B4C7E' : 'gray'}>
-      {hasScrollUp && (
-        <Text color="gray">{`\u25B2 (${aboveCount} more)`}</Text>
+      {win.hasUp && (
+        <Text color="gray">{`▲ (${win.above} more)`}</Text>
       )}
-      {visibleLines.map((line, i) => (
+      {win.visible.map((line, i) => (
         <Text key={i} wrap="truncate">{line}</Text>
       ))}
-      {hasScrollDown && (
-        <Text color="gray">{`\u25BC (${belowCount} more)`}</Text>
+      {win.hasDown && (
+        <Text color="gray">{`▼ (${win.below} more)`}</Text>
       )}
     </Box>
   );

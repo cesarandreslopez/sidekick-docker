@@ -133,7 +133,7 @@ export class ServicesPanel implements SidePanel {
         key: 'D',
         label: 'Down',
         confirm: true,
-        confirmMessage: 'Bring down this compose project?',
+        confirmMessage: (item) => `Bring down project "${getProjectName(panelData<ServiceItemData>(item))}"?`,
         confirmSeverity: 'high',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);

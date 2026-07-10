@@ -239,7 +239,7 @@ export class ContainersPanel implements SidePanel {
         key: 'd',
         label: 'Remove',
         confirm: true,
-        confirmMessage: 'Remove this container?',
+        confirmMessage: (item) => `Remove container "${panelData<ContainerInfo>(item).name}"?`,
         confirmSeverity: 'high',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);

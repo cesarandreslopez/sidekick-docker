@@ -25,7 +25,8 @@ export interface PanelAction {
   handler: (item: PanelItem) => void | string | Promise<void | string>;
   condition?: (item: PanelItem) => boolean;
   confirm?: boolean;
-  confirmMessage?: string;
+  /** Static message, or a function to interpolate the target's name/count. */
+  confirmMessage?: string | ((item: PanelItem) => string);
   /** Risk level for confirmation dialog: 'low' (yellow), 'high' (red, default), 'batch' (red, shows count). */
   confirmSeverity?: 'low' | 'high' | 'batch';
 }

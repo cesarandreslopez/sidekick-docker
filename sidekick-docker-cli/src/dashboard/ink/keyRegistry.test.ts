@@ -46,11 +46,15 @@ function makeState(overrides: Partial<DashboardUIState> = {}): DashboardUIState 
 }
 
 function makePanel(id: string): SidePanel {
+  // Only containers/services have a tailing logs tab, mirroring the real panels.
+  const hasLogsTab = id === 'containers' || id === 'services';
   return {
     id,
     title: id,
     shortcutKey: 1,
-    detailTabs: [{ label: 'Logs', render: () => [], autoScrollBottom: true }],
+    detailTabs: hasLogsTab
+      ? [{ label: 'Logs', render: () => [], autoScrollBottom: true }]
+      : [{ label: 'Info', render: () => [] }],
     getItems: () => [],
     getActions: () => [],
   };
@@ -158,11 +162,19 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
   });
 
   it('marks containers-only bindings unavailable on other panels', () => {
-    const images = makeCtx({ panel: makePanel('images') });
+    const imagesPanel = makePanel('images');
+    const images = makeCtx({ panel: imagesPanel, detailTabs: imagesPanel.detailTabs });
     for (const id of ['log-filter', 'toggle-all', 'sort-menu', 'sort-reverse', 'compare-pin']) {
       const spec = GLOBAL_BINDINGS.find(b => b.id === id)!;
       expect(spec.isAvailable!(images), id).toBe(false);
     }
+  });
+
+  it('log filter is available on any tailing logs tab (Services too)', () => {
+    const services = makePanel('services');
+    const ctx = makeCtx({ panel: services, detailTabs: services.detailTabs, tabIdx: 0 });
+    const spec = GLOBAL_BINDINGS.find(b => b.id === 'log-filter')!;
+    expect(spec.isAvailable!(ctx)).toBe(true);
   });
 
   it('actions-menu is unavailable when no applicable actions exist', () => {
@@ -192,7 +204,8 @@ describe('buildContextHint', () => {
   });
 
   it('omits unavailable hints on other panels', () => {
-    const hint = buildContextHint(makeCtx({ panel: makePanel('networks') }));
+    const networks = makePanel('networks');
+    const hint = buildContextHint(makeCtx({ panel: networks, detailTabs: networks.detailTabs }));
     expect(hint).toBe('');
   });
 });

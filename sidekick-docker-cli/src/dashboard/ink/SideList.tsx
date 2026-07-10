@@ -1,6 +1,9 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { PanelItem } from '../panels/types';
+import { windowLines } from './windowLines';
+
+export type ListState = 'disconnected' | 'loading' | 'ready';
 
 interface SideListProps {
   items: PanelItem[];
@@ -15,6 +18,8 @@ interface SideListProps {
   totalCount?: number;
   runningCount?: number;
   compareItemId?: string;
+  /** Distinguishes "still connecting" from "genuinely empty" for the empty state. */
+  listState?: ListState;
 }
 
 const EMPTY_HINTS: Record<string, string[]> = {
@@ -25,12 +30,11 @@ const EMPTY_HINTS: Record<string, string[]> = {
   services: ['Start a compose project:', '  docker compose up -d'],
 };
 
-export function SideList({ items, selectedIndex, scrollOffset, focused, width, viewportHeight, panelTitle, filterString, panelId, totalCount, runningCount, compareItemId }: SideListProps): React.ReactElement {
-  const hasScrollUp = scrollOffset > 0;
-  const hasScrollDown = scrollOffset + viewportHeight < items.length;
-  const aboveCount = scrollOffset;
-  const belowCount = Math.max(0, items.length - scrollOffset - viewportHeight);
-  const visibleItems = items.slice(scrollOffset, scrollOffset + viewportHeight);
+export function SideList({ items, selectedIndex, scrollOffset, focused, width, viewportHeight, panelTitle, filterString, panelId, totalCount, runningCount, compareItemId, listState = 'ready' }: SideListProps): React.ReactElement {
+  // viewportHeight already excludes the title row (RESERVED_UI_ROWS);
+  // windowLines budgets the ▲/▼ indicator rows inside it.
+  const win = windowLines(items, scrollOffset, viewportHeight);
+  const visibleItems = win.visible;
 
   // Build panel title with count
   let titleLabel = panelTitle;
@@ -49,8 +53,8 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
     <Box flexDirection="column" width={width} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? '#2B4C7E' : 'gray'}>
       {/* Panel title in first row */}
       <Text color={focused ? '#2B4C7E' : 'gray'} bold>{` ${titleLabel}`}</Text>
-      {hasScrollUp && (
-        <Text color="gray">{` \u25B2 (${aboveCount} more)`}</Text>
+      {win.hasUp && (
+        <Text color="gray">{` \u25B2 (${win.above} more)`}</Text>
       )}
       {visibleItems.map((item, i) => {
         const actualIndex = scrollOffset + i;
@@ -116,8 +120,8 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
           </Box>
         );
       })}
-      {hasScrollDown && (
-        <Text color="gray">{` \u25BC (${belowCount} more)`}</Text>
+      {win.hasDown && (
+        <Text color="gray">{` \u25BC (${win.below} more)`}</Text>
       )}
       {items.length === 0 && filterString && (
         <Box flexDirection="column" paddingTop={1}>
@@ -125,7 +129,18 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
           <Text color="gray" dimColor>{' Press Esc to clear filter'}</Text>
         </Box>
       )}
-      {items.length === 0 && !filterString && (
+      {items.length === 0 && !filterString && listState === 'disconnected' && (
+        <Box flexDirection="column" paddingTop={1}>
+          <Text color="red">{' \u25CB Docker daemon unreachable'}</Text>
+          <Text color="gray" dimColor>{' Waiting to reconnect\u2026'}</Text>
+        </Box>
+      )}
+      {items.length === 0 && !filterString && listState === 'loading' && (
+        <Box flexDirection="column" paddingTop={1}>
+          <Text color="gray">{' Connecting to Docker\u2026'}</Text>
+        </Box>
+      )}
+      {items.length === 0 && !filterString && listState === 'ready' && (
         <Box flexDirection="column" paddingTop={1}>
           <Text color="gray">{` \u2500 No ${panelTitle.toLowerCase()} found`}</Text>
           {panelId && EMPTY_HINTS[panelId] && (

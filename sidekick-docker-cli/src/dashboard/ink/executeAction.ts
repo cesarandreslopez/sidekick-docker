@@ -41,7 +41,8 @@ export function executeAction(
   };
 
   if (action.confirm) {
-    dispatch({ type: 'SET_CONFIRM', action: run, message: action.confirmMessage || 'Are you sure?', severity: action.confirmSeverity ?? 'high' });
+    const message = typeof action.confirmMessage === 'function' ? action.confirmMessage(item) : action.confirmMessage;
+    dispatch({ type: 'SET_CONFIRM', action: run, message: message || 'Are you sure?', severity: action.confirmSeverity ?? 'high' });
   } else {
     run();
   }

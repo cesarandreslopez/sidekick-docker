@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { maxScrollOffset } from './windowLines';
 
 interface UseWindowedScrollOptions {
   totalItems: number;
@@ -20,7 +21,9 @@ export function useWindowedScroll({ totalItems, viewportHeight }: UseWindowedScr
   const [scrollOffset, setScrollOffset] = useState(0);
 
   const adjustScroll = useCallback((newIndex: number) => {
-    const maxVisible = viewportHeight - 1;
+    // Conservative visible budget: windowLines may reserve up to two rows
+    // for the ▲/▼ indicators, so keep the selection inside the worst case.
+    const maxVisible = Math.max(1, viewportHeight - 2);
     let newOffset = scrollOffset;
 
     if (newIndex < scrollOffset) {
@@ -29,7 +32,7 @@ export function useWindowedScroll({ totalItems, viewportHeight }: UseWindowedScr
       newOffset = newIndex - maxVisible + 1;
     }
 
-    newOffset = Math.max(0, Math.min(newOffset, Math.max(0, totalItems - viewportHeight)));
+    newOffset = Math.max(0, Math.min(newOffset, maxScrollOffset(totalItems, viewportHeight)));
     setScrollOffset(newOffset);
   }, [scrollOffset, viewportHeight, totalItems]);
 

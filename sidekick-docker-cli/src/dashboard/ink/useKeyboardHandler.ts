@@ -8,7 +8,6 @@ import { executeAction } from './executeAction';
 export interface KeyboardHandlerProps {
   ctx: KeyContext;
   removeToast: (id: number) => void;
-  rotatePhrase: () => void;
 }
 
 /**
@@ -17,12 +16,11 @@ export interface KeyboardHandlerProps {
  * everything, so text overlays receive characters like 'q') → global bindings
  * from the key registry → per-panel action shortcuts.
  */
-export function useKeyboardHandler({ ctx, removeToast, rotatePhrase }: KeyboardHandlerProps): void {
+export function useKeyboardHandler({ ctx, removeToast }: KeyboardHandlerProps): void {
   useInput((input, key) => {
     const { state, dispatch, addToast, selectedItem, applicableActions } = ctx;
 
     if (state.overlay === 'exec') return;
-    rotatePhrase();
 
     if (key.ctrl && input === 'c') {
       ctx.exit();

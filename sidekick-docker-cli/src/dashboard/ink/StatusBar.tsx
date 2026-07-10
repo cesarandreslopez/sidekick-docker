@@ -20,6 +20,8 @@ interface StatusBarProps {
   totalCount?: number;
   lastRefresh?: Date | null;
   contextHint?: string;
+  /** Terminal width budget; segments are dropped lowest-priority-first to fit. */
+  width: number;
 }
 
 function formatAgo(date: Date): { text: string; stale: boolean } {
@@ -30,9 +32,74 @@ function formatAgo(date: Date): { text: string; stale: boolean } {
   return { text: `${mins}m ago`, stale: mins >= 1 };
 }
 
-const SEP = '\u2502'; // │ vertical bar separator
+const SEP = '│';
 
-export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh, contextHint }: StatusBarProps): React.ReactElement {
+/** One colored text run in the status bar. Runs sharing a group are dropped together. */
+export interface StatusSegment {
+  group: string;
+  text: string;
+  color?: string;
+  dimColor?: boolean;
+  bold?: boolean;
+}
+
+/** Groups dropped (in this order) until the bar fits the width budget. */
+const DROP_ORDER = ['tagline', 'version', 'brand', 'nav', 'context', 'ago', 'hints'];
+
+export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width: number): StatusSegment[] {
+  const { daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh, contextHint } = props;
+  const ago = lastRefresh ? formatAgo(lastRefresh) : null;
+
+  const segments: StatusSegment[] = [];
+
+  segments.push({ group: 'brand', text: ` ⚡ ${BRAND_INLINE}`, color: 'magenta', bold: true });
+  segments.push({ group: 'tagline', text: ` ${BRAND_TAGLINE}`, color: 'gray', dimColor: true });
+  segments.push({ group: 'version', text: ` v${version}`, color: 'gray', dimColor: true });
+  segments.push({ group: 'daemon', text: ` ${SEP} `, color: 'gray', dimColor: true });
+  segments.push(
+    daemonConnected
+      ? { group: 'daemon', text: `● ${runningCount ?? 0}/${containerCount ?? 0}`, color: 'green' }
+      : { group: 'daemon', text: '○ disconnected', color: 'red' },
+  );
+  if (ago) {
+    segments.push({ group: 'ago', text: ` ↻ ${ago.text}`, color: ago.stale ? 'yellow' : 'gray', dimColor: !ago.stale });
+  }
+
+  if (panelActionHints.length > 0) {
+    segments.push({ group: 'hints', text: ` ${SEP} `, color: 'gray', dimColor: true });
+    panelActionHints.forEach((hint, i) => {
+      if (i > 0) segments.push({ group: 'hints', text: '  ' });
+      segments.push({ group: 'hints', text: `${hint.key}:${hint.label}`, color: hint.destructive ? 'red' : '#2B4C7E' });
+    });
+  }
+
+  segments.push({ group: 'focus', text: ` ${SEP} `, color: 'gray', dimColor: true });
+  segments.push({ group: 'focus', text: '◀', color: focusTarget === 'side' ? '#2B4C7E' : 'gray', bold: focusTarget === 'side' });
+  segments.push({ group: 'focus', text: '/', color: 'gray', dimColor: true });
+  segments.push({ group: 'focus', text: '▶', color: focusTarget === 'detail' ? '#2B4C7E' : 'gray', bold: focusTarget === 'detail' });
+
+  segments.push({ group: 'nav', text: '  j/k  Tab  /  ?', color: 'gray', dimColor: true });
+
+  if (contextHint) {
+    segments.push({ group: 'context', text: `  ${contextHint}`, color: 'cyan', dimColor: true });
+  }
+
+  if (filterString) {
+    const counts = matchCount !== undefined && totalCount !== undefined ? ` ${matchCount}/${totalCount}` : '';
+    segments.push({ group: 'filter', text: `  ◉ "${filterString}"${counts}`, color: 'yellow', bold: true });
+  }
+
+  // Drop lowest-priority groups until the plain text fits the width budget.
+  let result = segments;
+  const fits = (segs: StatusSegment[]) => segs.reduce((n, s) => n + [...s.text].length, 0) <= width;
+  for (const group of DROP_ORDER) {
+    if (fits(result)) break;
+    result = result.filter(s => s.group !== group);
+  }
+  return result;
+}
+
+export function StatusBar(props: StatusBarProps): React.ReactElement {
   // Re-render periodically to keep "ago" text fresh
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -40,64 +107,15 @@ export function StatusBar({ daemonConnected, focusTarget, panelActionHints, filt
     return () => clearInterval(timer);
   }, []);
 
-  const ago = lastRefresh ? formatAgo(lastRefresh) : null;
+  const segments = buildStatusSegments(props, props.width);
 
   return (
-    <Box>
-      {/* Brand + version */}
-      <Text bold color="magenta">{` \u26A1 ${BRAND_INLINE}`}</Text>
-      <Text color="gray" dimColor>{` ${BRAND_TAGLINE} v${version}`}</Text>
-
-      {/* Separator */}
-      <Text color="gray" dimColor>{` ${SEP} `}</Text>
-
-      {/* Daemon status */}
-      <Text color={daemonConnected ? 'green' : 'red'}>
-        {daemonConnected ? `\u25CF ${runningCount ?? 0}/${containerCount ?? 0}` : '\u25CB disconnected'}
+    <Box width={props.width}>
+      <Text wrap="truncate">
+        {segments.map((s, i) => (
+          <Text key={i} color={s.color} dimColor={s.dimColor} bold={s.bold}>{s.text}</Text>
+        ))}
       </Text>
-      {ago && (
-        <Text color={ago.stale ? 'yellow' : 'gray'} dimColor={!ago.stale}>
-          {` \u21BB ${ago.text}`}
-        </Text>
-      )}
-
-      {/* Separator */}
-      <Text color="gray" dimColor>{` ${SEP} `}</Text>
-
-      {/* Panel actions — destructive in red, safe in brand blue */}
-      {panelActionHints.length > 0 && (
-        <>
-          {panelActionHints.map((hint, i) => (
-            <React.Fragment key={hint.key}>
-              {i > 0 && <Text>{'  '}</Text>}
-              <Text color={hint.destructive ? 'red' : '#2B4C7E'}>
-                {`${hint.key}:${hint.label}`}
-              </Text>
-            </React.Fragment>
-          ))}
-          <Text color="gray" dimColor>{` ${SEP} `}</Text>
-        </>
-      )}
-
-      {/* Focus indicator */}
-      <Text color={focusTarget === 'side' ? '#2B4C7E' : 'gray'} bold={focusTarget === 'side'}>{'\u25C0'}</Text>
-      <Text color="gray" dimColor>{'/'}</Text>
-      <Text color={focusTarget === 'detail' ? '#2B4C7E' : 'gray'} bold={focusTarget === 'detail'}>{'\u25B6'}</Text>
-
-      {/* Navigation hints */}
-      <Text color="gray" dimColor>
-        {'  j/k  Tab  /  ?'}
-      </Text>
-
-      {/* Contextual hints for active panel */}
-      {contextHint ? (
-        <Text color="cyan" dimColor>{`  ${contextHint}`}</Text>
-      ) : null}
-
-      {/* Active filter indicator */}
-      {filterString ? (
-        <Text color="yellow" bold>{`  \u25C9 "${filterString}"${matchCount !== undefined && totalCount !== undefined ? ` ${matchCount}/${totalCount}` : ''}`}</Text>
-      ) : null}
     </Box>
   );
 }

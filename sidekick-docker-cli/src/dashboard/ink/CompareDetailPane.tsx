@@ -32,20 +32,26 @@ export function CompareDetailPane({
   const headerLeft = clipAnsi(`\x1b[1m${primaryLabel}\x1b[22m`, colWidth);
   const headerRight = clipAnsi(`\x1b[1m${secondaryLabel}\x1b[22m`, colWidth);
 
-  // Visible lines for each column
-  const leftVisible = primaryLines.slice(primaryScrollOffset, primaryScrollOffset + viewportHeight);
-  const rightVisible = secondaryLines.slice(secondaryScrollOffset, secondaryScrollOffset + viewportHeight);
-
-  // Scroll indicators
+  // Budget content rows so header + shared indicator rows fit inside viewportHeight.
   const leftHasUp = primaryScrollOffset > 0;
-  const leftHasDown = primaryScrollOffset + viewportHeight < primaryLines.length;
   const rightHasUp = secondaryScrollOffset > 0;
-  const rightHasDown = secondaryScrollOffset + viewportHeight < secondaryLines.length;
+  const anyUp = leftHasUp || rightHasUp;
+  let contentBudget = Math.max(1, viewportHeight - 1 - (anyUp ? 1 : 0));
+  const anyDownTentative =
+    primaryScrollOffset + contentBudget < primaryLines.length ||
+    secondaryScrollOffset + contentBudget < secondaryLines.length;
+  if (anyDownTentative) contentBudget = Math.max(1, contentBudget - 1);
 
-  const maxRows = Math.max(leftVisible.length, rightVisible.length, viewportHeight);
+  // Visible lines for each column
+  const leftVisible = primaryLines.slice(primaryScrollOffset, primaryScrollOffset + contentBudget);
+  const rightVisible = secondaryLines.slice(secondaryScrollOffset, secondaryScrollOffset + contentBudget);
+
+  const leftHasDown = primaryScrollOffset + contentBudget < primaryLines.length;
+  const rightHasDown = secondaryScrollOffset + contentBudget < secondaryLines.length;
+
   const rows: React.ReactElement[] = [];
 
-  for (let i = 0; i < maxRows && i < viewportHeight; i++) {
+  for (let i = 0; i < contentBudget; i++) {
     const left = leftVisible[i] ?? '';
     const right = rightVisible[i] ?? '';
     rows.push(
@@ -78,9 +84,9 @@ export function CompareDetailPane({
       {/* Scroll down indicators */}
       {(leftHasDown || rightHasDown) && (
         <Box>
-          <Text color="gray">{leftHasDown ? clipAnsi(`\u25BC (${Math.max(0, primaryLines.length - primaryScrollOffset - viewportHeight)} more)`, colWidth) : ' '.repeat(colWidth)}</Text>
+          <Text color="gray">{leftHasDown ? clipAnsi(`\u25BC (${Math.max(0, primaryLines.length - primaryScrollOffset - contentBudget)} more)`, colWidth) : ' '.repeat(colWidth)}</Text>
           <Text color="gray" dimColor>{' \u2502 '}</Text>
-          <Text color="gray">{rightHasDown ? clipAnsi(`\u25BC (${Math.max(0, secondaryLines.length - secondaryScrollOffset - viewportHeight)} more)`, colWidth) : ' '.repeat(colWidth)}</Text>
+          <Text color="gray">{rightHasDown ? clipAnsi(`\u25BC (${Math.max(0, secondaryLines.length - secondaryScrollOffset - contentBudget)} more)`, colWidth) : ' '.repeat(colWidth)}</Text>
         </Box>
       )}
     </Box>

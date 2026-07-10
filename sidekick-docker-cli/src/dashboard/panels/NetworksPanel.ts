@@ -12,6 +12,7 @@ export class NetworksPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
+  private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(client: DockerClient, onAction: () => void) {
     this.client = client;
@@ -44,6 +45,7 @@ export class NetworksPanel implements SidePanel {
   ];
 
   getItems(metrics: DockerDashboardMetrics): PanelItem[] {
+    this.lastMetrics = metrics;
     return metrics.networks.map((net): PanelItem => {
       const icon = net.isDefault ? '\u25C6' : '\u25C7'; // ◆ vs ◇
       const countLabel = net.containers.length > 0 ? `${net.containers.length}` : '';
@@ -65,7 +67,7 @@ export class NetworksPanel implements SidePanel {
         key: 'd',
         label: 'Remove',
         confirm: true,
-        confirmMessage: 'Remove this network?',
+        confirmMessage: (item) => `Remove network "${panelData<NetworkInfo>(item).name}"?`,
         confirmSeverity: 'high',
         handler: (item) => {
           const net = panelData<NetworkInfo>(item);
@@ -80,7 +82,10 @@ export class NetworksPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: 'Prune all unused networks?',
+        confirmMessage: () => {
+          const n = this.lastMetrics?.networks.filter(net => !net.isDefault && net.containers.length === 0).length ?? 0;
+          return n > 0 ? `Prune ${n} unused network${n === 1 ? '' : 's'}?` : 'Prune all unused networks?';
+        },
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneNetworks().then((r) => {

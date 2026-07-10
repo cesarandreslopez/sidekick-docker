@@ -31,6 +31,7 @@ import { stripCursorEscapes, renderLogLines } from '../../formatters';
 import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
 import { buildHelpBindings, buildContextHint } from './keyRegistry';
 import type { KeyContext } from './keyRegistry';
+import { maxScrollOffset } from './windowLines';
 
 const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
 
@@ -87,13 +88,13 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
       // followTab marks a user-initiated scroll on a logs (auto-scroll) tab:
       // follow pauses unless the jump lands at the bottom.
       if (action.followTab && action.totalLines !== undefined && action.viewportHeight !== undefined) {
-        const maxOffset = Math.max(0, action.totalLines - action.viewportHeight);
+        const maxOffset = maxScrollOffset(action.totalLines, action.viewportHeight);
         return { ...state, detailScrollOffset: action.offset, logFollow: action.offset >= maxOffset };
       }
       return { ...state, detailScrollOffset: action.offset };
     }
     case 'SCROLL_DETAIL_DELTA': {
-      const maxOffset = Math.max(0, action.totalLines - action.viewportHeight);
+      const maxOffset = maxScrollOffset(action.totalLines, action.viewportHeight);
       const next = Math.max(0, Math.min(state.detailScrollOffset + action.delta, maxOffset));
       if (action.followTab) {
         return { ...state, detailScrollOffset: next, logFollow: next >= maxOffset };
@@ -160,7 +161,7 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
     case 'SCROLL_SECONDARY_DETAIL':
       return { ...state, secondaryDetailScrollOffset: action.offset };
     case 'SCROLL_SECONDARY_DETAIL_DELTA': {
-      const maxOffset = Math.max(0, action.totalLines - action.viewportHeight);
+      const maxOffset = maxScrollOffset(action.totalLines, action.viewportHeight);
       const next = Math.max(0, Math.min(state.secondaryDetailScrollOffset + action.delta, maxOffset));
       return { ...state, secondaryDetailScrollOffset: next };
     }
@@ -318,15 +319,21 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   // Derived values
   const panel = panels[state.activePanelIndex];
   const tooSmall = columns < MIN_SCREEN_WIDTH || rows < MIN_SCREEN_HEIGHT;
+  // Wide layout adapts to narrow terminals instead of starving the detail pane.
+  const wideWidth = Math.min(SIDE_PANEL_WIDTH_WIDE, Math.max(SIDE_PANEL_WIDTH, Math.floor(columns * 0.4)));
   const sideWidth = state.layoutMode === 'expanded' ? 0
-    : state.layoutMode === 'wide' ? SIDE_PANEL_WIDTH_WIDE
+    : state.layoutMode === 'wide' ? wideWidth
     : SIDE_PANEL_WIDTH;
+  const listState: 'disconnected' | 'loading' | 'ready' = !metrics.daemonConnected
+    ? 'disconnected'
+    : metrics.lastRefresh == null ? 'loading' : 'ready';
 
-  // Get all items for active panel (once), then filter
-  const allItems = panel.getItems(metrics);
-  const totalItemCount = allItems.length;
-
-  const currentItems = (() => {
+  // Items for the active panel: filtered + sorted, memoized so UI-only renders
+  // (toasts, scroll, phrase) don't refilter/resort. metrics identity changes on
+  // every data refresh, which is exactly when recomputation is needed.
+  const { currentItems, totalItemCount } = React.useMemo(() => {
+    const allItems = panel.getItems(metrics);
+    const total = allItems.length;
     let items = allItems;
     // Show all / running-only toggle (containers panel)
     if (panel.id === 'containers' && !state.showAllContainers) {
@@ -342,6 +349,8 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         return text.toLowerCase().includes(f);
       });
     }
+    // Copy before sorting: the array may be the memoized/panel-owned one.
+    items = [...items];
     // Sort: use sortField for containers panel, default sortKey otherwise
     if (panel.id === 'containers' && state.sortField !== 'state') {
       const dir = state.sortReversed ? -1 : 1;
@@ -382,8 +391,9 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       const dir = state.sortReversed ? -1 : 1;
       items.sort((a, b) => dir * (a.sortKey - b.sortKey));
     }
-    return items;
-  })();
+    return { currentItems: items, totalItemCount: total };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panel, metrics, state.showAllContainers, state.filterString, state.sortField, state.sortReversed]);
   const clampedSelection = Math.min(state.selectedItemIndex, Math.max(0, currentItems.length - 1));
 
   if (clampedSelection !== state.selectedItemIndex && currentItems.length > 0) {
@@ -449,7 +459,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const followPaused = shouldAutoScroll && !state.logFollow;
   useEffect(() => {
     if (shouldAutoScroll && state.logFollow && detailLines.length > detailViewportHeight) {
-      dispatch({ type: 'SCROLL_DETAIL', offset: detailLines.length - detailViewportHeight });
+      dispatch({ type: 'SCROLL_DETAIL', offset: maxScrollOffset(detailLines.length, detailViewportHeight) });
     }
   }, [shouldAutoScroll, state.logFollow, detailLines.length, detailViewportHeight]);
 
@@ -473,7 +483,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   // Auto-scroll secondary pane (compare panes follow together with the primary)
   useEffect(() => {
     if (isCompareActive && state.logFollow && secondaryDetailLines.length > detailViewportHeight) {
-      dispatch({ type: 'SCROLL_SECONDARY_DETAIL', offset: secondaryDetailLines.length - detailViewportHeight });
+      dispatch({ type: 'SCROLL_SECONDARY_DETAIL', offset: maxScrollOffset(secondaryDetailLines.length, detailViewportHeight) });
     }
   }, [isCompareActive, state.logFollow, secondaryDetailLines.length, detailViewportHeight]);
 
@@ -491,9 +501,10 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     : [];
   const contextActions = state.overlay === 'context-menu' ? applicableActions : [];
 
-  // Compute per-panel item counts for TabBar badges
+  // Compute per-panel item counts for TabBar badges (memoized: only data
+  // refreshes change them, not UI-state renders)
   const runningCount = metrics.containers.filter(c => c.state === 'running').length;
-  const panelCounts = panels.map((p) => {
+  const panelCounts = React.useMemo(() => panels.map((p) => {
     if (p.id === 'containers') {
       return { total: metrics.containers.length, running: runningCount };
     }
@@ -501,15 +512,14 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       const meaningful = metrics.composeProjects.reduce((sum, proj) => sum + proj.services.length, 0);
       return { total: meaningful };
     }
-    // For the active panel we already have allItems; for others call getItems
-    const items = p === panel ? allItems : p.getItems(metrics);
-    return { total: items.length };
-  });
+    return { total: p.getItems(metrics).length };
+  }), [panels, metrics, runningCount]);
 
   // Mouse input (extracted hook)
   const handleMouse = useMouseHandler({
     state, dispatch, panels, panelCounts, currentItems, clampedSelection,
-    sideWidth, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, rotatePhrase,
+    selectedItem, applicableActions, sideWidth, sideScroll, detailLines,
+    detailViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast,
   });
 
   // Shared context for global keybindings, help rendering, and status-bar hints
@@ -521,7 +531,16 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   };
 
   // Keyboard input (extracted hook)
-  useKeyboardHandler({ ctx: keyCtx, removeToast, rotatePhrase });
+  useKeyboardHandler({ ctx: keyCtx, removeToast });
+
+  // Right-click/x can request the menu for an item with no applicable actions;
+  // close it instead of showing an empty shell.
+  useEffect(() => {
+    if (state.overlay === 'context-menu' && (!selectedItem || applicableActions.length === 0)) {
+      dispatch({ type: 'SET_OVERLAY', overlay: null });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.overlay, selectedItem, applicableActions.length]);
 
   // Render
   if (tooSmall) {
@@ -561,6 +580,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                 totalCount={totalItemCount}
                 runningCount={panel.id === 'containers' ? runningCount : undefined}
                 compareItemId={compareItemId || undefined}
+                listState={listState}
               />
             )}
             <Box flexDirection="column" flexGrow={1}>
@@ -617,11 +637,12 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
             totalCount={state.filterString ? totalItemCount : undefined}
             lastRefresh={metrics.lastRefresh}
             contextHint={contextHint}
+            width={columns}
           />
         )}
 
         {state.overlay === 'context-menu' && (
-          <ContextMenuOverlay actions={contextActions} selectedIndex={state.contextMenuIndex} />
+          <ContextMenuOverlay actions={contextActions} selectedIndex={state.contextMenuIndex} maxWidth={columns - 6} />
         )}
 
         {state.overlay === 'filter' && (
@@ -648,6 +669,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
           <ConfirmOverlay
             message={state.confirmMessage}
             severity={state.confirmSeverity}
+            maxWidth={columns - 6}
             onConfirm={() => {
               state.confirmAction?.();
               dispatch({ type: 'SET_CONFIRM', action: null, message: '' });

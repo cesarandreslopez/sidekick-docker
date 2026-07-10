@@ -1,18 +1,22 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { PanelAction } from '../panels/types';
+import { CONTEXT_MENU_ORIGIN, contextMenuWidth } from './overlayHitTest';
 
 interface ContextMenuOverlayProps {
   actions: PanelAction[];
   selectedIndex: number;
+  maxWidth?: number;
 }
 
-export function ContextMenuOverlay({ actions, selectedIndex }: ContextMenuOverlayProps): React.ReactElement {
+export function ContextMenuOverlay({ actions, selectedIndex, maxWidth }: ContextMenuOverlayProps): React.ReactElement {
+  const width = maxWidth !== undefined ? Math.min(contextMenuWidth(actions), maxWidth) : undefined;
   return (
     <Box
       position="absolute"
-      marginTop={2}
-      marginLeft={2}
+      marginTop={CONTEXT_MENU_ORIGIN.top}
+      marginLeft={CONTEXT_MENU_ORIGIN.left}
+      width={width}
       flexDirection="column"
       borderStyle="single"
       borderColor="#2B4C7E"
@@ -45,7 +49,7 @@ export function ContextMenuOverlay({ actions, selectedIndex }: ContextMenuOverla
         );
       })}
       <Text>{''}</Text>
-      <Text color="gray" dimColor>{'j/k select  Enter run  Esc close'}</Text>
+      <Text color="gray" dimColor wrap="truncate">{'j/k select  Enter/click run  Esc close'}</Text>
     </Box>
   );
 }

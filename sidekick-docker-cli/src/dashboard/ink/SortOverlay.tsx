@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { SortField } from './dashboardTypes';
+import { SORT_OVERLAY_ORIGIN } from './overlayHitTest';
 
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
   { field: 'state', label: 'State (running first)' },
@@ -22,8 +23,8 @@ export function SortOverlay({ selectedIndex, currentField, reversed }: SortOverl
   return (
     <Box
       position="absolute"
-      marginTop={2}
-      marginLeft={2}
+      marginTop={SORT_OVERLAY_ORIGIN.top}
+      marginLeft={SORT_OVERLAY_ORIGIN.left}
       flexDirection="column"
       borderStyle="single"
       borderColor="#2B4C7E"

@@ -1,6 +1,7 @@
 import type { Key } from 'ink';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from '../panels/types';
 import type { Action, DashboardUIState, ToastSeverity } from './dashboardTypes';
+import { maxScrollOffset } from './windowLines';
 
 /** Narrowed view of dashboard state that global keybindings operate on. */
 export interface KeyContext {
@@ -45,11 +46,7 @@ export interface KeyBindingSpec {
   run: (ctx: KeyContext, input: string, key: Key) => void;
 }
 
-function isLogsTab(ctx: KeyContext): boolean {
-  return ctx.panel.id === 'containers' && ctx.tabIdx === 0;
-}
-
-/** True when the active detail tab tails content (logs) — used for follow-pause semantics. */
+/** True when the active detail tab tails content (logs) — drives log-filter availability and follow-pause. */
 function isAutoScrollTab(ctx: KeyContext): boolean {
   return ctx.detailTabs[ctx.tabIdx]?.autoScrollBottom === true;
 }
@@ -159,7 +156,7 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     match: (input) => input === 'f',
     label: 'Log filter (Logs tab)',
     category: 'Filters & Sort',
-    isAvailable: isLogsTab,
+    isAvailable: isAutoScrollTab,
     hint: () => 'f:Filter',
     run: (ctx) => ctx.dispatch({ type: 'SET_OVERLAY', overlay: 'log-filter' }),
   },
@@ -216,6 +213,13 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
       } else {
         const label = item.label.replace(/^[^\w]*/, '').trim();
         ctx.addToast(`Pinned ${label} for comparison`, 'info');
+        // The split view only renders on the logs tab — switch so it appears immediately.
+        if (!isAutoScrollTab(ctx)) {
+          const logsTabIdx = ctx.detailTabs.findIndex(t => t.autoScrollBottom);
+          if (logsTabIdx >= 0) {
+            ctx.dispatch({ type: 'SET_DETAIL_TAB', index: logsTabIdx });
+          }
+        }
       }
     },
   },
@@ -320,7 +324,7 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
       // G lands at the bottom, which resumes follow on logs tabs.
       ctx.dispatch({
         type: 'SCROLL_DETAIL',
-        offset: top ? 0 : Math.max(0, ctx.detailLines.length - ctx.detailViewportHeight),
+        offset: top ? 0 : maxScrollOffset(ctx.detailLines.length, ctx.detailViewportHeight),
         followTab: isAutoScrollTab(ctx),
         totalLines: ctx.detailLines.length,
         viewportHeight: ctx.detailViewportHeight,

@@ -2,17 +2,18 @@ import { describe, it, expect } from 'vitest';
 import { reducer, initialState } from './Dashboard';
 
 describe('log follow reducer semantics', () => {
+  // maxScrollOffset(100, 10) = 91 (the ▲ indicator consumes one viewport row).
   it('pauses follow when the user scrolls up on a logs tab', () => {
-    const scrolledToBottom = { ...initialState, detailScrollOffset: 90 };
+    const scrolledToBottom = { ...initialState, detailScrollOffset: 91 };
     const next = reducer(scrolledToBottom, {
       type: 'SCROLL_DETAIL_DELTA', delta: -1, totalLines: 100, viewportHeight: 10, followTab: true,
     });
     expect(next.logFollow).toBe(false);
-    expect(next.detailScrollOffset).toBe(89);
+    expect(next.detailScrollOffset).toBe(90);
   });
 
   it('resumes follow when scrolling reaches the bottom', () => {
-    const paused = { ...initialState, logFollow: false, detailScrollOffset: 89 };
+    const paused = { ...initialState, logFollow: false, detailScrollOffset: 90 };
     const next = reducer(paused, {
       type: 'SCROLL_DETAIL_DELTA', delta: 1, totalLines: 100, viewportHeight: 10, followTab: true,
     });
@@ -22,10 +23,10 @@ describe('log follow reducer semantics', () => {
   it('G (jump to bottom) resumes follow', () => {
     const paused = { ...initialState, logFollow: false, detailScrollOffset: 3 };
     const next = reducer(paused, {
-      type: 'SCROLL_DETAIL', offset: 90, followTab: true, totalLines: 100, viewportHeight: 10,
+      type: 'SCROLL_DETAIL', offset: 91, followTab: true, totalLines: 100, viewportHeight: 10,
     });
     expect(next.logFollow).toBe(true);
-    expect(next.detailScrollOffset).toBe(90);
+    expect(next.detailScrollOffset).toBe(91);
   });
 
   it('g (jump to top) pauses follow', () => {

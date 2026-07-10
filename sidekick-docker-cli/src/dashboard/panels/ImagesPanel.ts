@@ -1,5 +1,5 @@
 import type { ImageInfo, ImageLayer } from 'sidekick-docker-shared';
-import { DockerClient } from 'sidekick-docker-shared';
+import { DockerClient, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -12,6 +12,7 @@ export class ImagesPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
+  private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(client: DockerClient, onAction: () => void) {
     this.client = client;
@@ -61,6 +62,7 @@ export class ImagesPanel implements SidePanel {
   ];
 
   getItems(metrics: DockerDashboardMetrics): PanelItem[] {
+    this.lastMetrics = metrics;
     return metrics.images.map((img): PanelItem => {
       const tag = img.repoTags[0] || '<none>';
       const icon = img.isDangling ? '\u25CB' : '\u25CF'; // ○ vs ●
@@ -82,7 +84,12 @@ export class ImagesPanel implements SidePanel {
         key: 'd',
         label: 'Remove',
         confirm: true,
-        confirmMessage: 'Remove this image?',
+        confirmMessage: (item) => {
+          const img = panelData<ImageInfo>(item);
+          const tag = img.repoTags[0] || shortId(img.id);
+          const multiTag = img.repoTags.length > 1 ? ` (removes all ${img.repoTags.length} tags)` : '';
+          return `Remove image "${tag}"?${multiTag}`;
+        },
         confirmSeverity: 'high',
         handler: (item) => {
           const img = panelData<ImageInfo>(item);
@@ -93,7 +100,10 @@ export class ImagesPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: 'Prune all dangling images?',
+        confirmMessage: () => {
+          const n = this.lastMetrics?.images.filter(i => i.isDangling).length ?? 0;
+          return n > 0 ? `Prune ${n} dangling image${n === 1 ? '' : 's'}?` : 'Prune all dangling images?';
+        },
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneImages().then((r) => {

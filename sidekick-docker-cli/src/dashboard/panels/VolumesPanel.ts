@@ -12,6 +12,7 @@ export class VolumesPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
+  private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(client: DockerClient, onAction: () => void) {
     this.client = client;
@@ -35,6 +36,7 @@ export class VolumesPanel implements SidePanel {
   ];
 
   getItems(metrics: DockerDashboardMetrics): PanelItem[] {
+    this.lastMetrics = metrics;
     return metrics.volumes.map((vol): PanelItem => {
       const icon = vol.isInUse ? '\u25CF' : '\u25CB'; // ● vs ○
       return {
@@ -55,7 +57,7 @@ export class VolumesPanel implements SidePanel {
         key: 'd',
         label: 'Remove',
         confirm: true,
-        confirmMessage: 'Remove this volume?',
+        confirmMessage: (item) => `Remove volume "${panelData<VolumeInfo>(item).name}"?`,
         confirmSeverity: 'high',
         handler: (item) => {
           const vol = panelData<VolumeInfo>(item);
@@ -67,7 +69,10 @@ export class VolumesPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: 'Prune all unused volumes?',
+        confirmMessage: () => {
+          const n = this.lastMetrics?.volumes.filter(v => !v.isInUse).length ?? 0;
+          return n > 0 ? `Prune ${n} unused volume${n === 1 ? '' : 's'}?` : 'Prune all unused volumes?';
+        },
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneVolumes().then((r) => {
