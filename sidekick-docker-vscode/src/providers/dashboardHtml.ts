@@ -680,6 +680,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       max-width: 350px;
       word-break: break-word;
       animation: toastIn 0.2s ease-out;
+      pointer-events: auto;
     }
     .toast.dismissing {
       animation: toastOut 0.2s ease-in forwards;
@@ -687,6 +688,28 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .toast.info { border-left: 3px solid var(--vscode-editorInfo-foreground, #3794ff); }
     .toast.warning { border-left: 3px solid var(--vscode-editorWarning-foreground, #cca700); }
     .toast.error { border-left: 3px solid var(--vscode-errorForeground, #f85149); }
+    .toast .toast-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-left: 10px;
+      vertical-align: middle;
+    }
+    .toast .toast-actions button {
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 0 2px;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      font-family: inherit;
+    }
+    .toast .toast-actions button:hover {
+      color: var(--vscode-foreground);
+    }
+    .toast .toast-dismiss {
+      font-size: 13px;
+    }
 
     /* ─── Context menu ─────────────────────────────────────────── */
     #context-menu {

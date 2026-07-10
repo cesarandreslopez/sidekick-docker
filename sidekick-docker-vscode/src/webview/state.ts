@@ -21,6 +21,27 @@ export const SORT_OPTIONS: { field: SortField; label: string }[] = [
   { field: 'pids', label: 'PIDs' },
 ];
 
+/** View state persisted via the webview's setState() so panels survive reloads. */
+export interface PersistedViewState {
+  activePanelIndex: number;
+  selectedItemId: string | null;
+  detailTabIndex: number;
+  sortField: SortField;
+  sortReversed: boolean;
+  layoutMode: LayoutMode;
+  showAllContainers: boolean;
+}
+
+export interface ToastEntry {
+  id: number;
+  message: string;
+  severity: ToastSeverity;
+  /** Auto-dismiss timer handle; null for sticky toasts. */
+  timer: number | null;
+  /** Sticky toasts (errors) stay until explicitly dismissed. */
+  sticky: boolean;
+}
+
 export interface ContainerStatsEntry {
   stats: SerializedContainerStats | null;
   loading: boolean;
@@ -53,7 +74,7 @@ export interface WebviewState {
   logFilterMode: FilterMode;
 
   phrase: string;
-  toasts: { id: number; message: string; severity: ToastSeverity; timer: number }[];
+  toasts: ToastEntry[];
 
   // Focus & navigation
   focusTarget: 'side' | 'detail';
@@ -82,11 +103,11 @@ export interface WebviewState {
   versionOverlayVisible: boolean;
 }
 
-export function createInitialState(): WebviewState {
+export function createInitialState(restored?: Partial<PersistedViewState>): WebviewState {
   return {
-    activePanelIndex: 0,
-    selectedItemId: null,
-    detailTabIndex: 0,
+    activePanelIndex: restored?.activePanelIndex ?? 0,
+    selectedItemId: restored?.selectedItemId ?? null,
+    detailTabIndex: restored?.detailTabIndex ?? 0,
     filterString: '',
     snapshot: null,
     logs: new Map(),
@@ -101,12 +122,12 @@ export function createInitialState(): WebviewState {
     phrase: '',
     toasts: [],
     focusTarget: 'side',
-    showAllContainers: true,
-    sortField: 'state',
-    sortReversed: false,
+    showAllContainers: restored?.showAllContainers ?? true,
+    sortField: restored?.sortField ?? 'state',
+    sortReversed: restored?.sortReversed ?? false,
     sortOverlayVisible: false,
     sortMenuIndex: 0,
-    layoutMode: 'normal',
+    layoutMode: restored?.layoutMode ?? 'normal',
     confirmVisible: false,
     confirmMessage: '',
     confirmCallback: null,

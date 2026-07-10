@@ -1,20 +1,33 @@
 import * as vscode from 'vscode';
 import type { ContainerInfo } from 'sidekick-docker-shared';
+import { buildContainerGroups } from './containerGroups';
+import type { ContainerGroup, ComposeProjectGroup } from './containerGroups';
 
-type TreeElement = ContainerGroupItem | ContainerTreeItem;
+type TreeElement = ContainerGroupItem | ComposeProjectGroupItem | ContainerTreeItem;
 
 export class ContainerGroupItem extends vscode.TreeItem {
-  readonly containers: ContainerInfo[];
+  readonly group: ContainerGroup;
 
-  constructor(
-    label: string,
-    count: number,
-    collapsibleState: vscode.TreeItemCollapsibleState,
-    containers: ContainerInfo[],
-  ) {
-    super(`${label} (${count})`, collapsibleState);
-    this.containers = containers;
+  constructor(group: ContainerGroup, collapsibleState: vscode.TreeItemCollapsibleState) {
+    super(group.label, collapsibleState);
+    this.group = group;
+    // Stable id + count in description so VS Code preserves expansion across refreshes.
+    this.id = group.id;
+    this.description = String(group.count);
     this.contextValue = 'container-group';
+  }
+}
+
+export class ComposeProjectGroupItem extends vscode.TreeItem {
+  readonly project: ComposeProjectGroup;
+
+  constructor(project: ComposeProjectGroup) {
+    super(project.projectName, vscode.TreeItemCollapsibleState.Collapsed);
+    this.project = project;
+    this.id = project.id;
+    this.description = String(project.containers.length);
+    this.iconPath = new vscode.ThemeIcon('layers');
+    this.contextValue = 'compose-project-group';
   }
 }
 
@@ -24,6 +37,7 @@ export class ContainerTreeItem extends vscode.TreeItem {
   constructor(container: ContainerInfo) {
     super(container.name, vscode.TreeItemCollapsibleState.None);
     this.container = container;
+    this.id = container.id;
     this.description = container.image;
     this.contextValue = `container-${container.state}`;
     this.tooltip = `${container.name}\n${container.image}\n${container.state} - ${container.status}`;
@@ -49,12 +63,6 @@ export class ContainerTreeItem extends vscode.TreeItem {
         this.iconPath = new vscode.ThemeIcon('circle-outline');
         break;
     }
-
-    this.command = {
-      command: 'sidekick-docker.openContainerInDashboard',
-      title: 'Open in Dashboard',
-      arguments: [container.id],
-    };
   }
 }
 
@@ -69,6 +77,8 @@ export class ContainerTreeProvider implements vscode.TreeDataProvider<TreeElemen
   update(containers: ContainerInfo[], connected: boolean): void {
     this.containers = containers;
     this.connected = connected;
+    // Drives the daemon-down viewsWelcome entry.
+    void vscode.commands.executeCommand('setContext', 'sidekickDocker.daemonDown', !connected);
     this._onDidChangeTreeData.fire();
   }
 
@@ -78,60 +88,30 @@ export class ContainerTreeProvider implements vscode.TreeDataProvider<TreeElemen
 
   getChildren(element?: TreeElement): TreeElement[] {
     if (element) {
-      // Children of a group
       if (element instanceof ContainerGroupItem) {
-        return element.containers.map(c => new ContainerTreeItem(c));
+        return [
+          ...element.group.composeProjects.map(p => new ComposeProjectGroupItem(p)),
+          ...element.group.containers.map(c => new ContainerTreeItem(c)),
+        ];
+      }
+      if (element instanceof ComposeProjectGroupItem) {
+        return element.project.containers.map(c => new ContainerTreeItem(c));
       }
       return [];
     }
 
-    // Root level
-    if (!this.connected) {
-      const item = new vscode.TreeItem('Docker daemon not running');
-      item.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('editorWarning.foreground'));
-      item.contextValue = 'warning';
-      return [item as TreeElement];
+    // Root level — empty when disconnected or no containers, so the
+    // viewsWelcome entries become reachable.
+    if (!this.connected || this.containers.length === 0) {
+      return [];
     }
 
-    if (this.containers.length === 0) {
-      const item = new vscode.TreeItem('No containers');
-      item.iconPath = new vscode.ThemeIcon('info');
-      item.contextValue = 'info';
-      return [item as TreeElement];
-    }
-
-    const running = this.containers.filter(c => c.state === 'running');
-    const stopped = this.containers.filter(c => c.state === 'exited');
-    const other = this.containers.filter(c => c.state !== 'running' && c.state !== 'exited');
-
-    const groups: TreeElement[] = [];
-
-    if (running.length > 0) {
-      groups.push(new ContainerGroupItem(
-        'Running',
-        running.length,
-        vscode.TreeItemCollapsibleState.Expanded,
-        running,
-      ));
-    }
-    if (stopped.length > 0) {
-      groups.push(new ContainerGroupItem(
-        'Stopped',
-        stopped.length,
-        vscode.TreeItemCollapsibleState.Collapsed,
-        stopped,
-      ));
-    }
-    if (other.length > 0) {
-      groups.push(new ContainerGroupItem(
-        'Other',
-        other.length,
-        vscode.TreeItemCollapsibleState.Collapsed,
-        other,
-      ));
-    }
-
-    return groups;
+    return buildContainerGroups(this.containers).map(group => new ContainerGroupItem(
+      group,
+      group.id === 'group-running'
+        ? vscode.TreeItemCollapsibleState.Expanded
+        : vscode.TreeItemCollapsibleState.Collapsed,
+    ));
   }
 
   dispose(): void {

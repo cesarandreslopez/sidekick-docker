@@ -8,6 +8,7 @@ import {
   EventWatcher,
   StatsCollector,
   MAX_LOG_LINES,
+  shortId,
 } from 'sidekick-docker-shared';
 import { LogAnalytics, LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/log';
 import type {
@@ -816,6 +817,31 @@ export class DockerService {
 
   getContainerName(containerId: string): string | undefined {
     return this.containers.find(c => c.id === containerId)?.name;
+  }
+
+  /** Human-readable name for an item, used in action feedback (progress/success/error). */
+  getItemDisplayName(panelId: string, itemId: string): string {
+    switch (panelId) {
+      case 'containers':
+        return this.getContainerName(itemId) ?? shortId(itemId);
+      case 'images': {
+        const image = this.images.find(i => i.id === itemId);
+        return image?.repoTags[0] ?? shortId(itemId);
+      }
+      case 'volumes':
+        return itemId;
+      case 'networks':
+        return this.networks.find(n => n.id === itemId)?.name ?? shortId(itemId);
+      case 'services': {
+        // itemId format: "project:projectName" or "service:projectName:serviceName"
+        const parts = itemId.split(':');
+        if (parts[0] === 'project') return parts.slice(1).join(':');
+        if (parts[0] === 'service') return `${parts[1]}/${parts.slice(2).join(':')}`;
+        return itemId;
+      }
+      default:
+        return itemId;
+    }
   }
 
   async forceRefresh(): Promise<void> {

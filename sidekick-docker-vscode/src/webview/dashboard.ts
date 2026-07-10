@@ -7,7 +7,7 @@ declare const __VERSION__: string;
 
 import type { ExtensionMessage, WebviewMessage, SerializedLogEntry } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
-import type { WebviewState, SortField, ToastSeverity } from './state';
+import type { WebviewState, SortField, ToastSeverity, PersistedViewState } from './state';
 import { createInitialState, SORT_OPTIONS } from './state';
 import { containersPanel } from './panels/containers';
 import { servicesPanel } from './panels/services';
@@ -43,8 +43,43 @@ const panels: PanelDefinition[] = [
   networksPanel,
 ];
 
-const state: WebviewState = createInitialState();
+// ─── Persisted view state (survives tab hide + window reload) ────────
+function readPersistedState(): Partial<PersistedViewState> | undefined {
+  const raw = vscode.getState();
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: Partial<PersistedViewState> = {};
+  if (typeof r.activePanelIndex === 'number' && r.activePanelIndex >= 0 && r.activePanelIndex < panels.length) {
+    out.activePanelIndex = r.activePanelIndex;
+  }
+  if (typeof r.selectedItemId === 'string') out.selectedItemId = r.selectedItemId;
+  const restoredPanel = panels[out.activePanelIndex ?? 0];
+  if (typeof r.detailTabIndex === 'number' && r.detailTabIndex >= 0 && r.detailTabIndex < restoredPanel.detailTabs.length) {
+    out.detailTabIndex = r.detailTabIndex;
+  }
+  if (SORT_OPTIONS.some(o => o.field === r.sortField)) out.sortField = r.sortField as SortField;
+  if (typeof r.sortReversed === 'boolean') out.sortReversed = r.sortReversed;
+  if (r.layoutMode === 'normal' || r.layoutMode === 'wide' || r.layoutMode === 'expanded') out.layoutMode = r.layoutMode;
+  if (typeof r.showAllContainers === 'boolean') out.showAllContainers = r.showAllContainers;
+  return out;
+}
+
+const restoredViewState = readPersistedState();
+const state: WebviewState = createInitialState(restoredViewState);
 let toastIdCounter = 0;
+
+function persistViewState(): void {
+  const persisted: PersistedViewState = {
+    activePanelIndex: state.activePanelIndex,
+    selectedItemId: state.selectedItemId,
+    detailTabIndex: state.detailTabIndex,
+    sortField: state.sortField,
+    sortReversed: state.sortReversed,
+    layoutMode: state.layoutMode,
+    showAllContainers: state.showAllContainers,
+  };
+  vscode.setState(persisted);
+}
 
 // ─── Local phrase rotation ──────────────────────────────────────────
 let phraseBank: string[] = [];
@@ -168,23 +203,29 @@ function getSelectedComposeLogKey(item: PanelItem | undefined): string | null {
   return null;
 }
 
+function dismissToast(id: number): void {
+  const toast = state.toasts.find(t => t.id === id);
+  if (toast && toast.timer !== null) window.clearTimeout(toast.timer);
+  const finalize = (): void => {
+    state.toasts = state.toasts.filter(t => t.id !== id);
+    renderToasts();
+  };
+  // Start dismiss animation
+  const el = $toastContainer.querySelector(`[data-toast-id="${id}"]`);
+  if (el) {
+    el.classList.add('dismissing');
+    window.setTimeout(finalize, 200);
+  } else {
+    finalize();
+  }
+}
+
 function addToast(message: string, severity: ToastSeverity): void {
   const id = ++toastIdCounter;
-  const timer = window.setTimeout(() => {
-    // Start dismiss animation
-    const el = $toastContainer.querySelector(`[data-toast-id="${id}"]`);
-    if (el) {
-      el.classList.add('dismissing');
-      window.setTimeout(() => {
-        state.toasts = state.toasts.filter(t => t.id !== id);
-        renderToasts();
-      }, 200);
-    } else {
-      state.toasts = state.toasts.filter(t => t.id !== id);
-      renderToasts();
-    }
-  }, TOAST_DURATIONS[severity]);
-  state.toasts.push({ id, message, severity, timer });
+  // Errors stay until explicitly dismissed (with a copy affordance).
+  const sticky = severity === 'error';
+  const timer = sticky ? null : window.setTimeout(() => dismissToast(id), TOAST_DURATIONS[severity]);
+  state.toasts.push({ id, message, severity, timer, sticky });
   renderToasts();
 }
 
@@ -222,6 +263,7 @@ function renderAll(): void {
   renderDetailTabBar();
   renderDetailContent(items);
   renderStatusBar(items);
+  persistViewState();
 }
 
 function renderTabBar(): void {
@@ -368,6 +410,7 @@ function setDetailTab(idx: number): void {
   post({ type: 'switchDetailTab', tabIndex: idx });
   renderDetailTabBar();
   renderDetailContent(getFilteredItems());
+  persistViewState();
 }
 
 function renderStatusBar(items: PanelItem[]): void {
@@ -418,9 +461,12 @@ function renderStatusBar(items: PanelItem[]): void {
 }
 
 function renderToasts(): void {
-  $toastContainer.innerHTML = state.toasts.map(t =>
-    `<div class="toast ${t.severity}" data-toast-id="${t.id}">${escapeHtml(t.message)}</div>`
-  ).join('');
+  $toastContainer.innerHTML = state.toasts.map(t => {
+    const actions = t.sticky
+      ? `<span class="toast-actions"><button class="toast-copy" data-toast-copy="${t.id}" title="Copy message">Copy</button><button class="toast-dismiss" data-toast-dismiss="${t.id}" title="Dismiss">\u00D7</button></span>`
+      : '';
+    return `<div class="toast ${t.severity}${t.sticky ? ' sticky' : ''}" data-toast-id="${t.id}">${escapeHtml(t.message)}${actions}</div>`;
+  }).join('');
 }
 
 function renderScrollIndicators(): void {
@@ -576,6 +622,7 @@ function selectItem(id: string, items: PanelItem[]): void {
   renderDetailTabBar();
   renderDetailContent(items);
   renderStatusBar(items);
+  persistViewState();
 }
 
 function navigateSide(delta: number): void {
@@ -730,6 +777,19 @@ $detailContent.addEventListener('click', (e: Event) => {
   }
 });
 
+// Sticky toast actions (dismiss / copy), delegated on the container
+$toastContainer.addEventListener('click', (e: Event) => {
+  const target = e.target as HTMLElement;
+  if (target.dataset.toastDismiss !== undefined) {
+    dismissToast(Number(target.dataset.toastDismiss));
+    return;
+  }
+  if (target.dataset.toastCopy !== undefined) {
+    const toast = state.toasts.find(t => t.id === Number(target.dataset.toastCopy));
+    if (toast) post({ type: 'copyLogs', text: toast.message });
+  }
+});
+
 // Rotate phrase on mouse interaction
 document.addEventListener('mousedown', () => rotatePhrase());
 
@@ -849,9 +909,27 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 });
 
 // ─── Initialize ──────────────────────────────────────────────────────
+/**
+ * Replay view state restored from getState() to the host so its viewState
+ * (and stream demand) match what the webview is showing. Ordering matters:
+ * the host resets tab/selection on switchPanel and tab on selectItem.
+ */
+function replayRestoredViewState(): void {
+  if (!restoredViewState || Object.keys(restoredViewState).length === 0) return;
+  post({ type: 'switchPanel', panelIndex: state.activePanelIndex });
+  post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
+  if (state.selectedItemId) {
+    post({ type: 'selectItem', panelId: getPanel().id, itemId: state.selectedItemId });
+  }
+  if (state.detailTabIndex > 0) {
+    post({ type: 'switchDetailTab', tabIndex: state.detailTabIndex });
+  }
+}
+
 function initialize(): void {
   renderAll();
   post({ type: 'webviewReady' });
+  replayRestoredViewState();
 }
 
 if (document.readyState === 'loading') {

@@ -6,6 +6,7 @@ import type { DashboardViewState } from '../services/DockerService';
 import { getSettings } from '../settings';
 import { resolveComposeCwd } from '../utils/workspace';
 import { getDashboardHtml } from './dashboardHtml';
+import { ACTION_META, runDockerAction } from './actionRegistry';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import { WebviewMessageSchema } from '../types/messageSchemas';
 
@@ -43,7 +44,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
     });
   }
 
-  open(containerId?: string): void {
+  open(containerId?: string, viewColumn?: vscode.ViewColumn): void {
     if (containerId) {
       this.pendingFocusContainerId = containerId;
     }
@@ -58,24 +59,48 @@ export class DockerDashboardProvider implements vscode.Disposable {
       return;
     }
 
-    this.panel = vscode.window.createWebviewPanel(
+    const panel = vscode.window.createWebviewPanel(
       'sidekick-docker.dashboard',
       'Sidekick Docker',
-      vscode.ViewColumn.One,
+      viewColumn ?? vscode.ViewColumn.One,
       {
         enableScripts: true,
         retainContextWhenHidden: true,
-        localResourceRoots: [
-          vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
-          vscode.Uri.joinPath(this.extensionUri, 'images'),
-        ],
+        localResourceRoots: this._localResourceRoots(),
       }
     );
 
-    this.panel.webview.html = getDashboardHtml(this.panel.webview, this.extensionUri, getNonce());
-    this.viewState = { ...DEFAULT_VIEW_STATE, visible: this.panel.visible };
+    panel.webview.html = getDashboardHtml(panel.webview, this.extensionUri, getNonce());
+    this._adoptPanel(panel);
+  }
 
-    this.panel.webview.onDidReceiveMessage(
+  /** Re-attach a webview panel revived by the panel serializer after a window reload. */
+  restore(panel: vscode.WebviewPanel): void {
+    if (this.panel) {
+      // A dashboard is already open; drop the revived duplicate.
+      panel.dispose();
+      return;
+    }
+    panel.webview.options = {
+      enableScripts: true,
+      localResourceRoots: this._localResourceRoots(),
+    };
+    panel.webview.html = getDashboardHtml(panel.webview, this.extensionUri, getNonce());
+    this._adoptPanel(panel);
+  }
+
+  private _localResourceRoots(): vscode.Uri[] {
+    return [
+      vscode.Uri.joinPath(this.extensionUri, 'out', 'webview'),
+      vscode.Uri.joinPath(this.extensionUri, 'images'),
+    ];
+  }
+
+  private _adoptPanel(panel: vscode.WebviewPanel): void {
+    this.panel = panel;
+    this.viewState = { ...DEFAULT_VIEW_STATE, visible: panel.visible };
+
+    panel.webview.onDidReceiveMessage(
       (raw: unknown) => {
         const result = WebviewMessageSchema.safeParse(raw);
         if (result.success) this._handleMessage(result.data);
@@ -84,12 +109,12 @@ export class DockerDashboardProvider implements vscode.Disposable {
       this.disposables
     );
 
-    this.panel.onDidDispose(() => {
+    panel.onDidDispose(() => {
       this._cleanup();
       this.panel = undefined;
     }, null, this.disposables);
 
-    this.panel.onDidChangeViewState(() => {
+    panel.onDidChangeViewState(() => {
       this.viewState.visible = this.panel?.visible ?? false;
       void this.service?.setVisible(this.viewState.visible);
     }, null, this.disposables);
@@ -254,6 +279,15 @@ export class DockerDashboardProvider implements vscode.Disposable {
     }
 
     this.service.setViewState(this.viewState);
+    // Re-trigger one-shot fetches (env/changes/layers) for a selection that was
+    // restored or made before the service finished (re)initializing.
+    if (this.viewState.selectedItemId) {
+      if (this.viewState.activePanelId === 'containers') {
+        void this.service.selectContainer(this.viewState.selectedItemId);
+      } else if (this.viewState.activePanelId === 'images') {
+        void this.service.selectImage(this.viewState.selectedItemId);
+      }
+    }
     await this.service.setVisible(this.viewState.visible);
   }
 
@@ -286,20 +320,22 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
   private async _handleAction(actionType: string, itemId: string, panelId: string): Promise<void> {
     if (!this.service) return;
+    const service = this.service;
 
-    // In-progress feedback
-    this._postMessage({ type: 'toast', message: `${actionType}\u2026`, severity: 'info' });
+    const meta = ACTION_META[actionType];
+    // Prune acts on the whole resource type, not the selected item.
+    const itemName = actionType === 'prune' ? panelId : service.getItemDisplayName(panelId, itemId);
 
-    try {
+    const run = async (): Promise<void> => {
       switch (panelId) {
         case 'containers':
           switch (actionType) {
-            case 'start': await this.service.startContainer(itemId); break;
-            case 'stop': await this.service.stopContainer(itemId); break;
-            case 'restart': await this.service.restartContainer(itemId); break;
-            case 'pause': await this.service.pauseContainer(itemId); break;
-            case 'unpause': await this.service.unpauseContainer(itemId); break;
-            case 'remove': await this.service.removeContainer(itemId); break;
+            case 'start': await service.startContainer(itemId); break;
+            case 'stop': await service.stopContainer(itemId); break;
+            case 'restart': await service.restartContainer(itemId); break;
+            case 'pause': await service.pauseContainer(itemId); break;
+            case 'unpause': await service.unpauseContainer(itemId); break;
+            case 'remove': await service.removeContainer(itemId); break;
           }
           break;
 
@@ -309,19 +345,19 @@ export class DockerDashboardProvider implements vscode.Disposable {
           if (parts[0] === 'project') {
             const projectName = parts.slice(1).join(':');
             switch (actionType) {
-              case 'up': await this.service.composeUp(projectName); break;
-              case 'down': await this.service.composeDown(projectName); break;
-              case 'restart': await this.service.composeRestart(projectName); break;
-              case 'stop': await this.service.composeStop(projectName); break;
+              case 'up': await service.composeUp(projectName); break;
+              case 'down': await service.composeDown(projectName); break;
+              case 'restart': await service.composeRestart(projectName); break;
+              case 'stop': await service.composeStop(projectName); break;
             }
           } else if (parts[0] === 'service') {
             const projectName = parts[1];
             const serviceName = parts.slice(2).join(':');
             switch (actionType) {
-              case 'up': await this.service.composeUp(projectName); break;
-              case 'down': await this.service.composeDown(projectName); break;
-              case 'restart': await this.service.composeRestart(projectName, serviceName); break;
-              case 'stop': await this.service.composeStop(projectName, serviceName); break;
+              case 'up': await service.composeUp(projectName); break;
+              case 'down': await service.composeDown(projectName); break;
+              case 'restart': await service.composeRestart(projectName, serviceName); break;
+              case 'stop': await service.composeStop(projectName, serviceName); break;
             }
           }
           break;
@@ -329,29 +365,42 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
         case 'images':
           switch (actionType) {
-            case 'remove': await this.service.removeImage(itemId); break;
-            case 'prune': await this.service.pruneImages(); break;
+            case 'remove': await service.removeImage(itemId); break;
+            case 'prune': await service.pruneImages(); break;
           }
           break;
 
         case 'volumes':
           switch (actionType) {
-            case 'remove': await this.service.removeVolume(itemId); break;
-            case 'prune': await this.service.pruneVolumes(); break;
+            case 'remove': await service.removeVolume(itemId); break;
+            case 'prune': await service.pruneVolumes(); break;
           }
           break;
 
         case 'networks':
           switch (actionType) {
-            case 'remove': await this.service.removeNetwork(itemId); break;
-            case 'prune': await this.service.pruneNetworks(); break;
+            case 'remove': await service.removeNetwork(itemId); break;
+            case 'prune': await service.pruneNetworks(); break;
           }
           break;
       }
+    };
 
-      this._postMessage({ type: 'toast', message: actionType, severity: 'success' });
+    try {
+      if (meta) {
+        // Slow ops get a native progress notification (survives panel hide).
+        await runDockerAction(meta, itemName, run);
+        this._postMessage({ type: 'toast', message: meta.successMessage(itemName), severity: 'success' });
+      } else {
+        await run();
+        this._postMessage({ type: 'toast', message: actionType, severity: 'success' });
+      }
     } catch (err: unknown) {
-      this._postMessage({ type: 'toast', message: `${actionType} failed: ${errorMessage(err)}`, severity: 'error' });
+      this._postMessage({
+        type: 'toast',
+        message: `${actionType} ${itemName} failed: ${errorMessage(err)}`,
+        severity: 'error',
+      });
     }
   }
 

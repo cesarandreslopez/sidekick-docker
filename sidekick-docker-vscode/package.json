@@ -60,45 +60,104 @@
     "commands": [
       {
         "command": "sidekick-docker.openDashboard",
-        "title": "Sidekick Docker: Open Dashboard",
+        "title": "Open Dashboard",
+        "category": "Sidekick Docker",
         "icon": "$(dashboard)"
       },
       {
+        "command": "sidekick-docker.openDashboardBeside",
+        "title": "Open Dashboard to the Side",
+        "category": "Sidekick Docker",
+        "icon": "$(split-horizontal)"
+      },
+      {
         "command": "sidekick-docker.refreshContainers",
-        "title": "Sidekick Docker: Refresh Containers",
+        "title": "Refresh Containers",
+        "category": "Sidekick Docker",
         "icon": "$(refresh)"
       },
       {
         "command": "sidekick-docker.startContainer",
         "title": "Start",
+        "category": "Sidekick Docker",
         "icon": "$(debug-start)"
       },
       {
         "command": "sidekick-docker.stopContainer",
         "title": "Stop",
+        "category": "Sidekick Docker",
         "icon": "$(debug-stop)"
       },
       {
+        "command": "sidekick-docker.restartContainer",
+        "title": "Restart",
+        "category": "Sidekick Docker",
+        "icon": "$(sync)"
+      },
+      {
+        "command": "sidekick-docker.pauseContainer",
+        "title": "Pause",
+        "category": "Sidekick Docker",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "sidekick-docker.unpauseContainer",
+        "title": "Unpause",
+        "category": "Sidekick Docker",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "sidekick-docker.removeContainer",
+        "title": "Remove",
+        "category": "Sidekick Docker",
+        "icon": "$(trash)"
+      },
+      {
         "command": "sidekick-docker.openContainerInDashboard",
-        "title": "Open in Dashboard"
+        "title": "Open in Dashboard",
+        "category": "Sidekick Docker",
+        "icon": "$(dashboard)"
       },
       {
         "command": "sidekick-docker.quickStart",
-        "title": "Sidekick Docker: Start Container..."
+        "title": "Start Container...",
+        "category": "Sidekick Docker"
       },
       {
         "command": "sidekick-docker.quickStop",
-        "title": "Sidekick Docker: Stop Container..."
+        "title": "Stop Container...",
+        "category": "Sidekick Docker"
       },
       {
         "command": "sidekick-docker.quickRestart",
-        "title": "Sidekick Docker: Restart Container..."
+        "title": "Restart Container...",
+        "category": "Sidekick Docker"
       }
     ],
     "viewsWelcome": [
       {
         "view": "sidekick-docker.containers",
+        "when": "sidekickDocker.daemonDown",
+        "contents": "Docker daemon is not reachable.\n[Retry Connection](command:sidekick-docker.refreshContainers)\nIf Docker listens on a custom socket or tcp:// endpoint, check the sidekick-docker.socketPath setting."
+      },
+      {
+        "view": "sidekick-docker.containers",
+        "when": "!sidekickDocker.daemonDown",
         "contents": "No containers found.\n[Open Dashboard](command:sidekick-docker.openDashboard)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "sidekick-docker.openDashboard",
+        "key": "ctrl+alt+d",
+        "mac": "cmd+alt+d",
+        "when": "!terminalFocus"
+      },
+      {
+        "command": "sidekick-docker.refreshContainers",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "focusedView == sidekick-docker.containers"
       }
     ],
     "configuration": {
@@ -128,6 +187,36 @@
       }
     },
     "menus": {
+      "commandPalette": [
+        {
+          "command": "sidekick-docker.startContainer",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.stopContainer",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.restartContainer",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.pauseContainer",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.unpauseContainer",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.removeContainer",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.openContainerInDashboard",
+          "when": "false"
+        }
+      ],
       "view/title": [
         {
           "command": "sidekick-docker.refreshContainers",
@@ -150,6 +239,46 @@
           "command": "sidekick-docker.stopContainer",
           "when": "view == sidekick-docker.containers && viewItem == container-running",
           "group": "inline@1"
+        },
+        {
+          "command": "sidekick-docker.openContainerInDashboard",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-/",
+          "group": "inline@9"
+        },
+        {
+          "command": "sidekick-docker.startContainer",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created|dead)$/",
+          "group": "1_lifecycle@1"
+        },
+        {
+          "command": "sidekick-docker.stopContainer",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(running|paused|restarting)$/",
+          "group": "1_lifecycle@2"
+        },
+        {
+          "command": "sidekick-docker.restartContainer",
+          "when": "view == sidekick-docker.containers && viewItem == container-running",
+          "group": "1_lifecycle@3"
+        },
+        {
+          "command": "sidekick-docker.pauseContainer",
+          "when": "view == sidekick-docker.containers && viewItem == container-running",
+          "group": "1_lifecycle@4"
+        },
+        {
+          "command": "sidekick-docker.unpauseContainer",
+          "when": "view == sidekick-docker.containers && viewItem == container-paused",
+          "group": "1_lifecycle@1"
+        },
+        {
+          "command": "sidekick-docker.openContainerInDashboard",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-/",
+          "group": "2_open@1"
+        },
+        {
+          "command": "sidekick-docker.removeContainer",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created|dead)$/",
+          "group": "3_danger@1"
         }
       ]
     }

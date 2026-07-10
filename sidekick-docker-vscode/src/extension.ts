@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DockerDashboardProvider } from './providers/DockerDashboardProvider';
 import { ContainerTreeProvider, ContainerTreeItem } from './providers/ContainerTreeProvider';
+import { ACTION_META, runDockerAction } from './providers/actionRegistry';
 import { ContainerWatcherService } from './services/ContainerWatcherService';
 import { getSettings, onSettingsChanged } from './settings';
 import type { SidekickSettings } from './settings';
@@ -28,6 +29,23 @@ async function withDockerClient(
   } finally {
     client?.dispose();
   }
+}
+
+/**
+ * Run a container action with unified feedback: slow ops get a progress
+ * notification (via the action registry), success gets a native toast,
+ * errors surface through the withDockerClient catch.
+ */
+async function runContainerCommand(
+  actionType: 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 'remove',
+  name: string,
+  action: (client: InstanceType<typeof import('sidekick-docker-shared').DockerClient>) => Promise<void>,
+): Promise<void> {
+  const meta = ACTION_META[actionType];
+  await withDockerClient(async (client) => {
+    await runDockerAction(meta, name, () => action(client));
+    vscode.window.showInformationMessage(meta.successMessage(name));
+  }, `Failed to ${actionType} container`);
 }
 
 function createWatcherService(settings: SidekickSettings): ContainerWatcherService {
@@ -95,13 +113,28 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // ── Dashboard panel serializer (revive after window reload) ─────
+  context.subscriptions.push(
+    vscode.window.registerWebviewPanelSerializer('sidekick-docker.dashboard', {
+      deserializeWebviewPanel: (panel: vscode.WebviewPanel) => {
+        dashboardProvider!.restore(panel);
+        return Promise.resolve();
+      },
+    }),
+  );
+
   // ── Commands ────────────────────────────────────────────────────
   context.subscriptions.push(
     vscode.commands.registerCommand('sidekick-docker.openDashboard', () => {
       dashboardProvider!.open();
     }),
 
-    vscode.commands.registerCommand('sidekick-docker.openContainerInDashboard', (containerId?: string) => {
+    vscode.commands.registerCommand('sidekick-docker.openDashboardBeside', () => {
+      dashboardProvider!.open(undefined, vscode.ViewColumn.Beside);
+    }),
+
+    vscode.commands.registerCommand('sidekick-docker.openContainerInDashboard', (arg?: ContainerTreeItem | string) => {
+      const containerId = typeof arg === 'string' ? arg : arg?.container.id;
       if (!containerId) return;
       dashboardProvider!.open(containerId);
     }),
@@ -112,18 +145,39 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('sidekick-docker.startContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
-      await withDockerClient(
-        client => client.startContainer(item.container.id),
-        'Failed to start container',
-      );
+      await runContainerCommand('start', item.container.name, client => client.startContainer(item.container.id));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.stopContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
-      await withDockerClient(
-        client => client.stopContainer(item.container.id),
-        'Failed to stop container',
+      await runContainerCommand('stop', item.container.name, client => client.stopContainer(item.container.id));
+    }),
+
+    vscode.commands.registerCommand('sidekick-docker.restartContainer', async (item?: ContainerTreeItem) => {
+      if (!(item instanceof ContainerTreeItem)) return;
+      await runContainerCommand('restart', item.container.name, client => client.restartContainer(item.container.id));
+    }),
+
+    vscode.commands.registerCommand('sidekick-docker.pauseContainer', async (item?: ContainerTreeItem) => {
+      if (!(item instanceof ContainerTreeItem)) return;
+      await runContainerCommand('pause', item.container.name, client => client.pauseContainer(item.container.id));
+    }),
+
+    vscode.commands.registerCommand('sidekick-docker.unpauseContainer', async (item?: ContainerTreeItem) => {
+      if (!(item instanceof ContainerTreeItem)) return;
+      await runContainerCommand('unpause', item.container.name, client => client.unpauseContainer(item.container.id));
+    }),
+
+    vscode.commands.registerCommand('sidekick-docker.removeContainer', async (item?: ContainerTreeItem) => {
+      if (!(item instanceof ContainerTreeItem)) return;
+      const name = item.container.name;
+      const choice = await vscode.window.showWarningMessage(
+        `Remove container "${name}"?`,
+        { modal: true },
+        'Remove',
       );
+      if (choice !== 'Remove') return;
+      await runContainerCommand('remove', name, client => client.removeContainer(item.container.id, true));
     }),
 
     // ── Quick pick commands ─────────────────────────────────────
@@ -139,10 +193,7 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to start' }
       );
       if (!picked) return;
-      await withDockerClient(async client => {
-        await client.startContainer(picked.containerId);
-        vscode.window.showInformationMessage(`Started ${picked.label}`);
-      }, 'Failed to start container');
+      await runContainerCommand('start', picked.label, client => client.startContainer(picked.containerId));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.quickStop', async () => {
@@ -157,10 +208,7 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to stop' }
       );
       if (!picked) return;
-      await withDockerClient(async client => {
-        await client.stopContainer(picked.containerId);
-        vscode.window.showInformationMessage(`Stopped ${picked.label}`);
-      }, 'Failed to stop container');
+      await runContainerCommand('stop', picked.label, client => client.stopContainer(picked.containerId));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.quickRestart', async () => {
@@ -175,10 +223,7 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to restart' }
       );
       if (!picked) return;
-      await withDockerClient(async client => {
-        await client.restartContainer(picked.containerId);
-        vscode.window.showInformationMessage(`Restarted ${picked.label}`);
-      }, 'Failed to restart container');
+      await runContainerCommand('restart', picked.label, client => client.restartContainer(picked.containerId));
     }),
   );
 }
