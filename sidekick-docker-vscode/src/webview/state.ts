@@ -11,6 +11,16 @@ export type SortField = 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids'
 export type LayoutMode = 'normal' | 'wide' | 'expanded';
 export type ToastSeverity = 'error' | 'warning' | 'info' | 'success';
 
+export const SORT_OPTIONS: { field: SortField; label: string }[] = [
+  { field: 'state', label: 'State (running first)' },
+  { field: 'name', label: 'Name' },
+  { field: 'cpu', label: 'CPU %' },
+  { field: 'mem', label: 'Memory %' },
+  { field: 'net', label: 'Network I/O' },
+  { field: 'io', label: 'Block I/O' },
+  { field: 'pids', label: 'PIDs' },
+];
+
 export interface ContainerStatsEntry {
   stats: SerializedContainerStats | null;
   loading: boolean;

@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { DockerDashboardProvider } from './providers/DockerDashboardProvider';
 import { ContainerTreeProvider, ContainerTreeItem } from './providers/ContainerTreeProvider';
 import { ContainerWatcherService } from './services/ContainerWatcherService';
+import { getSettings, onSettingsChanged } from './settings';
+import type { SidekickSettings } from './settings';
 import type { ContainerInfo } from 'sidekick-docker-shared';
 
 let dashboardProvider: DockerDashboardProvider | undefined;
@@ -17,7 +19,7 @@ async function withDockerClient(
   let client: InstanceType<typeof import('sidekick-docker-shared').DockerClient> | undefined;
   try {
     const { DockerClient } = await import('sidekick-docker-shared');
-    client = new DockerClient();
+    client = new DockerClient(getSettings().clientOptions);
     await action(client);
     await watcherService?.forceRefresh();
   } catch (err: unknown) {
@@ -28,7 +30,29 @@ async function withDockerClient(
   }
 }
 
+function createWatcherService(settings: SidekickSettings): ContainerWatcherService {
+  return new ContainerWatcherService({
+    onContainersChanged: (containers) => {
+      treeProvider!.update(containers, true);
+      updateBadge(containers);
+      updateStatusBar(containers, true);
+    },
+    onConnectionChanged: (connected) => {
+      if (!connected) {
+        treeProvider!.update([], false);
+        updateBadge([]);
+        updateStatusBar([], false);
+      }
+    },
+  }, {
+    clientOptions: settings.clientOptions,
+    refreshIntervalMs: settings.refreshIntervalMs,
+  });
+}
+
 export function activate(context: vscode.ExtensionContext): void {
+  const settings = getSettings();
+
   // ── Dashboard provider ──────────────────────────────────────────
   dashboardProvider = new DockerDashboardProvider(context.extensionUri);
   context.subscriptions.push(dashboardProvider);
@@ -47,26 +71,29 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBarItem.command = 'sidekick-docker.openDashboard';
   statusBarItem.tooltip = 'Sidekick Docker - Click to open dashboard';
   updateStatusBar([], false);
-  statusBarItem.show();
+  if (settings.statusBarVisible) statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 
   // ── Container watcher ───────────────────────────────────────────
-  watcherService = new ContainerWatcherService({
-    onContainersChanged: (containers) => {
-      treeProvider!.update(containers, true);
-      updateBadge(containers);
-      updateStatusBar(containers, true);
-    },
-    onConnectionChanged: (connected) => {
-      if (!connected) {
-        treeProvider!.update([], false);
-        updateBadge([]);
-        updateStatusBar([], false);
-      }
-    },
-  });
+  watcherService = createWatcherService(settings);
   watcherService.start();
   context.subscriptions.push({ dispose: () => watcherService?.dispose() });
+
+  // ── Settings changes ────────────────────────────────────────────
+  context.subscriptions.push(
+    onSettingsChanged((next, affected) => {
+      if (affected.has('clientOptions') || affected.has('refreshIntervalMs')) {
+        watcherService?.dispose();
+        watcherService = createWatcherService(next);
+        watcherService.start();
+        dashboardProvider?.reinitializeService();
+      }
+      if (affected.has('statusBarVisible')) {
+        if (next.statusBarVisible) statusBarItem?.show();
+        else statusBarItem?.hide();
+      }
+    }),
+  );
 
   // ── Commands ────────────────────────────────────────────────────
   context.subscriptions.push(

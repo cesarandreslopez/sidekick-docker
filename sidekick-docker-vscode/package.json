@@ -101,6 +101,32 @@
         "contents": "No containers found.\n[Open Dashboard](command:sidekick-docker.openDashboard)"
       }
     ],
+    "configuration": {
+      "title": "Sidekick Docker",
+      "properties": {
+        "sidekick-docker.socketPath": {
+          "type": "string",
+          "default": "",
+          "description": "Docker endpoint: a socket path (e.g. /var/run/docker.sock), unix://, or tcp://host:port. Leave empty to use the platform default socket (or the DOCKER_HOST environment variable if set)."
+        },
+        "sidekick-docker.refreshIntervalSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 5,
+          "description": "Seconds between fallback full refreshes of Docker state (events still update instantly)."
+        },
+        "sidekick-docker.statusBar.visible": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show the Sidekick Docker container count in the status bar."
+        },
+        "sidekick-docker.exec.defaultShell": {
+          "type": "string",
+          "default": "/bin/sh",
+          "description": "Shell to launch when opening an exec terminal into a container."
+        }
+      }
+    },
     "menus": {
       "view/title": [
         {
@@ -131,7 +157,9 @@
   "scripts": {
     "build": "node esbuild.cjs",
     "watch": "node esbuild.cjs --watch",
-    "clean": "rm -rf out"
+    "clean": "rm -rf out",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -139,6 +167,7 @@
     "esbuild": "^0.24.0",
     "sidekick-docker-shared": "file:../sidekick-docker-shared",
     "typescript": "^5.7.0",
+    "vitest": "^3.0.0",
     "zod": "^4.3.6"
   },
   "license": "MIT"

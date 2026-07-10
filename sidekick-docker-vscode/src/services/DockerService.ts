@@ -1,3 +1,5 @@
+import { existsSync } from 'fs';
+import { dirname } from 'path';
 import {
   DockerClient,
   ComposeClient,
@@ -10,6 +12,7 @@ import {
 import { LogAnalytics, LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/log';
 import type {
   ContainerInfo,
+  DockerClientOptions,
   ImageInfo,
   ImageLayer,
   FilesystemChange,
@@ -60,6 +63,13 @@ export interface DockerServiceCallbacks {
 }
 
 export type DashboardPanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
+
+export interface DockerServiceOptions {
+  clientOptions?: DockerClientOptions;
+  refreshIntervalMs?: number;
+  /** Directory for compose file detection and fallback cwd for compose actions. Undefined = no workspace. */
+  cwd?: string;
+}
 
 export interface DashboardViewState {
   activePanelId: DashboardPanelId;
@@ -129,7 +139,8 @@ export class DockerService {
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private callbacks: DockerServiceCallbacks;
   private disposed = false;
-  private cwd: string;
+  private cwd: string | undefined;
+  private refreshIntervalMs: number;
   private initialized = false;
   private viewState: DashboardViewState = {
     activePanelId: 'containers',
@@ -144,10 +155,11 @@ export class DockerService {
     compareComposeServiceName: null,
   };
 
-  constructor(callbacks: DockerServiceCallbacks, socketPath?: string) {
-    this.client = new DockerClient(socketPath ? { socketPath } : undefined);
+  constructor(callbacks: DockerServiceCallbacks, options?: DockerServiceOptions) {
+    this.client = new DockerClient(options?.clientOptions);
     this.callbacks = callbacks;
-    this.cwd = process.cwd();
+    this.cwd = options?.cwd;
+    this.refreshIntervalMs = options?.refreshIntervalMs ?? 30_000;
   }
 
   async initialize(): Promise<boolean> {
@@ -207,7 +219,7 @@ export class DockerService {
     if (!this.refreshInterval) {
       this.refreshInterval = setInterval(() => {
         this.refresh().then(() => this.scheduleStateUpdate()).catch(e => console.debug('periodic refresh failed:', e));
-      }, 30_000);
+      }, this.refreshIntervalMs);
     }
   }
 
@@ -229,7 +241,7 @@ export class DockerService {
         this.client.listImages(),
         this.client.listVolumes(),
         this.client.listNetworks(),
-        this.composeFileReader.readFromDirectory(this.cwd).catch(() => null),
+        this.cwd ? this.composeFileReader.readFromDirectory(this.cwd).catch(() => null) : Promise.resolve(null),
       ]);
 
       this.containers = containers;
@@ -767,26 +779,37 @@ export class DockerService {
     this.scheduleStateUpdate();
   }
 
+  /**
+   * Working directory for a compose action: prefer the directory of the
+   * compose file Docker recorded for the project (correct regardless of
+   * workspace), falling back to the injected workspace cwd.
+   */
+  private composeCwd(projectName: string): string | undefined {
+    const configFile = this.composeProjects.find(p => p.name === projectName)?.configFile;
+    if (configFile && existsSync(configFile)) return dirname(configFile);
+    return this.cwd;
+  }
+
   async composeUp(projectName: string): Promise<void> {
-    await this.composeClient.up(projectName, this.cwd);
+    await this.composeClient.up(projectName, this.composeCwd(projectName));
     await this.refresh();
     this.scheduleStateUpdate();
   }
 
   async composeDown(projectName: string): Promise<void> {
-    await this.composeClient.down(projectName, this.cwd);
+    await this.composeClient.down(projectName, this.composeCwd(projectName));
     await this.refresh();
     this.scheduleStateUpdate();
   }
 
   async composeRestart(projectName: string, serviceName?: string): Promise<void> {
-    await this.composeClient.restart(projectName, serviceName, this.cwd);
+    await this.composeClient.restart(projectName, serviceName, this.composeCwd(projectName));
     await this.refresh();
     this.scheduleStateUpdate();
   }
 
   async composeStop(projectName: string, serviceName?: string): Promise<void> {
-    await this.composeClient.stop(projectName, serviceName, this.cwd);
+    await this.composeClient.stop(projectName, serviceName, this.composeCwd(projectName));
     await this.refresh();
     this.scheduleStateUpdate();
   }

@@ -18,7 +18,7 @@
     "build:vscode": "cd sidekick-docker-vscode && npm run build",
     "build": "npm run build:shared && npm run build:cli && npm run build:vscode",
     "clean": "cd sidekick-docker-shared && npm run clean; cd ../sidekick-docker-cli && npm run clean; cd ../sidekick-docker-vscode && npm run clean",
-    "test": "cd sidekick-docker-shared && npm test; cd ../sidekick-docker-cli && npm test",
+    "test": "cd sidekick-docker-shared && npm test; cd ../sidekick-docker-cli && npm test; cd ../sidekick-docker-vscode && npm test",
     "lint": "eslint sidekick-docker-shared/src sidekick-docker-cli/src sidekick-docker-vscode/src",
     "lint:fix": "eslint --fix sidekick-docker-shared/src sidekick-docker-cli/src sidekick-docker-vscode/src"
   },

@@ -1,9 +1,14 @@
 import { DockerClient, EventWatcher } from 'sidekick-docker-shared';
-import type { ContainerInfo } from 'sidekick-docker-shared';
+import type { ContainerInfo, DockerClientOptions } from 'sidekick-docker-shared';
 
 export interface ContainerWatcherCallbacks {
   onContainersChanged: (containers: ContainerInfo[]) => void;
   onConnectionChanged: (connected: boolean) => void;
+}
+
+export interface ContainerWatcherOptions {
+  clientOptions?: DockerClientOptions;
+  refreshIntervalMs?: number;
 }
 
 /**
@@ -22,10 +27,12 @@ export class ContainerWatcherService {
   private reconnectInterval: ReturnType<typeof setInterval> | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private callbacks: ContainerWatcherCallbacks;
+  private refreshIntervalMs: number;
 
-  constructor(callbacks: ContainerWatcherCallbacks) {
-    this.client = new DockerClient();
+  constructor(callbacks: ContainerWatcherCallbacks, options?: ContainerWatcherOptions) {
+    this.client = new DockerClient(options?.clientOptions);
     this.callbacks = callbacks;
+    this.refreshIntervalMs = options?.refreshIntervalMs ?? 30_000;
   }
 
   async start(): Promise<void> {
@@ -62,10 +69,10 @@ export class ContainerWatcherService {
       });
       this.watcher.start();
 
-      // 30s fallback refresh
+      // Fallback refresh
       this.refreshInterval = setInterval(() => {
         this.refresh().catch(e => console.debug('watcher refresh failed:', e));
-      }, 30_000);
+      }, this.refreshIntervalMs);
 
       this.stopReconnectPolling();
       return true;

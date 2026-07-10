@@ -8,43 +8,32 @@ declare const __VERSION__: string;
 import type { ExtensionMessage, WebviewMessage, SerializedLogEntry } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
 import type { WebviewState, SortField, ToastSeverity } from './state';
-import { createInitialState } from './state';
+import { createInitialState, SORT_OPTIONS } from './state';
 import { containersPanel } from './panels/containers';
 import { servicesPanel } from './panels/services';
 import { imagesPanel } from './panels/images';
 import { volumesPanel } from './panels/volumes';
 import { networksPanel } from './panels/networks';
-import { colorizeLogEntry } from './formatters';
+import { colorizeLogEntry, escapeHtml, escapeAttr } from './formatters';
+import {
+  initOverlays,
+  showConfirm,
+  hideConfirm,
+  showFilter,
+  hideFilter,
+  showContextMenu,
+  hideContextMenu,
+  renderContextMenu,
+  renderSortOverlay,
+  renderHelpOverlay,
+  renderVersionOverlay,
+} from './overlays';
+import { handleGlobalKeydown } from './keyboard';
+import type { KeyboardContext } from './keyboard';
 import { filterLine } from 'sidekick-docker-shared/log';
 
 const vscode = acquireVsCodeApi();
 const TOAST_DURATIONS: Record<ToastSeverity, number> = { error: 4000, warning: 3000, info: 2000, success: 2000 };
-
-const SORT_OPTIONS: { field: SortField; label: string }[] = [
-  { field: 'state', label: 'State (running first)' },
-  { field: 'name', label: 'Name' },
-  { field: 'cpu', label: 'CPU %' },
-  { field: 'mem', label: 'Memory %' },
-  { field: 'net', label: 'Network I/O' },
-  { field: 'io', label: 'Block I/O' },
-  { field: 'pids', label: 'PIDs' },
-];
-
-const GLOBAL_KEYBINDINGS = [
-  { key: '1-5', label: 'Switch panel' },
-  { key: 'j/k', label: 'Navigate / scroll' },
-  { key: 'g/G', label: 'Jump to first / last' },
-  { key: 'Tab', label: 'Toggle focus' },
-  { key: '[/]', label: 'Cycle detail tabs' },
-  { key: 'z', label: 'Cycle layout (Normal/Wide/Expanded)' },
-  { key: '/', label: 'Filter items' },
-  { key: 'x', label: 'Actions menu' },
-  { key: 'a', label: 'Toggle all/running (Containers)' },
-  { key: 'o', label: 'Sort menu (Containers)' },
-  { key: 'R', label: 'Reverse sort (Containers)' },
-  { key: 'V', label: 'Version info' },
-  { key: '?', label: 'This help' },
-];
 
 const panels: PanelDefinition[] = [
   containersPanel,
@@ -75,18 +64,13 @@ function rotatePhrase(): void {
 }
 
 // ─── DOM refs ────────────────────────────────────────────────────────
+// Overlay elements (confirm, filter, context menu, sort/help/version) are
+// owned by webview/overlays.ts.
 const $tabBar = document.getElementById('tab-bar')!;
 const $sideList = document.getElementById('side-list')!;
 const $detailTabBar = document.getElementById('detail-tab-bar')!;
 const $detailContent = document.getElementById('detail-content')!;
 const $statusBar = document.getElementById('status-bar')!;
-const $confirmOverlay = document.getElementById('confirm-overlay')!;
-const $confirmMessage = $confirmOverlay.querySelector('.message')!;
-const $confirmYes = $confirmOverlay.querySelector('.btn-confirm') as HTMLButtonElement;
-const $confirmNo = $confirmOverlay.querySelector('.btn-cancel') as HTMLButtonElement;
-const $filterOverlay = document.getElementById('filter-overlay')!;
-const $filterInput = document.getElementById('filter-input') as HTMLInputElement;
-const $contextMenu = document.getElementById('context-menu')!;
 const $toastContainer = document.getElementById('toast-container')!;
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -202,54 +186,6 @@ function addToast(message: string, severity: ToastSeverity): void {
   }, TOAST_DURATIONS[severity]);
   state.toasts.push({ id, message, severity, timer });
   renderToasts();
-}
-
-function showConfirm(message: string, callback: () => void): void {
-  state.confirmVisible = true;
-  state.confirmMessage = message;
-  state.confirmCallback = callback;
-  $confirmMessage.textContent = message;
-  $confirmOverlay.classList.add('visible');
-}
-
-function hideConfirm(): void {
-  state.confirmVisible = false;
-  state.confirmCallback = null;
-  $confirmOverlay.classList.remove('visible');
-}
-
-function showFilter(): void {
-  state.filterVisible = true;
-  $filterOverlay.classList.add('visible');
-  $filterInput.value = state.filterString;
-  $filterInput.focus();
-}
-
-function hideFilter(): void {
-  state.filterVisible = false;
-  $filterOverlay.classList.remove('visible');
-}
-
-function showContextMenu(items: PanelItem[]): void {
-  const item = getSelectedItem(items);
-  if (!item || !state.snapshot) return;
-  const actions = getPanel().getActions(item, state.snapshot);
-  if (actions.length === 0) return;
-
-  state.contextMenuVisible = true;
-  state.contextMenuIndex = 0;
-  renderContextMenu(actions);
-  $contextMenu.classList.add('visible');
-
-  // Position near center
-  $contextMenu.style.top = '50%';
-  $contextMenu.style.left = '50%';
-  $contextMenu.style.transform = 'translate(-50%, -50%)';
-}
-
-function hideContextMenu(): void {
-  state.contextMenuVisible = false;
-  $contextMenu.classList.remove('visible');
 }
 
 // ─── Empty state helpers ──────────────────────────────────────────────
@@ -481,96 +417,10 @@ function renderStatusBar(items: PanelItem[]): void {
   `;
 }
 
-function renderContextMenu(actions: ActionDefinition[]): void {
-  let html = '';
-  for (let i = 0; i < actions.length; i++) {
-    const a = actions[i];
-    const selected = i === state.contextMenuIndex ? ' selected' : '';
-    html += `<div class="menu-item${selected}" data-idx="${i}" data-action="${a.actionType}">${a.label}<span class="key">${a.key}</span></div>`;
-  }
-  $contextMenu.innerHTML = html;
-
-  $contextMenu.querySelectorAll('.menu-item').forEach(el => {
-    el.addEventListener('click', () => {
-      const idx = parseInt((el as HTMLElement).dataset.idx!, 10);
-      executeContextAction(idx, actions);
-    });
-  });
-}
-
 function renderToasts(): void {
   $toastContainer.innerHTML = state.toasts.map(t =>
     `<div class="toast ${t.severity}" data-toast-id="${t.id}">${escapeHtml(t.message)}</div>`
   ).join('');
-}
-
-function renderSortOverlay(): void {
-  const $sort = document.getElementById('sort-overlay')!;
-  if (!state.sortOverlayVisible) {
-    $sort.classList.remove('visible');
-    return;
-  }
-  let html = '<div class="overlay-title">\u2195 Sort by</div>';
-  for (let i = 0; i < SORT_OPTIONS.length; i++) {
-    const opt = SORT_OPTIONS[i];
-    const selected = i === state.sortMenuIndex ? ' selected' : '';
-    const current = opt.field === state.sortField;
-    const indicator = current ? (state.sortReversed ? ' \u25B2' : ' \u25BC') : '';
-    const currentClass = current ? ' current' : '';
-    html += `<div class="sort-item${selected}${currentClass}" data-idx="${i}">${escapeHtml(opt.label)}${indicator}</div>`;
-  }
-  html += '<div class="overlay-hint">j/k select  Enter apply  R reverse  Esc close</div>';
-  $sort.innerHTML = html;
-  $sort.classList.add('visible');
-}
-
-function renderHelpOverlay(): void {
-  const $help = document.getElementById('help-overlay')!;
-  if (!state.helpOverlayVisible) {
-    $help.classList.remove('visible');
-    return;
-  }
-
-  let html = '<div class="overlay-title">\u26A1 SIDEKICK Docker</div>';
-  html += '<div class="overlay-section">Navigation</div>';
-  for (const b of GLOBAL_KEYBINDINGS) {
-    html += `<div class="help-row"><span class="help-key">${escapeHtml(b.key)}</span><span class="help-label">${escapeHtml(b.label)}</span></div>`;
-  }
-
-  // Panel-specific actions
-  const items = getFilteredItems();
-  const item = getSelectedItem(items);
-  if (item && state.snapshot) {
-    const actions = getPanel().getActions(item, state.snapshot);
-    if (actions.length > 0) {
-      html += `<div class="overlay-section">${escapeHtml(getPanel().title)} Actions</div>`;
-      for (const a of actions) {
-        const cls = a.confirm ? ' destructive' : '';
-        html += `<div class="help-row"><span class="help-key${cls}">${escapeHtml(a.key)}</span><span class="help-label${cls}">${escapeHtml(a.label)}${a.confirm ? ' \u26A0' : ''}</span></div>`;
-      }
-    }
-  }
-
-  html += '<div class="overlay-hint">Press ? or Esc to close</div>';
-  $help.innerHTML = html;
-  $help.classList.add('visible');
-}
-
-function renderVersionOverlay(): void {
-  const $version = document.getElementById('version-overlay')!;
-  if (!state.versionOverlayVisible) {
-    $version.classList.remove('visible');
-    return;
-  }
-  $version.innerHTML = `
-    <div class="overlay-title">\u26A1 SIDEKICK</div>
-    <div class="version-tagline">Docker v${__VERSION__}</div>
-    <div class="version-divider"></div>
-    <div class="version-phrase">"${escapeHtml(state.phrase)}"</div>
-    <div class="version-divider"></div>
-    <div class="overlay-hint">Press V or Esc to close</div>
-  `;
-  $version.classList.add('visible');
 }
 
 function renderScrollIndicators(): void {
@@ -807,362 +657,58 @@ function scrollDetail(delta: number): void {
   renderScrollIndicators();
 }
 
-// ─── Keyboard handling ───────────────────────────────────────────────
-document.addEventListener('keydown', (e: KeyboardEvent) => {
-  rotatePhrase();
-
-  // Confirm overlay
-  if (state.confirmVisible) {
-    if (e.key === 'y' || e.key === 'Y' || e.key === 'Enter') {
-      e.preventDefault();
-      state.confirmCallback?.();
-      hideConfirm();
-      return;
-    }
-    if (e.key === 'n' || e.key === 'N' || e.key === 'Escape') {
-      e.preventDefault();
-      hideConfirm();
-      return;
-    }
-    return;
-  }
-
-  // Filter overlay
-  if (state.filterVisible) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      state.filterString = '';
-      hideFilter();
-      renderAll();
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      hideFilter();
-      return;
-    }
-    // Let the input handle typing
-    return;
-  }
-
-  // Context menu
-  if (state.contextMenuVisible) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      hideContextMenu();
-      return;
-    }
-    if (e.key === 'j' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      const items = getFilteredItems();
-      const item = getSelectedItem(items);
-      if (!item || !state.snapshot) return;
-      const actions = getPanel().getActions(item, state.snapshot);
-      state.contextMenuIndex = (state.contextMenuIndex + 1) % actions.length;
-      renderContextMenu(actions);
-      return;
-    }
-    if (e.key === 'k' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      const items = getFilteredItems();
-      const item = getSelectedItem(items);
-      if (!item || !state.snapshot) return;
-      const actions = getPanel().getActions(item, state.snapshot);
-      state.contextMenuIndex = (state.contextMenuIndex - 1 + actions.length) % actions.length;
-      renderContextMenu(actions);
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const items = getFilteredItems();
-      const item = getSelectedItem(items);
-      if (!item || !state.snapshot) return;
-      const actions = getPanel().getActions(item, state.snapshot);
-      executeContextAction(state.contextMenuIndex, actions);
-      return;
-    }
-    // Check for action key shortcut
+// ─── Overlay + keyboard wiring ───────────────────────────────────────
+initOverlays({
+  state,
+  getPanel,
+  getFilteredItems,
+  getSelectedItem,
+  executeContextAction,
+  onFilterInput: (value) => {
+    state.filterString = value;
+    post({ type: 'filterChange', filter: state.filterString });
     const items = getFilteredItems();
-    const item = getSelectedItem(items);
-    if (item && state.snapshot) {
-      const actions = getPanel().getActions(item, state.snapshot);
-      const match = actions.find(a => a.key === e.key);
-      if (match) {
-        e.preventDefault();
-        hideContextMenu();
-        executeAction(match, item.id);
-        return;
-      }
-    }
-    return;
-  }
-
-  // Sort overlay
-  if (state.sortOverlayVisible) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      state.sortOverlayVisible = false;
-      renderSortOverlay();
-      return;
-    }
-    if (e.key === 'j' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      state.sortMenuIndex = (state.sortMenuIndex + 1) % SORT_OPTIONS.length;
-      renderSortOverlay();
-      return;
-    }
-    if (e.key === 'k' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      state.sortMenuIndex = (state.sortMenuIndex - 1 + SORT_OPTIONS.length) % SORT_OPTIONS.length;
-      renderSortOverlay();
-      return;
-    }
-    if (e.key === 'R') {
-      e.preventDefault();
-      state.sortReversed = !state.sortReversed;
-      post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
-      addToast(`Sort: ${state.sortReversed ? 'descending' : 'ascending'}`, 'info');
-      renderSortOverlay();
-      renderAll();
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      state.sortField = SORT_OPTIONS[state.sortMenuIndex].field;
-      state.sortOverlayVisible = false;
-      post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
-      addToast(`Sort: ${SORT_OPTIONS[state.sortMenuIndex].label}`, 'info');
-      renderSortOverlay();
-      renderAll();
-      return;
-    }
-    return;
-  }
-
-  // Help overlay
-  if (state.helpOverlayVisible) {
-    if (e.key === 'Escape' || e.key === '?') {
-      e.preventDefault();
-      state.helpOverlayVisible = false;
-      renderHelpOverlay();
-      return;
-    }
-    return;
-  }
-
-  // Version overlay
-  if (state.versionOverlayVisible) {
-    if (e.key === 'Escape' || e.key === 'V') {
-      e.preventDefault();
-      state.versionOverlayVisible = false;
-      renderVersionOverlay();
-      return;
-    }
-    return;
-  }
-
-  // ── Global keys ────────────────────────────────────────────────
-  // Help overlay
-  if (e.key === '?') {
-    e.preventDefault();
-    state.helpOverlayVisible = true;
-    renderHelpOverlay();
-    return;
-  }
-
-  // Version overlay
-  if (e.key === 'V') {
-    e.preventDefault();
-    state.versionOverlayVisible = true;
-    renderVersionOverlay();
-    return;
-  }
-
-  // Panel switching: 1-5
-  const num = parseInt(e.key, 10);
-  if (num >= 1 && num <= panels.length) {
-    e.preventDefault();
-    switchPanel(num - 1);
-    return;
-  }
-
-  // Focus toggle (Tab)
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    state.focusTarget = state.focusTarget === 'side' ? 'detail' : 'side';
-    renderAll();
-    return;
-  }
-
-  // Layout mode cycle (z)
-  if (e.key === 'z') {
-    e.preventDefault();
-    const modes: Array<'normal' | 'wide' | 'expanded'> = ['normal', 'wide', 'expanded'];
-    const curIdx = modes.indexOf(state.layoutMode);
-    state.layoutMode = modes[(curIdx + 1) % modes.length];
-    addToast(`Layout: ${state.layoutMode.charAt(0).toUpperCase() + state.layoutMode.slice(1)}`, 'info');
-    renderAll();
-    return;
-  }
-
-  // Show all/running toggle (a key, containers only)
-  if (e.key === 'a' && getPanel().id === 'containers') {
-    e.preventDefault();
-    state.showAllContainers = !state.showAllContainers;
-    addToast(state.showAllContainers ? 'Show all' : 'Running only', 'info');
-    renderAll();
-    return;
-  }
-
-  // Sort overlay (o key, containers only)
-  if (e.key === 'o' && getPanel().id === 'containers') {
-    e.preventDefault();
-    state.sortOverlayVisible = true;
-    renderSortOverlay();
-    return;
-  }
-
-  // Sort reverse toggle (R key, containers only)
-  if (e.key === 'R' && getPanel().id === 'containers') {
-    e.preventDefault();
-    state.sortReversed = !state.sortReversed;
-    post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
-    addToast(`Sort: ${state.sortReversed ? 'descending' : 'ascending'}`, 'info');
-    renderAll();
-    return;
-  }
-
-  // Detail tab cycling
-  if (e.key === '[') {
-    e.preventDefault();
-    const tabCount = getPanel().detailTabs.length;
-    if (tabCount > 1) {
-      setDetailTab((state.detailTabIndex - 1 + tabCount) % tabCount);
-    }
-    return;
-  }
-  if (e.key === ']') {
-    e.preventDefault();
-    const tabCount = getPanel().detailTabs.length;
-    if (tabCount > 1) {
-      setDetailTab((state.detailTabIndex + 1) % tabCount);
-    }
-    return;
-  }
-
-  // Filter
-  if (e.key === '/') {
-    e.preventDefault();
-    showFilter();
-    return;
-  }
-
-  // Context menu
-  if (e.key === 'x') {
-    e.preventDefault();
-    showContextMenu(getFilteredItems());
-    return;
-  }
-
-  // Navigation (focus-aware)
-  if (state.focusTarget === 'side') {
-    if (e.key === 'j' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      navigateSide(1);
-      return;
-    }
-    if (e.key === 'k' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      navigateSide(-1);
-      return;
-    }
-    if (e.key === 'g') {
-      e.preventDefault();
-      navigateSide(-Infinity);
-      return;
-    }
-    if (e.key === 'G') {
-      e.preventDefault();
-      navigateSide(Infinity);
-      return;
-    }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      state.focusTarget = 'detail';
-      renderAll();
-      return;
-    }
-  }
-
-  if (state.focusTarget === 'detail') {
-    if (e.key === 'j' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      scrollDetail(1);
-      return;
-    }
-    if (e.key === 'k' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      scrollDetail(-1);
-      return;
-    }
-    if (e.key === 'h' || e.key === 'ArrowLeft') {
-      e.preventDefault();
-      state.focusTarget = 'side';
-      renderAll();
-      return;
-    }
-    if (e.key === 'g') {
-      e.preventDefault();
-      $detailContent.scrollTop = 0;
-      renderScrollIndicators();
-      return;
-    }
-    if (e.key === 'G') {
-      e.preventDefault();
-      $detailContent.scrollTop = $detailContent.scrollHeight;
-      renderScrollIndicators();
-      return;
-    }
-  }
-
-  // Escape: clear filter or return focus to side
-  if (e.key === 'Escape') {
-    e.preventDefault();
-    if (state.filterString) {
-      state.filterString = '';
-      post({ type: 'filterChange', filter: '' });
-      renderAll();
-      return;
-    }
-    if (state.focusTarget === 'detail') {
-      state.focusTarget = 'side';
-      renderAll();
-      return;
-    }
-    return;
-  }
-
-  // Action shortcut keys (when no overlay is active)
-  const items = getFilteredItems();
-  const selItem = getSelectedItem(items);
-  if (selItem && state.snapshot) {
-    const actions = getPanel().getActions(selItem, state.snapshot);
-    const match = actions.find(a => a.key === e.key);
-    if (match) {
-      e.preventDefault();
-      executeAction(match, selItem.id);
-    }
-  }
+    renderSideList(items);
+    renderStatusBar(items);
+  },
 });
 
-// Filter input handler
-$filterInput.addEventListener('input', () => {
-  state.filterString = $filterInput.value;
-  post({ type: 'filterChange', filter: state.filterString });
-  const items = getFilteredItems();
-  renderSideList(items);
-  renderStatusBar(items);
-});
+const keyboardContext: KeyboardContext = {
+  state,
+  panelCount: panels.length,
+  getPanel,
+  getFilteredItems,
+  getSelectedItem,
+  switchPanel,
+  setDetailTab,
+  navigateSide,
+  scrollDetail,
+  scrollDetailToTop: () => {
+    $detailContent.scrollTop = 0;
+    renderScrollIndicators();
+  },
+  scrollDetailToBottom: () => {
+    $detailContent.scrollTop = $detailContent.scrollHeight;
+    renderScrollIndicators();
+  },
+  executeAction,
+  executeContextAction,
+  showFilter,
+  hideFilter,
+  hideConfirm,
+  hideContextMenu,
+  showContextMenu,
+  renderContextMenu,
+  renderSortOverlay,
+  renderHelpOverlay,
+  renderVersionOverlay,
+  renderAll,
+  addToast,
+  post,
+  rotatePhrase,
+};
+
+document.addEventListener('keydown', (e: KeyboardEvent) => handleGlobalKeydown(e, keyboardContext));
 
 // Log filter input handler (event delegation on detail content)
 $detailContent.addEventListener('input', (e: Event) => {
@@ -1183,13 +729,6 @@ $detailContent.addEventListener('click', (e: Event) => {
     copyCurrentLogs();
   }
 });
-
-// Confirm overlay buttons
-$confirmYes.addEventListener('click', () => {
-  state.confirmCallback?.();
-  hideConfirm();
-});
-$confirmNo.addEventListener('click', () => hideConfirm());
 
 // Rotate phrase on mouse interaction
 document.addEventListener('mousedown', () => rotatePhrase());
@@ -1308,15 +847,6 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     }
   }
 });
-
-// ─── Escape HTML helpers ─────────────────────────────────────────────
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function escapeAttr(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
 
 // ─── Initialize ──────────────────────────────────────────────────────
 function initialize(): void {

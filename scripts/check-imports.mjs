@@ -111,7 +111,7 @@ const ALLOWED_DEPS = {
   'cli/commands':   ['cli/ink', 'cli/panels', 'cli/state', 'cli/formatters', 'cli/utils', 'shared'],
 
   // === VSCode package ===
-  'vscode/utils':     [],
+  'vscode/utils':     ['shared'], // workspace.ts consumes ComposeFileReader
   'vscode/types':     [],
   'vscode/services':  ['shared', 'vscode/types'],
   'vscode/providers': ['vscode/services', 'vscode/types', 'vscode/utils', 'shared'],

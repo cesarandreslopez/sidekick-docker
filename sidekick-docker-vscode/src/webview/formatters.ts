@@ -46,6 +46,10 @@ export function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
+export function escapeAttr(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
 const TOKEN_CSS_CLASSES: Record<LogTokenType, string | null> = {
   'severity-error': 'tok-sev-error',
   'severity-warn': 'tok-sev-warn',
