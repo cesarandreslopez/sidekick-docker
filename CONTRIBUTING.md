@@ -48,9 +48,10 @@ npm run build:cli                # esbuild in sidekick-docker-cli
 npm run build:vscode             # esbuild in sidekick-docker-vscode
 
 # Tests (vitest, co-located .test.ts files)
-npm test                         # runs shared + cli tests
+npm test                         # runs shared + cli + vscode tests
 cd sidekick-docker-shared && npx vitest run   # shared only
 cd sidekick-docker-cli && npx vitest run      # cli only
+cd sidekick-docker-vscode && npx vitest run   # vscode only (vscode API mocked via src/test/vscode.ts)
 
 # Linting (ESLint 9, flat config)
 npm run lint                     # lint all packages
@@ -72,7 +73,7 @@ bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 
 Tests use Vitest and are co-located with source files (e.g., `FooService.ts` / `FooService.test.ts`). When adding new functionality, add tests alongside the source.
 
 ```bash
-npm test             # Run all tests (shared + cli)
+npm test             # Run all tests (shared + cli + vscode)
 cd sidekick-docker-shared && npx vitest   # Watch mode
 ```
 
@@ -90,7 +91,7 @@ sidekick-docker/
 
 ### Key Architecture Concepts
 
-- **Panel system**: Each resource type (containers, compose, images, volumes, networks) implements the `SidePanel` interface with `getItems()`, `detailTabs[]`, `getActions()`, and optional `getKeybindings()`
+- **Panel system**: Each resource type (containers, compose, images, volumes, networks) implements the `SidePanel` interface with `getItems()`, `detailTabs[]`, and `getActions()`; global TUI keybindings live in the `ink/keyRegistry.ts` registry, not on panels
 - **State flow**: Docker events -> `EventWatcher` -> `DockerState.processEvent()` -> `scheduleRender()`. Fallback: 30s periodic full refresh
 - **Stats streaming**: Selection-driven (expensive). `StatsStreamManager.select(id)` starts stream -> pushes to `StatsCollector` ring buffer (60 samples) -> sparklines
 - **Log streaming**: Selection-driven. `LogStreamManager.select(id)` starts stream -> ring buffer (1000 lines)

@@ -5,12 +5,15 @@ The main facade for all Docker operations. All methods return typed results — 
 ## Constructor
 
 ```typescript
-import { DockerClient } from 'sidekick-docker-shared';
+import { DockerClient, parseDockerEndpoint } from 'sidekick-docker-shared';
 
 const client = new DockerClient();
 // or with options:
 const client = new DockerClient({ socketPath: '/var/run/docker.sock' });
 const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
+const client = new DockerClient({ host: '192.168.1.100', port: 2376, protocol: 'https' });
+// or parse a user-supplied endpoint (bare socket path, unix:// URL, or tcp://host[:port] URL):
+const client = new DockerClient(parseDockerEndpoint('tcp://192.168.1.100:2376'));
 ```
 
 ## Container Methods
@@ -18,6 +21,7 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `ping` | `() => Promise<boolean>` | Check Docker daemon connectivity |
+| `pingDetailed` | `() => Promise<PingResult>` | Like `ping()`, but preserves the underlying error so callers can explain the failure |
 | `listContainers` | `(all?: boolean) => Promise<ContainerInfo[]>` | List containers (default: all including stopped) |
 | `startContainer` | `(id: string) => Promise<void>` | Start a container |
 | `stopContainer` | `(id: string) => Promise<void>` | Stop a container |
@@ -60,7 +64,7 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `streamEvents` | `(filters?: Record<string, string[]>) => AsyncIterable<DockerEvent>` | Stream Docker daemon events |
+| `streamEvents` | `(filters?: Record<string, string[]>, signal?: AbortSignal) => AsyncIterable<DockerEvent>` | Stream Docker daemon events |
 
 ## Usage Examples
 

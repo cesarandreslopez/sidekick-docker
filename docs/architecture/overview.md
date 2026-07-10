@@ -66,10 +66,13 @@ The VS Code extension produces two bundles:
 - `out/webview/dashboard.js` — IIFE, runs in the browser webview context
 - **Defines**: `__VERSION__` injected from `package.json` (used for status bar display)
 
+The webview source is modular — `dashboard.ts` orchestrates rendering, with keyboard handling (`keyboard.ts`), overlays (`overlays.ts`), and per-resource renderers (`panels/`) in separate modules — all bundled into the single IIFE file above.
+
 ## Dashboard Decomposition
 
-The main `Dashboard` component delegates input handling to extracted hooks:
+The main `Dashboard` component delegates input handling to extracted modules:
 
-- **`useKeyboardHandler`** — all keyboard input processing
-- **`useMouseHandler`** — mouse click and scroll handling
+- **`keyRegistry.ts`** — declarative registry of global keybindings; the single source of truth that drives dispatch, the help overlay, and status-bar hints
+- **`useKeyboardHandler`** — keyboard input router with a fixed dispatch order: exec passthrough → Ctrl+C → active overlay handler → global bindings from the key registry → per-panel action shortcuts
+- **`useMouseHandler`** — mouse click, scroll, and right-click handling, including clickable overlays
 - **`Dashboard.tsx`** — state management (`useReducer`) and render orchestration

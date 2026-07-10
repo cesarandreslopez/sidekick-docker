@@ -45,5 +45,5 @@ Each event contains:
 | `type` | `string` | Event action (e.g., `start`, `stop`, `create`, `destroy`) |
 | `resourceType` | `DockerResourceType` | Resource category (`container`, `image`, `volume`, `network`) |
 | `resourceId` | `string` | ID of the affected resource |
-| `timestamp` | `number` | Unix timestamp of the event |
+| `timestamp` | `Date` | Timestamp of the event |
 | `attributes` | `Record<string, string>` | Additional event metadata |

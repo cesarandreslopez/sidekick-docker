@@ -43,11 +43,13 @@ A full-featured Docker management dashboard that runs in your terminal and in VS
 - **Filesystem inspector** — view all filesystem changes inside containers (added/changed/deleted files)
 - **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions
 - **Network & block I/O sparklines** — rate-based sparklines for network and disk activity
-- **Vi keybindings** — `j`/`k` navigation, `g`/`G` jump, `1`-`5` panel switching
+- **Vi keybindings** — `j`/`k` navigation, `g`/`G` jump, `1`-`5` panel switching, `PgUp`/`PgDn` and `Ctrl+D`/`Ctrl+U` paging
 - **Compose support** — automatic project detection, per-project actions
 - **Interactive exec** — shell into running containers without leaving the dashboard
 - **Filter & search** — `/` to filter any resource list
-- **Mouse support** — click to select, scroll to navigate
+- **Mouse support** — click to select, scroll to navigate, right-click for the actions menu
+- **Scriptable CLI** — `ps --format json`, `ps -q`, and `logs --no-follow` for scripts and pipes, with `--no-color`/`NO_COLOR` support
+- **Flexible endpoints** — `--socket` accepts a socket path, `unix://` URL, or `tcp://host:port` for remote daemons
 - **VS Code extension** — the same dashboard, embedded as a webview panel (works in VS Code, VSCodium, and compatible editors)
 
 ## Quick Install
@@ -61,7 +63,7 @@ sidekick-docker
 
 ### VS Code / VSCodium / Compatible Editors
 
-Install the **Sidekick Docker** extension from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode) or the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-docker-vscode), then run `Sidekick Docker: Open Dashboard` from the command palette.
+Install the **Sidekick Docker** extension from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode) or the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-docker-vscode), then run `Sidekick Docker: Open Dashboard` from the command palette (or press `Ctrl+Alt+D`).
 
 ## See Also
 

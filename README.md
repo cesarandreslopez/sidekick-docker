@@ -39,7 +39,7 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 - **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
 - **Log analytics** — severity counts, severity sparkline over time, and pattern clustering that groups similar logs into templates
 - **Dual-log compare** — pin a second container or service to compare log streams side by side
-- **Vi keybindings** — navigate with `j`/`k`, jump with `g`/`G`, switch panels with `1`-`5`
+- **Vi keybindings** — navigate with `j`/`k`, jump with `g`/`G`, switch panels with `1`-`5`, page with `PgUp`/`PgDn` or `Ctrl+D`/`Ctrl+U`
 - **Sparkline charts** — CPU, memory, network I/O, block I/O, and log severity rendered as inline sparklines
 - **Filesystem inspector** — view all filesystem changes inside containers (added/changed/deleted files)
 - **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions
@@ -47,7 +47,9 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 - **Interactive exec** — drop into a running container shell without leaving the dashboard
 - **Filter & search** — `/` to filter any resource list by name
 - **Confirmation modals** — destructive actions (remove, prune) always ask first
-- **Mouse support** — click to select, scroll to navigate
+- **Mouse support** — click to select, scroll to navigate, right-click for the actions menu
+- **Scriptable CLI** — `ps --format json`, `ps -q`, and `logs --no-follow` for scripts and pipes, with `--no-color`/`NO_COLOR` support
+- **Flexible endpoints** — `--socket` accepts a socket path, `unix://` URL, or `tcp://host:port` for remote daemons
 - **VS Code extension** — the same dashboard, embedded as a webview panel
 
 ## Quick Start
@@ -61,7 +63,7 @@ sidekick-docker
 
 ### VS Code / VSCodium / Compatible Editors
 
-Install the **Sidekick Docker** extension from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode) or the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-docker-vscode), then run `Sidekick Docker: Open Dashboard` from the command palette.
+Install the **Sidekick Docker** extension from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode) or the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-docker-vscode), then run `Sidekick Docker: Open Dashboard` from the command palette (or press `Ctrl+Alt+D`).
 
 ## Packages
 

@@ -22,6 +22,8 @@ Live-streamed container logs with token-level syntax highlighting. Individual to
 
 Logs are selection-driven — streaming starts when you select a container and stops when you navigate away.
 
+**Follow pause** — scrolling up in the Logs tab (keyboard or mouse wheel) pauses auto-follow so you can read scrollback; a `⏸ follow paused — G to resume` indicator appears in the detail tab bar. Press `G` or scroll back to the bottom to resume following.
+
 **Severity badges** appear in the Logs tab header showing running counts of ERROR, WARN, INFO, and DEBUG lines, each colored by severity level.
 
 **Log filter** — press `f` to open the filter overlay. Type a search query and press `Enter` to filter. Two modes are available (toggle with `Tab`):
@@ -102,7 +104,7 @@ Press `x` to open the context menu:
 
 ### Interactive Exec
 
-The exec action drops you into a shell session inside the container using `node-pty`. It tries bash, then sh, then ash. Press `Ctrl+D` or type `exit` to return to the dashboard.
+The exec action drops you into a shell session inside the container using `node-pty`, running `/bin/sh`. Press `Ctrl+]` to detach back to the dashboard, or end the shell with `Ctrl+D` / `exit`.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/shell_bash_into_container_cli.gif" alt="Interactive Exec Demo" width="800">

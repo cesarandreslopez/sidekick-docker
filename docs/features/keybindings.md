@@ -9,9 +9,11 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `j` / `Down` | Move down |
 | `k` / `Up` | Move up |
 | `g` | Jump to top |
-| `G` | Jump to bottom |
+| `G` | Jump to bottom (resumes log follow) |
+| `PgUp` / `PgDn` | Page up / down |
+| `Ctrl+U` / `Ctrl+D` | Half page up / down |
 | `Tab` | Toggle focus between side list and detail pane |
-| `Enter` | Focus detail pane |
+| `Enter` / `l` / `Right` | Focus detail pane |
 | `Esc` | Back to side list / close overlay / clear filter |
 | `h` / `Left` | Back to side list (when in detail pane) |
 
@@ -57,10 +59,20 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | Key | Action |
 |-----|--------|
 | `u` | Up (start project) |
-| `d` | Down (stop project) |
+| `D` | Down (stop project, with confirmation) |
 | `r` | Restart |
 | `S` | Stop |
 | `c` | Copy logs to clipboard |
+
+## Mouse
+
+| Gesture | Action |
+|---------|--------|
+| Click item | Select it (side list) or focus the detail pane |
+| Click panel tab / detail tab | Switch panel / detail tab |
+| Click overlay buttons | Activate them (clicks outside an overlay dismiss it) |
+| Right-click item | Open the actions menu for it |
+| Scroll wheel | Scroll the pane under the cursor; scrolling up in a logs tab pauses follow — scroll back to the bottom or press `G` to resume |
 
 ## Overlay Keyboard Hints
 
@@ -70,7 +82,7 @@ Interactive overlays display inline keyboard hints:
 |---------|-------------|
 | **Context Menu** | `j`/`k` select, `Enter` run, `Esc` close |
 | **Sort Menu** | `j`/`k` select, `Enter` apply, `R` reverse, `Esc` close |
-| **Confirmation Modal** | `y`/`n` buttons, `Esc` to cancel |
+| **Confirmation Modal** | `y` confirms; `n` / `Esc` / `Enter` / `q` cancel (Enter is deliberately the safe default) |
 | **Filter Overlay** | `Enter` to apply, `Esc` to cancel |
 | **Log Filter Overlay** | `Tab` to toggle mode, `Esc` to clear |
 | **Detail Tab Bar** | `[`/`]` cycle tabs |

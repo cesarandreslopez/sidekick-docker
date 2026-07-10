@@ -47,9 +47,11 @@ await compose.restart('my-project', 'web');
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `up` | `(project: string) => Promise<void>` | Start a Compose project (`docker compose up -d`) |
-| `down` | `(project: string) => Promise<void>` | Stop a Compose project (`docker compose down`) |
-| `restart` | `(project: string, service?: string) => Promise<void>` | Restart a project or specific service |
-| `stop` | `(project: string, service?: string) => Promise<void>` | Stop a project or specific service |
+| `up` | `(project: string, cwd?: string) => Promise<ComposeExecResult>` | Start a Compose project (`docker compose up -d`) |
+| `down` | `(project: string, cwd?: string) => Promise<ComposeExecResult>` | Stop a Compose project (`docker compose down`) |
+| `restart` | `(project: string, service?: string, cwd?: string) => Promise<ComposeExecResult>` | Restart a project or specific service |
+| `stop` | `(project: string, service?: string, cwd?: string) => Promise<ComposeExecResult>` | Stop a project or specific service |
+
+Each method resolves to a `ComposeExecResult` (`exitCode`, `stdout`, `stderr`); pass `cwd` to run compose from a specific project directory.
 
 All operations shell out to `docker compose` rather than using the Docker API directly, because compose orchestration logic lives in the compose CLI.

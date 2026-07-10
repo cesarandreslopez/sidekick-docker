@@ -32,7 +32,7 @@ Press `x` on a project or service to open the context menu:
 | Key | Action | Description |
 |-----|--------|-------------|
 | `u` | Up | Start the project (`docker compose up -d`) |
-| `d` | Down | Stop the project (`docker compose down`) |
+| `D` | Down | Stop the project (`docker compose down`) — asks for confirmation naming the project |
 | `r` | Restart | Restart the project or individual service |
 | `S` | Stop | Stop the project or individual service |
 | `c` | Copy Logs | Copy buffered log text to clipboard |

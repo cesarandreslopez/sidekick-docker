@@ -41,21 +41,22 @@ Open the command palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and run:
 Sidekick Docker: Open Dashboard
 ```
 
-or press `Ctrl+Alt+D` (`Cmd+Alt+D` on macOS). The dashboard opens as a webview panel
-with the same layout and capabilities as the terminal TUI, and survives window reloads.
+or press `Ctrl+Alt+D` — `Ctrl`, not `Cmd`, on macOS too (macOS reserves `Cmd+Opt+D`
+for the Dock). The dashboard opens as a webview panel with the same layout and
+capabilities as the terminal TUI, and survives window reloads.
 
 ### Commands
 
 | Command | Description |
 |---------|-------------|
-| `Sidekick Docker: Open Dashboard` | Open the dashboard (`Ctrl/Cmd+Alt+D`) |
+| `Sidekick Docker: Open Dashboard` | Open the dashboard (`Ctrl+Alt+D`, all platforms) |
 | `Sidekick Docker: Open Dashboard to the Side` | Open in a split editor column |
-| `Sidekick Docker: Refresh Containers` | Refresh the tree view (`Ctrl/Cmd+Alt+R` when focused) |
+| `Sidekick Docker: Refresh Containers` | Refresh the tree view (`Ctrl+Alt+R` / `Cmd+Alt+R` when focused) |
 | `Sidekick Docker: Start/Stop/Restart Container...` | Quick-pick a container to act on |
 
 The activity-bar **Containers** tree groups containers by state (and by Compose
-project), with start/stop/restart/pause/unpause/remove in the context menu and a
-status-bar item showing running/total counts.
+project), with start/stop/restart/pause/unpause/remove and **Open in Dashboard** in
+the context menu and a status-bar item showing running/total counts.
 
 ### Settings
 
@@ -79,6 +80,11 @@ status-bar item showing running/total counts.
 - **Stats monitoring** — live CPU, memory, network I/O, and block I/O metrics with sparkline charts
 - **Filesystem inspector** — view all filesystem changes inside containers (Files tab)
 - **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions (Layers tab)
+- **Exec into containers** — open an interactive terminal inside a container (shell configurable via `sidekick-docker.exec.defaultShell`)
+- **Connection awareness** — status-bar connection indicator, a disconnected banner with one-click Retry when the daemon goes away, and a "Retry Connection" action in the Containers view
+- **Mouse-friendly** — click rows and tabs to select, right-click a container row for its action menu, clickable status-bar hint chips
+- **Accessible** — ARIA roles, labels, and live regions; tabs and overlays reachable by keyboard
+- **Workspace-aware Compose** — compose files are detected in your workspace folders, and Compose actions run from the folder containing the compose file
 
 ## Requirements
 
@@ -90,7 +96,7 @@ status-bar item showing running/total counts.
 
 The extension uses a webview panel to render the dashboard UI. The extension host (Node.js) communicates with the webview (browser) via `postMessage()` with a typed message protocol:
 
-- **Extension side** (`src/extension.ts`) — activates on command, creates the `DockerDashboardProvider`
+- **Extension side** (`src/extension.ts`) — activates on startup (`onStartupFinished`) to register commands and populate the Containers tree and status bar; creates the `DockerDashboardProvider`
 - **Provider** (`src/providers/DockerDashboardProvider.ts`) — manages the webview lifecycle, handles Docker API calls via `sidekick-docker-shared`
 - **Webview** (`out/webview/dashboard.js`) — renders the dashboard UI, sends user actions back to the extension
 - **Message types** (`src/types/messages.ts`) — typed request/response messages between extension and webview

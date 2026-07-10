@@ -10,10 +10,10 @@ Each panel implements:
 |--------|---------|
 | `getItems()` | Returns the list of resources to display in the side list |
 | `detailTabs[]` | Array of tab definitions, each with a render function |
-| `getActions()` | Returns context menu actions for the selected item |
-| `getKeybindings()` | Optional panel-specific keybindings |
+| `getActions()` | Returns per-item actions (shortcut key, confirm metadata, handler) for the actions menu |
+| `getSearchableText()` | Optional per-item text used by the `/` filter |
 
-The interface is defined in `sidekick-docker-cli/src/dashboard/panels/types.ts`.
+The interface is defined in `sidekick-docker-cli/src/dashboard/panels/types.ts`. Panels do not define keybindings themselves: global keys (including panel-contextual ones like filter, sort, and compare) live in the central registry at `sidekick-docker-cli/src/dashboard/ink/keyRegistry.ts`, while per-item action shortcuts come from `getActions()`.
 
 ## Panel Implementations
 
@@ -27,7 +27,7 @@ The interface is defined in `sidekick-docker-cli/src/dashboard/panels/types.ts`.
 
 ## State Management
 
-The main `Dashboard` component uses `useReducer` for UI state (selected panel, selected item, focus area, filter text, modal state). Input handling is delegated to `useKeyboardHandler` and `useMouseHandler` hooks.
+The main `Dashboard` component uses `useReducer` for UI state (selected panel, selected item, focus area, filter text, modal state). Input handling is delegated to `useKeyboardHandler` and `useMouseHandler` hooks, with global keybindings defined in `keyRegistry.ts`.
 
 Domain state (the actual Docker resources) lives in the `DockerState` class, which:
 

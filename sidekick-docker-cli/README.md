@@ -28,10 +28,12 @@ sidekick-docker
 # List containers (non-interactive)
 sidekick-docker ps
 sidekick-docker ps --all
+sidekick-docker ps --format json | jq   # machine-readable output
+sidekick-docker ps -q                   # container IDs only
 
 # Stream container logs
 sidekick-docker logs <container>
-sidekick-docker logs <container> --tail 50
+sidekick-docker logs <container> --no-follow --tail 50
 ```
 
 ### Options
@@ -87,9 +89,12 @@ The dashboard has 5 panels, each mapped to a number key:
 | `x` | Open context menu (actions for selected item) |
 | `f` | Open log filter (when on Logs tab) |
 | `/` | Open filter |
+| `a` | Toggle all/running containers (Containers panel) |
+| `o` | Open sort menu (Containers panel) |
+| `R` | Reverse sort direction (Containers panel) |
 | `m` | Pin/unpin item for log comparison (Containers/Services) |
 | `J` / `K` | Scroll compare pane (when in detail focus) |
-| `z` | Toggle expanded layout |
+| `z` | Cycle layout (Normal → Wide → Expanded) |
 | `?` | Show help overlay |
 | `V` | Show version |
 | `q` / `Ctrl+C` | Quit |
@@ -142,7 +147,7 @@ to the bottom or press `G` to resume).
 
 ### Custom Docker Endpoint
 
-`--socket` accepts a socket path, a `unix://` URL, or a `tcp://host[:port]` URL (port defaults to 2375; `https://` or port 2376 uses TLS):
+`--socket` accepts a socket path, a `unix://` URL, or a `tcp://host[:port]` URL (port defaults to 2375; TLS is used for `https://` URLs or `tcp://` on port 2376, while an explicit `http://` stays plain HTTP):
 
 ```bash
 sidekick-docker --socket /var/run/docker.sock
