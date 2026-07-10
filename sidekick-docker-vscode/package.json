@@ -293,11 +293,11 @@
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.85.0",
-    "esbuild": "^0.24.0",
+    "esbuild": "^0.28.1",
     "sidekick-docker-shared": "file:../sidekick-docker-shared",
-    "typescript": "^5.7.0",
+    "typescript": "^5.9.3",
     "vitest": "^3.0.0",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   },
   "license": "MIT"
 }
