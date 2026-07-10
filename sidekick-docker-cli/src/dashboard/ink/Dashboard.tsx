@@ -1,5 +1,5 @@
 import React, { useReducer, useCallback, useEffect, useRef } from 'react';
-import { Box } from 'ink';
+import { Box, useApp } from 'ink';
 import type { DockerDashboardMetrics } from '../DockerState';
 import type { SidePanel } from '../panels/types';
 import { useTerminalSize } from './useTerminalSize';
@@ -29,6 +29,8 @@ import { getRandomPhrase } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes, renderLogLines } from '../../formatters';
 import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
+import { buildHelpBindings, buildContextHint } from './keyRegistry';
+import type { KeyContext } from './keyRegistry';
 
 const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
 
@@ -204,6 +206,7 @@ export interface DashboardViewState {
 export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { columns, rows } = useTerminalSize();
+  const { exit } = useApp();
   const toastIdRef = useRef(0);
   const execManagerRef = useRef<ExecManager | null>(null);
 
@@ -492,13 +495,16 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     sideWidth, sideScroll, detailLines, detailViewportHeight, detailTabs, rows, rotatePhrase,
   });
 
-  // Keyboard input (extracted hook)
-  useKeyboardHandler({
-    state, dispatch, panels, panel, selectedItem, contextActions,
+  // Shared context for global keybindings, help rendering, and status-bar hints
+  const keyCtx: KeyContext = {
+    state, dispatch, panels, panel, selectedItem, applicableActions,
     clampedSelection, currentItems, detailLines, detailViewportHeight,
-    detailTabs, tabIdx, panelActions, sideScroll, addToast, removeToast, rotatePhrase,
+    detailTabs, tabIdx, sideScroll, addToast, exit,
     secondaryDetailLineCount: secondaryDetailLines.length,
-  });
+  };
+
+  // Keyboard input (extracted hook)
+  useKeyboardHandler({ ctx: keyCtx, removeToast, rotatePhrase });
 
   // Render
   if (tooSmall) {
@@ -512,24 +518,8 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     ? [{ key: 'x', label: 'Actions', destructive: false }]
     : [];
 
-  // Contextual hints based on active panel + tab
-  const contextHint = (() => {
-    if (panel.id === 'containers') {
-      const parts: string[] = [];
-      if (tabIdx === 0) {
-        parts.push('f:Filter', 'c:Copy', 'm:Compare');
-      }
-      parts.push(state.showAllContainers ? 'a:All' : 'a:Running');
-      parts.push(`o:\u2195${state.sortField}`);
-      return parts.join('  ');
-    }
-    if (panel.id === 'services') {
-      const parts: string[] = [];
-      if (tabIdx === 1) parts.push('m:Compare');
-      return parts.join('  ');
-    }
-    return '';
-  })();
+  // Contextual hints derived from the key registry (single source of truth)
+  const contextHint = buildContextHint(keyCtx);
 
   return (
     <MouseProvider onMouse={handleMouse}>
@@ -583,7 +573,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         )}
 
         {state.overlay === 'help' && (
-          <HelpOverlay panels={panels} activePanelIndex={state.activePanelIndex} version={__CLI_VERSION__} />
+          <HelpOverlay panels={panels} activePanelIndex={state.activePanelIndex} version={__CLI_VERSION__} bindings={buildHelpBindings(keyCtx)} />
         )}
 
         {state.overlay === 'version' && (

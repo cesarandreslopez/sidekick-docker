@@ -30,15 +30,6 @@ export interface PanelAction {
 /** Default error handler for panel actions — logs to debug console. */
 export const defaultOnError = (msg: string): void => { console.debug(msg); };
 
-/** A keybinding declared by a panel or globally. */
-export interface KeyBinding {
-  keys: string[];
-  label: string;
-  category?: string;
-  handler: (item?: PanelItem) => void;
-  condition?: (item?: PanelItem) => boolean;
-}
-
 /** A tab in the detail pane for a selected item. */
 export interface DetailTab {
   label: string;
@@ -63,9 +54,7 @@ export interface SidePanel {
 
   getItems(metrics: DockerDashboardMetrics): PanelItem[];
   getActions(): PanelAction[];
-  getKeybindings?(): KeyBinding[];
   getSearchableText?(item: PanelItem): string;
-  getStatusHints?(): string;
   onActivate?(): void;
   onDeactivate?(): void;
   dispose?(): void;

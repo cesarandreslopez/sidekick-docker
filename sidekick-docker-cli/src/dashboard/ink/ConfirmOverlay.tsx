@@ -40,10 +40,11 @@ export function ConfirmOverlay({ message, severity }: ConfirmOverlayProps): Reac
       ) : null}
       <Text>{''}</Text>
       <Box>
-        <Text backgroundColor={severity === 'low' ? 'yellow' : 'green'} color={severity === 'low' ? 'black' : 'white'} bold>{' y Yes '}</Text>
+        {/* Danger color sits on the dangerous button; No is the safe visual default. */}
+        <Text backgroundColor={severity === 'low' ? 'yellow' : 'red'} color={severity === 'low' ? 'black' : 'white'} bold>{' y Yes '}</Text>
         <Text>{'  '}</Text>
-        <Text backgroundColor="red" color="white" bold>{' n No '}</Text>
-        <Text color="gray" dimColor>{'   or Esc to cancel'}</Text>
+        <Text backgroundColor="white" color="black" bold>{' n No '}</Text>
+        <Text color="gray" dimColor>{'   Enter/Esc: cancel'}</Text>
       </Box>
     </Box>
   );

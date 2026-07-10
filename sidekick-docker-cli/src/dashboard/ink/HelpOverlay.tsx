@@ -1,90 +1,85 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { SidePanel } from '../panels/types';
+import type { HelpBinding, KeyCategory } from './keyRegistry';
 import { BRAND_INLINE, BRAND_TAGLINE } from 'sidekick-docker-shared';
 
 interface HelpOverlayProps {
   panels: SidePanel[];
   activePanelIndex: number;
   version: string;
+  bindings: HelpBinding[];
 }
 
-const GLOBAL_BINDINGS = [
-  { key: '1-5', label: 'Switch panel' },
-  { key: 'j/k', label: 'Navigate / scroll' },
-  { key: 'g/G', label: 'Jump to first / last' },
-  { key: 'Tab', label: 'Toggle focus' },
-  { key: '[/]', label: 'Cycle detail tabs' },
-  { key: 'z', label: 'Cycle layout (Normal/Wide/Expanded)' },
-  { key: '/', label: 'Filter items' },
-  { key: 'x', label: 'Actions menu' },
-  { key: 'a', label: 'Toggle all/running (Containers)' },
-  { key: 'o', label: 'Sort menu (Containers)' },
-  { key: 'R', label: 'Reverse sort (Containers)' },
-  { key: 'f', label: 'Log filter (Logs tab)' },
-  { key: 'm', label: 'Pin/unpin log comparison' },
-  { key: 'J/K', label: 'Scroll compare pane' },
-  { key: 'V', label: 'Version info' },
-  { key: '?', label: 'This help' },
-  { key: 'q', label: 'Quit' },
-];
+const CATEGORY_ORDER: KeyCategory[] = ['Navigation', 'View', 'Filters & Sort', 'System'];
 
-function KeyBadge({ k }: { k: string }): React.ReactElement {
+function KeyBadge({ k, dimmed }: { k: string; dimmed?: boolean }): React.ReactElement {
+  return dimmed
+    ? <Text color="gray" dimColor>{` ${k} `}</Text>
+    : <Text color="white" backgroundColor="#2B4C7E" bold>{` ${k} `}</Text>;
+}
+
+function SectionHeader({ title }: { title: string }): React.ReactElement {
   return (
-    <Text color="white" backgroundColor="#2B4C7E" bold>{` ${k} `}</Text>
+    <Box>
+      <Text bold color="yellow">{`── ${title} `}</Text>
+      <Text color="gray" dimColor>{'─'.repeat(Math.max(4, 34 - title.length))}</Text>
+    </Box>
   );
 }
 
-export function HelpOverlay({ panels, activePanelIndex, version }: HelpOverlayProps): React.ReactElement {
+export function HelpOverlay({ panels, activePanelIndex, version, bindings }: HelpOverlayProps): React.ReactElement {
   const panel = panels[activePanelIndex];
   const actions = panel.getActions();
 
   return (
     <Box flexDirection="column" flexGrow={1} padding={1}>
       <Box>
-        <Text bold color="magenta">{`\u26A1 ${BRAND_INLINE} ${BRAND_TAGLINE}`}</Text>
+        <Text bold color="magenta">{`⚡ ${BRAND_INLINE} ${BRAND_TAGLINE}`}</Text>
         <Text color="gray" dimColor>{` v${version}`}</Text>
       </Box>
-      <Text>{''}</Text>
 
-      {/* Navigation Section */}
-      <Box>
-        <Text bold color="yellow">{'\u2500\u2500 Navigation '}</Text>
-        <Text color="gray" dimColor>{'\u2500'.repeat(30)}</Text>
-      </Box>
-      <Text>{''}</Text>
-      {GLOBAL_BINDINGS.map(b => (
-        <Box key={b.key}>
-          <Box width={10} justifyContent="flex-end" marginRight={1}>
-            <KeyBadge k={b.key} />
+      {CATEGORY_ORDER.map(category => {
+        const entries = bindings.filter(b => b.category === category);
+        if (entries.length === 0) return null;
+        return (
+          <Box key={category} flexDirection="column">
+            <Text>{''}</Text>
+            <SectionHeader title={category} />
+            {entries.map(b => (
+              <Box key={`${category}-${b.keys[0]}-${b.label}`}>
+                <Box width={10} justifyContent="flex-end" marginRight={1}>
+                  <KeyBadge k={b.keys[0]} dimmed={!b.available} />
+                </Box>
+                <Text color="gray" dimColor={!b.available}>
+                  {b.label}
+                  {!b.available ? ' (not here)' : ''}
+                </Text>
+              </Box>
+            ))}
           </Box>
-          <Text color="gray">{b.label}</Text>
-        </Box>
-      ))}
+        );
+      })}
 
       {/* Panel Actions Section */}
       {actions.length > 0 && (
         <>
           <Text>{''}</Text>
-          <Box>
-            <Text bold color="yellow">{`\u2500\u2500 ${panel.title} Actions `}</Text>
-            <Text color="gray" dimColor>{'\u2500'.repeat(24)}</Text>
-          </Box>
-          <Text>{''}</Text>
+          <SectionHeader title={`${panel.title} Actions`} />
           {actions.map(a => (
             <Box key={a.key}>
               <Box width={10} justifyContent="flex-end" marginRight={1}>
                 <KeyBadge k={a.key} />
               </Box>
               <Text color={a.confirm ? 'red' : 'gray'}>{a.label}</Text>
-              {a.confirm && <Text color="red" dimColor>{' \u26A0'}</Text>}
+              {a.confirm && <Text color="red" dimColor>{' ⚠'}</Text>}
             </Box>
           ))}
         </>
       )}
 
       <Text>{''}</Text>
-      <Text color="gray" dimColor>{'Press ? or Esc to close'}</Text>
+      <Text color="gray" dimColor>{'Press ? or Esc to close · Mouse: click to select, wheel to scroll'}</Text>
     </Box>
   );
 }
