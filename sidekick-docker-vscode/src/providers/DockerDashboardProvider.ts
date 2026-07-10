@@ -178,6 +178,10 @@ export class DockerDashboardProvider implements vscode.Disposable {
         await this.service?.forceRefresh();
         break;
 
+      case 'retryConnect':
+        await this._initializeService();
+        break;
+
       case 'copyLogs':
         await vscode.env.clipboard.writeText(message.text);
         this._postMessage({ type: 'toast', message: 'Logs copied to clipboard', severity: 'info' });
@@ -258,6 +262,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
     if (!ok) {
       this.service.dispose();
       this.service = undefined;
+      this._postMessage({ type: 'connectionState', state: 'disconnected' });
       this._postMessage({
         type: 'toast',
         message: 'Cannot connect to Docker daemon. Is Docker running?',
@@ -266,6 +271,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
       return;
     }
 
+    this._postMessage({ type: 'connectionState', state: 'connected' });
     this._postMessage({ type: 'updateState', snapshot: this.service.getStateSnapshot() });
 
     // Send phrase bank for local rotation in webview

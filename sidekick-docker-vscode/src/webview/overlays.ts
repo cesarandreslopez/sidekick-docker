@@ -13,13 +13,21 @@ export const GLOBAL_KEYBINDINGS = [
   { key: '[/]', label: 'Cycle detail tabs' },
   { key: 'z', label: 'Cycle layout (Normal/Wide/Expanded)' },
   { key: '/', label: 'Filter items' },
+  { key: 'f', label: 'Focus log filter (Logs tab)' },
   { key: 'x', label: 'Actions menu' },
+  { key: 'm', label: 'Pin/unpin for compare (Containers/Services)' },
+  { key: 'J/K', label: 'Scroll compare pane' },
   { key: 'a', label: 'Toggle all/running (Containers)' },
   { key: 'o', label: 'Sort menu (Containers)' },
   { key: 'R', label: 'Reverse sort (Containers)' },
+  { key: 'PgUp/Dn', label: 'Page scroll' },
+  { key: '^d/^u', label: 'Half-page scroll' },
+  { key: 'F5', label: 'Refresh' },
   { key: 'V', label: 'Version info' },
   { key: '?', label: 'This help' },
 ];
+
+export type ConfirmSeverity = 'low' | 'high' | 'batch';
 
 /** Callbacks/state the overlay module needs from the dashboard. */
 export interface OverlayDeps {
@@ -27,11 +35,14 @@ export interface OverlayDeps {
   getPanel(): PanelDefinition;
   getFilteredItems(): PanelItem[];
   getSelectedItem(items: PanelItem[]): PanelItem | undefined;
+  /** Bounding rect of the selected side-list row, for anchoring the keyboard-opened menu. */
+  getSelectedRowRect(): DOMRect | null;
   executeContextAction(idx: number, actions: ActionDefinition[]): void;
   onFilterInput(value: string): void;
 }
 
 let deps: OverlayDeps;
+let previouslyFocused: Element | null = null;
 
 // ─── DOM refs (owned by this module) ─────────────────────────────────
 const $confirmOverlay = document.getElementById('confirm-overlay')!;
@@ -48,12 +59,41 @@ const $versionOverlay = document.getElementById('version-overlay')!;
 export function initOverlays(d: OverlayDeps): void {
   deps = d;
 
+  $contextMenu.setAttribute('role', 'menu');
+
   // Confirm overlay buttons
   $confirmYes.addEventListener('click', () => {
     deps.state.confirmCallback?.();
     hideConfirm();
   });
   $confirmNo.addEventListener('click', () => hideConfirm());
+
+  // Backdrop click closes the confirm overlay
+  $confirmOverlay.addEventListener('click', (e: Event) => {
+    if (e.target === $confirmOverlay) hideConfirm();
+  });
+
+  // One shared outside-click closer for the non-modal/context overlays.
+  // Sort/help/version are full-screen backdrops, so "outside" means the
+  // backdrop itself; the context menu closes on any press outside it.
+  document.addEventListener('mousedown', (e: Event) => {
+    const target = e.target as Node;
+    if (deps.state.contextMenuVisible && !$contextMenu.contains(target)) {
+      hideContextMenu();
+    }
+    if (deps.state.sortOverlayVisible && target === $sortOverlay) {
+      deps.state.sortOverlayVisible = false;
+      renderSortOverlay();
+    }
+    if (deps.state.helpOverlayVisible && target === $helpOverlay) {
+      deps.state.helpOverlayVisible = false;
+      renderHelpOverlay();
+    }
+    if (deps.state.versionOverlayVisible && target === $versionOverlay) {
+      deps.state.versionOverlayVisible = false;
+      renderVersionOverlay();
+    }
+  });
 
   // Filter input handler
   $filterInput.addEventListener('input', () => {
@@ -62,18 +102,29 @@ export function initOverlays(d: OverlayDeps): void {
 }
 
 // ─── Confirm overlay ─────────────────────────────────────────────────
-export function showConfirm(message: string, callback: () => void): void {
+export function showConfirm(message: string, callback: () => void, severity: ConfirmSeverity = 'high'): void {
   deps.state.confirmVisible = true;
   deps.state.confirmMessage = message;
   deps.state.confirmCallback = callback;
   $confirmMessage.textContent = message;
-  $confirmOverlay.classList.add('visible');
+  $confirmOverlay.classList.remove('severity-low', 'severity-high', 'severity-batch');
+  $confirmOverlay.classList.add('visible', `severity-${severity}`);
+  // Record focus and default to the safe button; Enter activates the
+  // focused button, so confirming requires y or a deliberate focus move.
+  previouslyFocused = document.activeElement;
+  $confirmNo.focus();
 }
 
 export function hideConfirm(): void {
   deps.state.confirmVisible = false;
   deps.state.confirmCallback = null;
   $confirmOverlay.classList.remove('visible');
+  if (previouslyFocused instanceof HTMLElement && document.contains(previouslyFocused)) {
+    previouslyFocused.focus();
+  } else {
+    (document.activeElement as HTMLElement | null)?.blur();
+  }
+  previouslyFocused = null;
 }
 
 // ─── Filter overlay ──────────────────────────────────────────────────
@@ -87,10 +138,11 @@ export function showFilter(): void {
 export function hideFilter(): void {
   deps.state.filterVisible = false;
   $filterOverlay.classList.remove('visible');
+  $filterInput.blur();
 }
 
 // ─── Context menu ────────────────────────────────────────────────────
-export function showContextMenu(items: PanelItem[]): void {
+export function showContextMenu(items: PanelItem[], anchor?: { x: number; y: number }): void {
   const item = deps.getSelectedItem(items);
   if (!item || !deps.state.snapshot) return;
   const actions = deps.getPanel().getActions(item, deps.state.snapshot);
@@ -99,12 +151,32 @@ export function showContextMenu(items: PanelItem[]): void {
   deps.state.contextMenuVisible = true;
   deps.state.contextMenuIndex = 0;
   renderContextMenu(actions);
-  $contextMenu.classList.add('visible');
 
-  // Position near center
-  $contextMenu.style.top = '50%';
-  $contextMenu.style.left = '50%';
-  $contextMenu.style.transform = 'translate(-50%, -50%)';
+  // Anchor at the pointer, or at the selected row for keyboard invocation.
+  let x: number;
+  let y: number;
+  if (anchor) {
+    x = anchor.x;
+    y = anchor.y;
+  } else {
+    const rect = deps.getSelectedRowRect();
+    if (rect) {
+      x = rect.right;
+      y = rect.top;
+    } else {
+      x = window.innerWidth / 2;
+      y = window.innerHeight / 3;
+    }
+  }
+
+  // Clamp to the viewport (the menu has layout even while hidden).
+  $contextMenu.style.transform = '';
+  const menuRect = $contextMenu.getBoundingClientRect();
+  x = Math.max(8, Math.min(x, window.innerWidth - menuRect.width - 8));
+  y = Math.max(8, Math.min(y, window.innerHeight - menuRect.height - 8));
+  $contextMenu.style.left = `${x}px`;
+  $contextMenu.style.top = `${y}px`;
+  $contextMenu.classList.add('visible');
 }
 
 export function hideContextMenu(): void {
@@ -117,7 +189,7 @@ export function renderContextMenu(actions: ActionDefinition[]): void {
   for (let i = 0; i < actions.length; i++) {
     const a = actions[i];
     const selected = i === deps.state.contextMenuIndex ? ' selected' : '';
-    html += `<div class="menu-item${selected}" data-idx="${i}" data-action="${a.actionType}">${a.label}<span class="key">${a.key}</span></div>`;
+    html += `<div class="menu-item${selected}" role="menuitem" data-idx="${i}" data-action="${a.actionType}">${a.label}<span class="key">${a.key}</span></div>`;
   }
   $contextMenu.innerHTML = html;
 

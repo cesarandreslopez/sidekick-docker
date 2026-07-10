@@ -10,6 +10,8 @@ export interface PanelItem {
   badge?: string;
   group?: string;
   tooltip?: string;
+  /** Container health, rendered as an inline badge in the side list. */
+  health?: 'healthy' | 'unhealthy' | 'starting';
 }
 
 export interface ActionDefinition {
@@ -18,6 +20,8 @@ export interface ActionDefinition {
   actionType: string;
   confirm?: boolean;
   confirmMessage?: string;
+  /** Visual weight of the confirm dialog: low (yellow), high/batch (red). Defaults to high. */
+  confirmSeverity?: 'low' | 'high' | 'batch';
   condition?: (item: PanelItem, snapshot: DashboardStateSnapshot) => boolean;
 }
 

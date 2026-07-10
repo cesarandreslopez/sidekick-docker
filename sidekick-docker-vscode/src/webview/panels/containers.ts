@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline, renderSeveritySparkline } from '../formatters';
+import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, escapeAttr, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline, renderSeveritySparkline } from '../formatters';
 import { filterLine, LogTemplateEngine } from 'sidekick-docker-shared/log';
 import type { SeverityCounts } from 'sidekick-docker-shared/log';
 
@@ -24,7 +24,7 @@ function renderSingleLogPane(containerId: string, state: WebviewState, logRoot: 
   if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
 
   const firstKey = `${entries[0]?.timestamp ?? ''}:${entries[0]?.stream ?? ''}:${entries[0]?.message ?? ''}`;
-  let html = `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeHtml(containerId)}" data-rendered-count="${entries.length}" data-first-key="${escapeHtml(firstKey)}">`;
+  let html = `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeAttr(containerId)}" data-rendered-count="${entries.length}" data-first-key="${escapeAttr(firstKey)}">`;
 
   const counts = state.logSeverityCounts.get(containerId);
   html += `<div class="severity-counts" data-log-severity>${counts && counts.total > 0 ? renderSeverityBadges(counts) : ''}</div>`;
@@ -32,7 +32,7 @@ function renderSingleLogPane(containerId: string, state: WebviewState, logRoot: 
   // Only show filter bar on primary pane
   if (logRoot === 'container') {
     html += `<div class="log-filter-bar">
-      <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeHtml(state.logFilterString)}" data-container-id="${escapeHtml(containerId)}" />
+      <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeAttr(state.logFilterString)}" data-container-id="${escapeAttr(containerId)}" />
       <span class="filter-mode" id="log-filter-mode" title="Click to toggle">${state.logFilterMode}</span>
       <span class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</span>
       <span class="match-count" data-log-match-count>`;
@@ -116,6 +116,8 @@ export const containersPanel: PanelDefinition = {
 
         const s = statsData.stats;
         const barColor = (v: number) => v > 80 ? 'red' : v > 50 ? 'yellow' : 'green';
+        // Text band beside the number so color is not the only high-load signal
+        const band = (v: number) => v > 80 ? ' <span class="stat-band">high</span>' : '';
         const cpuClamped = Math.min(s.cpuPercent, 100);
         const memClamped = Math.min(s.memoryPercent, 100);
 
@@ -143,12 +145,12 @@ export const containersPanel: PanelDefinition = {
 
         return `<div class="stats-grid" data-stats-root="container">
   <div class="stat-row">
-    <div class="stat-row-label"><span class="stat-label">CPU</span><span class="stat-value">${escapeHtml(s.cpuPercent.toFixed(1))}%</span></div>
+    <div class="stat-row-label"><span class="stat-label">CPU</span><span class="stat-value">${escapeHtml(s.cpuPercent.toFixed(1))}%${band(s.cpuPercent)}</span></div>
     <div class="stat-bar-track"><div class="stat-bar-fill ${barColor(s.cpuPercent)}" style="width:${cpuClamped.toFixed(1)}%"></div></div>
     ${cpuSparkline}
   </div>
   <div class="stat-row">
-    <div class="stat-row-label"><span class="stat-label">Memory</span><span class="stat-value">${escapeHtml(formatMemory(s.memoryUsage, s.memoryLimit))} (${escapeHtml(s.memoryPercent.toFixed(1))}%)</span></div>
+    <div class="stat-row-label"><span class="stat-label">Memory</span><span class="stat-value">${escapeHtml(formatMemory(s.memoryUsage, s.memoryLimit))} (${escapeHtml(s.memoryPercent.toFixed(1))}%)${band(s.memoryPercent)}</span></div>
     <div class="stat-bar-track"><div class="stat-bar-fill ${barColor(s.memoryPercent)}" style="width:${memClamped.toFixed(1)}%"></div></div>
     ${memSparkline}
   </div>
@@ -253,7 +255,8 @@ export const containersPanel: PanelDefinition = {
       sortKey: c.state === 'running' ? 0 : 1,
       badge: c.state === 'running' ? c.status.replace(/^Up /, '') : c.state,
       group: c.state === 'running' ? 'Running' : 'Stopped',
-      tooltip: c.name,
+      tooltip: c.healthStatus ? `${c.name} (${c.healthStatus})` : c.name,
+      health: c.healthStatus,
     }));
   },
 
@@ -274,7 +277,7 @@ export const containersPanel: PanelDefinition = {
       actions.push({ key: 'u', label: 'Unpause', actionType: 'unpause' });
     }
     actions.push({ key: 'c', label: 'Copy Logs', actionType: 'copyLogs' });
-    actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: 'Remove this container?' });
+    actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove container "${c.name}"?`, confirmSeverity: 'high' });
     if (c.state === 'running') {
       actions.push({ key: 'e', label: 'Exec', actionType: 'exec' });
     }

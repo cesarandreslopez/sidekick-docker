@@ -116,7 +116,8 @@ export type ExtensionMessage =
   | { type: 'focusContainer'; containerId: string }
   | { type: 'updateComposeLogs'; projectName: string; serviceName: string | null; entries: SerializedLogEntry[] }
   | { type: 'updateChanges'; containerId: string; changes: SerializedFilesystemChange[] }
-  | { type: 'updateLayers'; imageId: string; layers: SerializedImageLayer[] };
+  | { type: 'updateLayers'; imageId: string; layers: SerializedImageLayer[] }
+  | { type: 'connectionState'; state: 'connected' | 'disconnected' };
 
 // ─── Webview → Extension ────────────────────────────────────────────
 
@@ -132,4 +133,5 @@ export type WebviewMessage =
   | { type: 'requestRefresh' }
   | { type: 'selectComposeService'; projectName: string; serviceName: string | null }
   | { type: 'copyLogs'; text: string }
-  | { type: 'toggleCompareItem'; itemId: string | null; panelId: string };
+  | { type: 'toggleCompareItem'; itemId: string | null; panelId: string }
+  | { type: 'retryConnect' };

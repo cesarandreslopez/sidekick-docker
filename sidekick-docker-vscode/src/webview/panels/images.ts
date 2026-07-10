@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedImageInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { formatBytes, truncate, escapeHtml, colorizeId, colorizeBool, renderKvGrid } from '../formatters';
+import { formatBytes, truncate, escapeHtml, escapeAttr, colorizeId, colorizeBool, renderKvGrid, shortId } from '../formatters';
 
 
 function findImage(id: string, snapshot: DashboardStateSnapshot): SerializedImageInfo | undefined {
@@ -43,7 +43,7 @@ export const imagesPanel: PanelDefinition = {
           const num = String(i + 1);
           const sizeStr = l.size > 0 ? formatBytes(l.size) : '0 B';
           const sizeClass = l.size === 0 ? ' zero' : '';
-          html += `<div class="layer-row"><span class="layer-num">${escapeHtml(num)}</span><span class="layer-size${sizeClass}">${escapeHtml(sizeStr)}</span><span class="layer-cmd" title="${escapeHtml(l.createdBy)}">${escapeHtml(truncate(l.createdBy, 80))}</span></div>`;
+          html += `<div class="layer-row"><span class="layer-num">${escapeHtml(num)}</span><span class="layer-size${sizeClass}">${escapeHtml(sizeStr)}</span><span class="layer-cmd" title="${escapeAttr(l.createdBy)}">${escapeHtml(truncate(l.createdBy, 80))}</span></div>`;
         }
 
         // Show largest layer
@@ -72,10 +72,12 @@ export const imagesPanel: PanelDefinition = {
     });
   },
 
-  getActions(): ActionDefinition[] {
+  getActions(item: PanelItem, snapshot: DashboardStateSnapshot): ActionDefinition[] {
+    const img = findImage(item.id, snapshot);
+    const name = img?.repoTags[0] || shortId(item.id);
     return [
-      { key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: 'Remove this image?' },
-      { key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: 'Prune all dangling images?' },
+      { key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove image "${name}"?`, confirmSeverity: 'high' },
+      { key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: 'Prune all dangling images?', confirmSeverity: 'batch' },
     ];
   },
 

@@ -33,7 +33,8 @@ import type { KeyboardContext } from './keyboard';
 import { filterLine } from 'sidekick-docker-shared/log';
 
 const vscode = acquireVsCodeApi();
-const TOAST_DURATIONS: Record<ToastSeverity, number> = { error: 4000, warning: 3000, info: 2000, success: 2000 };
+// TUI-aligned lifetimes; errors are sticky, so their entry is a fallback only.
+const TOAST_DURATIONS: Record<ToastSeverity, number> = { error: 4000, warning: 3000, info: 2500, success: 2000 };
 
 const panels: PanelDefinition[] = [
   containersPanel,
@@ -107,6 +108,14 @@ const $detailTabBar = document.getElementById('detail-tab-bar')!;
 const $detailContent = document.getElementById('detail-content')!;
 const $statusBar = document.getElementById('status-bar')!;
 const $toastContainer = document.getElementById('toast-container')!;
+
+// Static ARIA wiring (per-render attributes are set in the renderers)
+$tabBar.setAttribute('role', 'tablist');
+$tabBar.setAttribute('aria-label', 'Resource panels');
+$detailTabBar.setAttribute('role', 'tablist');
+$detailTabBar.setAttribute('aria-label', 'Detail tabs');
+$sideList.setAttribute('role', 'listbox');
+$sideList.setAttribute('tabindex', '0');
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 function post(msg: WebviewMessage): void { vscode.postMessage(msg); }
@@ -263,15 +272,21 @@ function renderAll(): void {
   renderDetailTabBar();
   renderDetailContent(items);
   renderStatusBar(items);
+  renderConnectionBanner();
   persistViewState();
+}
+
+function renderConnectionBanner(): void {
+  const $banner = document.getElementById('disconnected-banner')!;
+  $banner.classList.toggle('visible', state.connState === 'disconnected');
 }
 
 function renderTabBar(): void {
   let html = '';
   for (let i = 0; i < panels.length; i++) {
     const p = panels[i];
-    const active = i === state.activePanelIndex ? ' active' : '';
-    html += `<div class="tab${active}" data-panel="${i}"><span class="shortcut">${p.shortcutKey}</span>${p.title}</div>`;
+    const active = i === state.activePanelIndex;
+    html += `<div class="tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="0" data-panel="${i}"><span class="shortcut">${p.shortcutKey}</span>${p.title}</div>`;
   }
   html += `<div class="phrase">${escapeHtml(state.phrase)}</div>`;
   $tabBar.innerHTML = html;
@@ -285,31 +300,57 @@ function renderTabBar(): void {
   });
 }
 
+const HEALTH_GLYPHS: Record<string, string> = { healthy: '\u2713', unhealthy: '\u2717', starting: '\u25CC' };
+
 function renderSideList(items: PanelItem[]): void {
+  $sideList.setAttribute('aria-label', `${getPanel().title} items`);
+
+  // While the first connection attempt is in flight, show skeleton rows
+  // instead of a misleading "No containers" empty state.
+  if (state.connState === 'connecting' && !state.snapshot) {
+    $sideList.removeAttribute('aria-activedescendant');
+    $sideList.innerHTML = '<div class="skeleton-row"></div>'.repeat(5);
+    return;
+  }
+
   if (items.length === 0) {
+    $sideList.removeAttribute('aria-activedescendant');
     $sideList.innerHTML = renderEmptyStateSide(getPanel().id);
     return;
   }
 
   let html = '';
   let lastGroup: string | undefined;
-  for (const item of items) {
+  let selectedRowId: string | null = null;
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
     if (item.group !== undefined && item.group !== lastGroup) {
       html += `<div class="side-group-header">${escapeHtml(item.group)}</div>`;
       lastGroup = item.group;
     }
-    const selected = item.id === state.selectedItemId ? ' selected' : '';
+    const isSelected = item.id === state.selectedItemId;
+    const rowId = `side-item-${i}`;
+    if (isSelected) selectedRowId = rowId;
     const panelId = getPanel().id;
     const isPinned = state.compareItemIds[panelId] === item.id;
     const pinClass = isPinned ? ' pinned' : '';
     const iconHtml = item.icon ? `<span style="color:${item.iconColor};margin-right:4px;flex-shrink:0;">${item.icon}</span>` : '';
+    const healthHtml = item.health
+      ? `<span class="health-badge ${item.health}" title="health: ${escapeAttr(item.health)}">${HEALTH_GLYPHS[item.health] ?? ''}</span>`
+      : '';
     const badgeHtml = item.badge ? `<span class="side-badge">${escapeHtml(item.badge)}</span>` : '';
     const pinBtnHtml = (panelId === 'containers' || panelId === 'services')
       ? `<span class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}">\u{1F4CC}</span>`
       : '';
-    html += `<div class="side-item${selected}${pinClass}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${pinBtnHtml}${badgeHtml}</div>`;
+    const actionsBtnHtml = `<span class="row-actions-btn" data-menu-id="${escapeAttr(item.id)}" title="Actions">\u22EF</span>`;
+    html += `<div class="side-item${isSelected ? ' selected' : ''}${pinClass}" role="option" id="${rowId}" aria-selected="${isSelected}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${healthHtml}${pinBtnHtml}${actionsBtnHtml}${badgeHtml}</div>`;
   }
   $sideList.innerHTML = html;
+  if (selectedRowId) {
+    $sideList.setAttribute('aria-activedescendant', selectedRowId);
+  } else {
+    $sideList.removeAttribute('aria-activedescendant');
+  }
 
   // Click handlers
   $sideList.querySelectorAll('.side-item').forEach(el => {
@@ -324,13 +365,18 @@ function renderSideList(items: PanelItem[]): void {
     el.addEventListener('click', (e) => {
       e.stopPropagation(); // Don't trigger the parent side-item click
       const id = (el as HTMLElement).dataset.pinId;
-      if (id !== undefined) {
-        const panelId = getPanel().id;
-        const current = state.compareItemIds[panelId] ?? null;
-        state.compareItemIds[panelId] = current === id ? null : id;
-        post({ type: 'toggleCompareItem', itemId: state.compareItemIds[panelId], panelId });
-        renderAll();
-      }
+      if (id !== undefined) toggleComparePin(id);
+    });
+  });
+
+  // Per-row actions button: select the row and open the anchored menu
+  $sideList.querySelectorAll('.row-actions-btn').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const id = (el as HTMLElement).dataset.menuId;
+      if (id === undefined) return;
+      selectItem(id, getFilteredItems());
+      showContextMenu(getFilteredItems());
     });
   });
 
@@ -344,8 +390,8 @@ function renderDetailTabBar(): void {
   let html = '';
   for (let i = 0; i < panel.detailTabs.length; i++) {
     const t = panel.detailTabs[i];
-    const active = i === state.detailTabIndex ? ' active' : '';
-    html += `<div class="detail-tab${active}" data-tab="${i}">${t.label}</div>`;
+    const active = i === state.detailTabIndex;
+    html += `<div class="detail-tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="0" data-tab="${i}">${t.label}</div>`;
   }
   $detailTabBar.innerHTML = html;
 
@@ -415,7 +461,6 @@ function setDetailTab(idx: number): void {
 
 function renderStatusBar(items: PanelItem[]): void {
   const snapshot = state.snapshot;
-  const connected = snapshot?.daemonConnected ?? false;
   const runningCount = snapshot?.containers.filter(c => c.state === 'running').length ?? 0;
   const totalCount = snapshot?.containers.length ?? 0;
 
@@ -434,11 +479,26 @@ function renderStatusBar(items: PanelItem[]): void {
     const sortLabel = SORT_OPTIONS.find(o => o.field === state.sortField)?.label ?? state.sortField;
     hintParts.push(`\u2195${sortLabel}${state.sortReversed ? '\u25B2' : '\u25BC'}`);
   }
-  hintParts.push('/ filter', 'x actions', '? help');
   const hints = hintParts.join('  ');
 
-  const connDot = connected ? '<span class="dot connected"></span>' : '<span class="dot disconnected"></span>';
-  const connText = connected ? `${runningCount}/${totalCount}` : 'disconnected';
+  // Trailing global hints are clickable chips (mouse path for overlays)
+  const chipsHtml = '<span class="hint-chip" data-hint-action="filter">/ filter</span>'
+    + '<span class="hint-chip" data-hint-action="actions">x actions</span>'
+    + '<span class="hint-chip" data-hint-action="help">? help</span>'
+    + '<span class="hint-chip" data-hint-action="refresh" title="Refresh now">\u21BB refresh</span>';
+
+  let connDot: string;
+  let connText: string;
+  if (state.connState === 'connecting') {
+    connDot = '<span class="dot connecting"></span>';
+    connText = 'connecting\u2026';
+  } else if (state.connState === 'connected') {
+    connDot = '<span class="dot connected"></span>';
+    connText = `${runningCount}/${totalCount}`;
+  } else {
+    connDot = '<span class="dot disconnected"></span>';
+    connText = 'disconnected';
+  }
 
   let filterHtml = '';
   if (state.filterString) {
@@ -452,11 +512,11 @@ function renderStatusBar(items: PanelItem[]): void {
 
   $statusBar.innerHTML = `
     <span class="brand">\u26A1 SIDEKICK Docker v${__VERSION__}</span>
-    <span class="hints">${escapeHtml(hints)}</span>
+    <span class="hints">${escapeHtml(hints)}  ${chipsHtml}</span>
     ${filterHtml}
     ${layoutIndicator}
     ${focusIndicator}
-    <span class="connection">${connDot}<span class="conn-text">${connText}</span></span>
+    <span class="connection" aria-live="polite">${connDot}<span class="conn-text">${connText}</span></span>
   `;
 }
 
@@ -465,7 +525,8 @@ function renderToasts(): void {
     const actions = t.sticky
       ? `<span class="toast-actions"><button class="toast-copy" data-toast-copy="${t.id}" title="Copy message">Copy</button><button class="toast-dismiss" data-toast-dismiss="${t.id}" title="Dismiss">\u00D7</button></span>`
       : '';
-    return `<div class="toast ${t.severity}${t.sticky ? ' sticky' : ''}" data-toast-id="${t.id}">${escapeHtml(t.message)}${actions}</div>`;
+    const alertRole = t.severity === 'error' ? ' role="alert"' : '';
+    return `<div class="toast ${t.severity}${t.sticky ? ' sticky' : ''}"${alertRole} data-toast-id="${t.id}">${escapeHtml(t.message)}${actions}</div>`;
   }).join('');
 }
 
@@ -683,7 +744,7 @@ function executeAction(action: ActionDefinition, itemId: string): void {
   if (action.confirm) {
     showConfirm(action.confirmMessage || 'Are you sure?', () => {
       post({ type: 'action', actionType: action.actionType, itemId, panelId: getPanel().id });
-    });
+    }, action.confirmSeverity);
   } else {
     post({ type: 'action', actionType: action.actionType, itemId, panelId: getPanel().id });
   }
@@ -704,12 +765,28 @@ function scrollDetail(delta: number): void {
   renderScrollIndicators();
 }
 
+/** Scroll the secondary compare log pane (keyboard Shift+J/K). */
+function scrollComparePane(delta: number): void {
+  const pane = $detailContent.querySelector('.log-compare-pane[data-compare="secondary"] .log-shell') as HTMLElement | null;
+  if (pane) pane.scrollTop += delta * 24;
+}
+
+/** Toggle the compare pin for an item on the active panel (pin button + m key). */
+function toggleComparePin(itemId: string): void {
+  const panelId = getPanel().id;
+  const current = state.compareItemIds[panelId] ?? null;
+  state.compareItemIds[panelId] = current === itemId ? null : itemId;
+  post({ type: 'toggleCompareItem', itemId: state.compareItemIds[panelId], panelId });
+  renderAll();
+}
+
 // ─── Overlay + keyboard wiring ───────────────────────────────────────
 initOverlays({
   state,
   getPanel,
   getFilteredItems,
   getSelectedItem,
+  getSelectedRowRect: () => $sideList.querySelector('.side-item.selected')?.getBoundingClientRect() ?? null,
   executeContextAction,
   onFilterInput: (value) => {
     state.filterString = value;
@@ -738,6 +815,9 @@ const keyboardContext: KeyboardContext = {
     $detailContent.scrollTop = $detailContent.scrollHeight;
     renderScrollIndicators();
   },
+  getDetailPageRows: () => Math.max(1, Math.floor($detailContent.clientHeight / 24)),
+  scrollComparePane,
+  toggleComparePin,
   executeAction,
   executeContextAction,
   showFilter,
@@ -756,6 +836,60 @@ const keyboardContext: KeyboardContext = {
 };
 
 document.addEventListener('keydown', (e: KeyboardEvent) => handleGlobalKeydown(e, keyboardContext));
+
+// ARIA tab activation: Enter/Space on a focused role=tab element
+function activateTabOnKey(e: KeyboardEvent, datasetKey: 'panel' | 'tab', activate: (idx: number) => void): void {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  const tab = (e.target as HTMLElement).closest('[role="tab"]') as HTMLElement | null;
+  if (!tab) return;
+  const raw = tab.dataset[datasetKey];
+  if (raw === undefined) return;
+  e.preventDefault();
+  e.stopPropagation();
+  activate(parseInt(raw, 10));
+}
+$tabBar.addEventListener('keydown', (e: KeyboardEvent) => activateTabOnKey(e, 'panel', switchPanel));
+$detailTabBar.addEventListener('keydown', (e: KeyboardEvent) => activateTabOnKey(e, 'tab', setDetailTab));
+
+// Right-click a side-list row: select it and open the menu at the pointer
+$sideList.addEventListener('contextmenu', (e: MouseEvent) => {
+  const row = (e.target as HTMLElement).closest('.side-item') as HTMLElement | null;
+  if (!row) return;
+  e.preventDefault();
+  const id = row.dataset.id;
+  if (id === undefined) return;
+  selectItem(id, getFilteredItems());
+  showContextMenu(getFilteredItems(), { x: e.clientX, y: e.clientY });
+});
+
+// Clickable status-bar hint chips (mouse path for keyboard-only overlays)
+$statusBar.addEventListener('click', (e: Event) => {
+  const chip = (e.target as HTMLElement).closest('.hint-chip') as HTMLElement | null;
+  if (!chip) return;
+  switch (chip.dataset.hintAction) {
+    case 'filter':
+      showFilter();
+      break;
+    case 'actions':
+      showContextMenu(getFilteredItems());
+      break;
+    case 'help':
+      state.helpOverlayVisible = !state.helpOverlayVisible;
+      renderHelpOverlay();
+      break;
+    case 'refresh':
+      post({ type: 'requestRefresh' });
+      addToast('Refreshing\u2026', 'info');
+      break;
+  }
+});
+
+// Retry button on the disconnected banner
+document.getElementById('retry-connect')!.addEventListener('click', () => {
+  state.connState = 'connecting';
+  renderAll();
+  post({ type: 'retryConnect' });
+});
 
 // Log filter input handler (event delegation on detail content)
 $detailContent.addEventListener('input', (e: Event) => {
@@ -803,12 +937,19 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
   switch (msg.type) {
     case 'updateState': {
       state.snapshot = msg.snapshot;
+      state.connState = msg.snapshot.daemonConnected ? 'connected' : 'disconnected';
       // Auto-select first item if nothing selected
       const items = getFilteredItems();
       if (!state.selectedItemId && items.length > 0) {
         state.selectedItemId = items[0].id;
         post({ type: 'selectItem', panelId: getPanel().id, itemId: items[0].id });
       }
+      renderAll();
+      break;
+    }
+
+    case 'connectionState': {
+      state.connState = msg.state;
       renderAll();
       break;
     }

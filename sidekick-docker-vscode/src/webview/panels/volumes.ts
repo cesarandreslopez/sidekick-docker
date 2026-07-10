@@ -46,9 +46,9 @@ export const volumesPanel: PanelDefinition = {
     const vol = findVolume(item.id, snapshot);
     const actions: ActionDefinition[] = [];
     if (vol && !vol.isInUse) {
-      actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: 'Remove this volume?' });
+      actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove volume "${vol.name}"?`, confirmSeverity: 'high' });
     }
-    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: 'Prune all unused volumes?' });
+    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: 'Prune all unused volumes?', confirmSeverity: 'batch' });
     return actions;
   },
 

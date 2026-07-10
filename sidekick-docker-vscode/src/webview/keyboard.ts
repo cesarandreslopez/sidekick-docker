@@ -16,6 +16,11 @@ export interface KeyboardContext {
   scrollDetail(delta: number): void;
   scrollDetailToTop(): void;
   scrollDetailToBottom(): void;
+  /** Rows that fit in one detail-pane page (for PageUp/PageDown & ctrl+d/u). */
+  getDetailPageRows(): number;
+  /** Scroll the secondary compare log pane (Shift+J/K). */
+  scrollComparePane(delta: number): void;
+  toggleComparePin(itemId: string): void;
   executeAction(action: ActionDefinition, itemId: string): void;
   executeContextAction(idx: number, actions: ActionDefinition[]): void;
   showFilter(): void;
@@ -35,11 +40,46 @@ export interface KeyboardContext {
 
 export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): void {
   const { state } = ctx;
+
+  // Typing guard — while an input/textarea/contentEditable is focused, no
+  // global shortcut may fire (fixes actions triggering from the log filter).
+  const active = document.activeElement;
+  const typing = active instanceof HTMLInputElement
+    || active instanceof HTMLTextAreaElement
+    || (active instanceof HTMLElement && active.isContentEditable);
+  if (typing) {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      (active as HTMLElement).blur();
+      if (state.filterVisible) {
+        // Preserve item-filter Escape semantics: clear + close.
+        state.filterString = '';
+        ctx.hideFilter();
+        ctx.renderAll();
+      }
+      return;
+    }
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      if (state.filterVisible) {
+        // Preserve item-filter Enter semantics: commit + close.
+        ctx.hideFilter();
+      } else {
+        // Log filter input: commit by blurring.
+        (active as HTMLElement).blur();
+      }
+      return;
+    }
+    return;
+  }
+
   ctx.rotatePhrase();
 
-  // Confirm overlay
+  // Confirm overlay — Enter is NOT intercepted here: it activates the
+  // focused button (Cancel by default), so destructive confirm needs an
+  // explicit y or a deliberate focus move.
   if (state.confirmVisible) {
-    if (e.key === 'y' || e.key === 'Y' || e.key === 'Enter') {
+    if (e.key === 'y' || e.key === 'Y') {
       e.preventDefault();
       state.confirmCallback?.();
       ctx.hideConfirm();
@@ -212,8 +252,12 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     return;
   }
 
-  // Focus toggle (Tab)
+  // Focus toggle (Tab). When an ARIA tab element has focus, let native Tab
+  // traverse so keyboard/AT users can reach the tab controls.
   if (e.key === 'Tab') {
+    if (active instanceof HTMLElement && active.getAttribute('role') === 'tab') {
+      return;
+    }
     e.preventDefault();
     state.focusTarget = state.focusTarget === 'side' ? 'detail' : 'side';
     ctx.renderAll();
@@ -228,6 +272,56 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     state.layoutMode = modes[(curIdx + 1) % modes.length];
     ctx.addToast(`Layout: ${state.layoutMode.charAt(0).toUpperCase() + state.layoutMode.slice(1)}`, 'info');
     ctx.renderAll();
+    return;
+  }
+
+  // Compare pin toggle (m, containers/services — TUI parity)
+  if (e.key === 'm' && (ctx.getPanel().id === 'containers' || ctx.getPanel().id === 'services')) {
+    e.preventDefault();
+    const items = ctx.getFilteredItems();
+    const item = ctx.getSelectedItem(items);
+    if (item) ctx.toggleComparePin(item.id);
+    return;
+  }
+
+  // Focus the log filter input when the active tab has one (f)
+  if (e.key === 'f') {
+    const logFilterInput = document.getElementById('log-filter-input') as HTMLInputElement | null;
+    if (logFilterInput) {
+      e.preventDefault();
+      logFilterInput.focus();
+      return;
+    }
+  }
+
+  // Manual refresh (F5)
+  if (e.key === 'F5') {
+    e.preventDefault();
+    ctx.post({ type: 'requestRefresh' });
+    ctx.addToast('Refreshing\u2026', 'info');
+    return;
+  }
+
+  // Secondary compare pane scrolling (Shift+J/K)
+  if (e.key === 'J' || e.key === 'K') {
+    e.preventDefault();
+    ctx.scrollComparePane(e.key === 'J' ? 3 : -3);
+    return;
+  }
+
+  // Page scrolling: PageUp/PageDown full page, ctrl+d/ctrl+u half page
+  const pageDir = e.key === 'PageDown' ? 1 : e.key === 'PageUp' ? -1 : 0;
+  const halfDir = e.ctrlKey && e.key === 'd' ? 1 : e.ctrlKey && e.key === 'u' ? -1 : 0;
+  if (pageDir !== 0 || halfDir !== 0) {
+    e.preventDefault();
+    const dir = pageDir !== 0 ? pageDir : halfDir;
+    if (state.focusTarget === 'detail') {
+      const rows = ctx.getDetailPageRows();
+      const step = pageDir !== 0 ? rows : Math.max(1, Math.floor(rows / 2));
+      ctx.scrollDetail(dir * step);
+    } else {
+      ctx.navigateSide(dir * 10);
+    }
     return;
   }
 

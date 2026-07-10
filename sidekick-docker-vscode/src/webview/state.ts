@@ -10,6 +10,7 @@ import type { SeverityCounts, FilterMode } from 'sidekick-docker-shared/log';
 export type SortField = 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids';
 export type LayoutMode = 'normal' | 'wide' | 'expanded';
 export type ToastSeverity = 'error' | 'warning' | 'info' | 'success';
+export type ConnState = 'connecting' | 'connected' | 'disconnected';
 
 export const SORT_OPTIONS: { field: SortField; label: string }[] = [
   { field: 'state', label: 'State (running first)' },
@@ -61,6 +62,7 @@ export interface WebviewState {
   filterString: string;
 
   snapshot: DashboardStateSnapshot | null;
+  connState: ConnState;
   logs: Map<string, SerializedLogEntry[]>;
   stats: Map<string, ContainerStatsEntry>;
   envVars: Map<string, string[]>;
@@ -110,6 +112,7 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
     detailTabIndex: restored?.detailTabIndex ?? 0,
     filterString: '',
     snapshot: null,
+    connState: 'connecting',
     logs: new Map(),
     stats: new Map(),
     envVars: new Map(),

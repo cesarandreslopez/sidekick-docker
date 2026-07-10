@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { stateIcon, stateColor, escapeHtml, colorizeState, colorizeId, renderKvGrid, colorizeLogEntry } from '../formatters';
+import { stateIcon, stateColor, escapeHtml, escapeAttr, colorizeState, colorizeId, renderKvGrid, colorizeLogEntry } from '../formatters';
 
 function getComposeLogKey(itemId: string): string {
   const parts = itemId.split(':');
@@ -19,7 +19,7 @@ function renderComposeLogPane(itemId: string, state: WebviewState, logRoot: stri
     return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the service produces output</div></div>';
   }
   const first = entries[0];
-  return `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeHtml(key)}" data-rendered-count="${entries.length}" data-first-key="${escapeHtml(`${first?.timestamp ?? ''}:${first?.stream ?? ''}:${first?.message ?? ''}`)}"><div class="log-content" data-log-content>${entries.map(e => colorizeLogEntry(e)).join('')}</div></div>`;
+  return `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeAttr(key)}" data-rendered-count="${entries.length}" data-first-key="${escapeAttr(`${first?.timestamp ?? ''}:${first?.stream ?? ''}:${first?.message ?? ''}`)}"><div class="log-content" data-log-content>${entries.map(e => colorizeLogEntry(e)).join('')}</div></div>`;
 }
 
 export const servicesPanel: PanelDefinition = {
@@ -65,7 +65,7 @@ export const servicesPanel: PanelDefinition = {
             ['Ports', escapeHtml(service.ports.join(', ') || 'none')],
           ]);
         }
-        return 'No compose projects detected.\n\nCompose projects are detected from container labels\n(com.docker.compose.project) or from a compose file in the CWD.';
+        return '';
       },
     },
     {
@@ -124,24 +124,16 @@ export const servicesPanel: PanelDefinition = {
       }
     }
 
-    if (items.length === 0) {
-      items.push({
-        id: 'no-services',
-        label: 'No compose projects found',
-        icon: '',
-        iconColor: '',
-        sortKey: 0,
-      });
-    }
-
     return items;
   },
 
   getActions(item: PanelItem): ActionDefinition[] {
-    if (item.id === 'no-services') return [];
+    // Compose actions target the whole project, even from a service row.
+    const parts = item.id.split(':');
+    const projectName = parts[0] === 'project' ? parts.slice(1).join(':') : parts[1] ?? item.label.trim();
     return [
       { key: 'u', label: 'Up', actionType: 'up' },
-      { key: 'D', label: 'Down', actionType: 'down', confirm: true, confirmMessage: 'Bring down this compose project?' },
+      { key: 'D', label: 'Down', actionType: 'down', confirm: true, confirmMessage: `Bring down compose project "${projectName}"?`, confirmSeverity: 'high' },
       { key: 'r', label: 'Restart', actionType: 'restart' },
       { key: 'S', label: 'Stop', actionType: 'stop' },
       { key: 'c', label: 'Copy Logs', actionType: 'copyLogs' },

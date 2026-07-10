@@ -55,9 +55,9 @@ export const networksPanel: PanelDefinition = {
     const net = findNetwork(item.id, snapshot);
     const actions: ActionDefinition[] = [];
     if (net && !net.isDefault && net.containers.length === 0) {
-      actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: 'Remove this network?' });
+      actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove network "${net.name}"?`, confirmSeverity: 'high' });
     }
-    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: 'Prune all unused networks?' });
+    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: 'Prune all unused networks?', confirmSeverity: 'batch' });
     return actions;
   },
 

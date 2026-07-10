@@ -26,6 +26,12 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       --tab-height: 36px;
       --status-height: 28px;
       --detail-tab-height: 30px;
+      /* Single info accent — passes contrast on both default themes. */
+      --sd-info: var(--vscode-editorInfo-foreground, #3794ff);
+    }
+    :focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
     }
     body {
       font-family: var(--vscode-font-family, 'Segoe WPC', 'Segoe UI', sans-serif);
@@ -164,6 +170,53 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     #side-list .side-item.pinned {
       border-left-color: var(--vscode-textLink-foreground, #3794ff);
     }
+    #side-list .side-item .row-actions-btn {
+      display: none;
+      margin-left: 4px;
+      cursor: pointer;
+      font-size: 11px;
+      opacity: 0.6;
+      flex-shrink: 0;
+    }
+    #side-list .side-item:hover .row-actions-btn,
+    #side-list .side-item.selected .row-actions-btn {
+      display: inline;
+    }
+    #side-list .side-item .row-actions-btn:hover {
+      opacity: 1;
+    }
+    /* Hide the badge while hover actions are shown to avoid overflow */
+    #side-list .side-item:hover .side-badge {
+      display: none;
+    }
+    #side-list .side-item .health-badge {
+      margin-left: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    #side-list .side-item .health-badge.healthy { color: var(--vscode-testing-iconPassed, #3fb950); }
+    #side-list .side-item .health-badge.unhealthy { color: var(--vscode-errorForeground, #f85149); }
+    #side-list .side-item .health-badge.starting { color: var(--vscode-editorWarning-foreground, #cca700); }
+
+    /* ─── Loading skeleton (initial connect) ───────────────────── */
+    @keyframes shimmer {
+      from { background-position: 200% 0; }
+      to { background-position: -200% 0; }
+    }
+    #side-list .skeleton-row {
+      height: 22px;
+      margin: 6px 12px;
+      border-radius: 3px;
+      background: linear-gradient(
+        90deg,
+        var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.12)) 25%,
+        rgba(128,128,128,0.28) 50%,
+        var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.12)) 75%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.2s ease-in-out infinite;
+    }
 
     /* ─── Detail pane ──────────────────────────────────────────── */
     #detail-pane {
@@ -285,24 +338,24 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .log-stderr { color: var(--vscode-errorForeground); }
     .log-error { color: var(--vscode-errorForeground); }
     .log-warn { color: var(--vscode-editorWarning-foreground, #cca700); }
-    .log-info { color: var(--vscode-editorInfo-foreground, #3794ff); }
+    .log-info { color: var(--sd-info); }
     .log-debug { color: var(--vscode-descriptionForeground); }
 
     /* ─── Token-level log syntax highlighting ────────────────── */
     .tok-sev-error { color: var(--vscode-errorForeground); font-weight: 600; }
     .tok-sev-warn { color: var(--vscode-editorWarning-foreground, #cca700); font-weight: 600; }
-    .tok-sev-info { color: var(--vscode-editorInfo-foreground, #3794ff); font-weight: 600; }
+    .tok-sev-info { color: var(--sd-info); font-weight: 600; }
     .tok-sev-debug { color: var(--vscode-descriptionForeground); }
     .tok-http-safe { color: var(--vscode-testing-iconPassed, #3fb950); }
     .tok-http-unsafe { color: var(--vscode-editorWarning-foreground, #cca700); }
     .tok-status-2xx { color: var(--vscode-testing-iconPassed, #3fb950); font-weight: 600; }
-    .tok-status-3xx { color: var(--vscode-editorInfo-foreground, #3794ff); }
+    .tok-status-3xx { color: var(--sd-info); }
     .tok-status-4xx { color: var(--vscode-editorWarning-foreground, #cca700); font-weight: 600; }
     .tok-status-5xx { color: var(--vscode-errorForeground); font-weight: 600; }
     .tok-url { color: var(--vscode-textLink-foreground, #3794ff); }
     .tok-ip { color: var(--vscode-descriptionForeground); }
     .tok-timestamp { color: var(--vscode-descriptionForeground); opacity: 0.7; }
-    .tok-json-key { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
+    .tok-json-key { color: var(--sd-info); }
     .tok-state-ok { color: var(--vscode-testing-iconPassed, #3fb950); }
     .tok-state-fail { color: var(--vscode-errorForeground); }
     .tok-path { color: var(--vscode-descriptionForeground); }
@@ -326,7 +379,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .sev-badge { font-weight: 600; }
     .sev-badge.error { color: var(--vscode-errorForeground); }
     .sev-badge.warn { color: var(--vscode-editorWarning-foreground, #cca700); }
-    .sev-badge.info { color: var(--vscode-editorInfo-foreground, #3794ff); }
+    .sev-badge.info { color: var(--sd-info); }
     .sev-badge.debug { color: var(--vscode-descriptionForeground); }
 
     /* ─── Log filter search bar ──────────────────────────────── */
@@ -401,13 +454,13 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
 
     /* ─── Detail panel coloring ───────────────────────────────── */
-    .detail-key { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
+    .detail-key { color: var(--sd-info); }
     .detail-id { color: var(--vscode-descriptionForeground); opacity: 0.7; }
     .detail-bool-yes { color: var(--vscode-testing-iconPassed, #3fb950); }
     .detail-bool-no { color: var(--vscode-descriptionForeground); opacity: 0.7; }
     .detail-stat-high { color: var(--vscode-errorForeground, #f85149); }
     .detail-stat-med { color: var(--vscode-editorWarning-foreground, #cca700); }
-    .env-key { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
+    .env-key { color: var(--sd-info); }
     .env-value { }
 
     /* ─── Stats progress bars ───────────────────────────────────── */
@@ -442,8 +495,16 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       font-variant-numeric: tabular-nums;
     }
     .stat-net-rx { color: var(--vscode-testing-iconPassed, #3fb950); }
-    .stat-net-tx { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
+    .stat-net-tx { color: var(--sd-info); }
     .stat-pids { color: var(--vscode-descriptionForeground); font-size: 11px; }
+    .stat-band {
+      color: var(--vscode-errorForeground, #f85149);
+      font-weight: 600;
+      text-transform: uppercase;
+      font-size: 9px;
+      margin-left: 4px;
+      letter-spacing: 0.5px;
+    }
     .sparkline-row {
       font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
       font-size: 10px;
@@ -453,7 +514,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       overflow: hidden;
     }
     .sparkline { white-space: nowrap; }
-    .sparkline-row.cpu .sparkline { color: var(--vscode-editorInfo-foreground, #3794ff); }
+    .sparkline-row.cpu .sparkline { color: var(--sd-info); }
     .sparkline-row.memory .sparkline { color: var(--vscode-testing-iconPassed, #3fb950); }
 
     /* ─── Stats spinner ────────────────────────────────────────── */
@@ -524,7 +585,17 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
     #status-bar .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
     #status-bar .dot.connected { background: #3fb950; animation: pulse 2s ease-in-out infinite; }
+    #status-bar .dot.connecting { background: var(--vscode-editorWarning-foreground, #cca700); animation: pulse 1s ease-in-out infinite; }
     #status-bar .dot.disconnected { background: #f85149; }
+    #status-bar .hint-chip {
+      cursor: pointer;
+      padding: 1px 5px;
+      border-radius: 3px;
+      margin-left: 4px;
+    }
+    #status-bar .hint-chip:hover {
+      background: rgba(255,255,255,0.15);
+    }
 
     /* ─── KV grid ──────────────────────────────────────────────── */
     .kv-grid {
@@ -534,7 +605,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       align-items: baseline;
     }
     .kv-key {
-      color: var(--vscode-editorInfo-foreground, #2B4C7E);
+      color: var(--sd-info);
       white-space: nowrap;
     }
     .kv-value {
@@ -549,7 +620,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       align-items: baseline;
     }
     .env-grid-key {
-      color: var(--vscode-editorInfo-foreground, #2B4C7E);
+      color: var(--sd-info);
       white-space: nowrap;
       font-weight: 500;
     }
@@ -624,6 +695,24 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       background: var(--vscode-button-secondaryBackground);
       color: var(--vscode-button-secondaryForeground);
     }
+    /* Confirm severity: red border/title for destructive (high/batch), yellow for low */
+    #confirm-overlay.severity-high .dialog,
+    #confirm-overlay.severity-batch .dialog {
+      border-color: var(--vscode-inputValidation-errorBorder, #f85149);
+    }
+    #confirm-overlay.severity-high .dialog .message,
+    #confirm-overlay.severity-batch .dialog .message {
+      color: var(--vscode-errorForeground, #f85149);
+    }
+    #confirm-overlay.severity-low .dialog {
+      border-color: var(--vscode-editorWarning-foreground, #cca700);
+    }
+    #confirm-overlay.severity-high .dialog .btn-confirm,
+    #confirm-overlay.severity-batch .dialog .btn-confirm {
+      background: var(--vscode-inputValidation-errorBackground, rgba(248,81,73,0.2));
+      color: var(--vscode-errorForeground, #f85149);
+      border: 1px solid var(--vscode-inputValidation-errorBorder, #f85149);
+    }
 
     /* ─── Filter overlay ───────────────────────────────────────── */
     #filter-overlay {
@@ -685,7 +774,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .toast.dismissing {
       animation: toastOut 0.2s ease-in forwards;
     }
-    .toast.info { border-left: 3px solid var(--vscode-editorInfo-foreground, #3794ff); }
+    .toast.info { border-left: 3px solid var(--sd-info); }
     .toast.warning { border-left: 3px solid var(--vscode-editorWarning-foreground, #cca700); }
     .toast.error { border-left: 3px solid var(--vscode-errorForeground, #f85149); }
     .toast .toast-actions {
@@ -845,7 +934,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     /* ─── Version overlay ───────────────────────────────────────── */
     .version-tagline {
       font-size: 13px;
-      color: var(--vscode-editorInfo-foreground, #2B4C7E);
+      color: var(--sd-info);
       font-weight: 600;
     }
     .version-divider {
@@ -899,7 +988,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
 
     /* ─── Rate sparkline rows ───────────────────────────────────── */
     .sparkline-row.net-rx .sparkline { color: var(--vscode-testing-iconPassed, #3fb950); }
-    .sparkline-row.net-tx .sparkline { color: var(--vscode-editorInfo-foreground, #2B4C7E); }
+    .sparkline-row.net-tx .sparkline { color: var(--sd-info); }
     .sparkline-row.block-read .sparkline { color: var(--vscode-editorWarning-foreground, #cca700); }
     .sparkline-row.block-write .sparkline { color: var(--vscode-descriptionForeground); }
     .sparkline-row.severity { margin-top: 4px; }
@@ -921,6 +1010,65 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .layer-size.zero { color: var(--vscode-descriptionForeground); opacity: 0.5; }
     .layer-cmd { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .layer-summary { padding: 8px 4px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+
+    /* ─── Disconnected banner ────────────────────────────────────── */
+    #disconnected-banner {
+      position: fixed;
+      top: var(--tab-height);
+      bottom: var(--status-height);
+      left: 0;
+      right: 0;
+      z-index: 80;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 8px;
+      text-align: center;
+      padding: 0 24px;
+      background: var(--vscode-editor-background);
+    }
+    #disconnected-banner.visible { display: flex; }
+    #disconnected-banner .banner-icon {
+      font-size: 32px;
+      color: var(--vscode-editorWarning-foreground, #cca700);
+    }
+    #disconnected-banner .banner-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    #disconnected-banner .banner-subtitle {
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+    }
+    #disconnected-banner #retry-connect {
+      margin-top: 10px;
+      padding: 6px 20px;
+      border: none;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    #disconnected-banner #retry-connect:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+
+    /* ─── Reduced motion ─────────────────────────────────────────── */
+    @media (prefers-reduced-motion: reduce) {
+      .dot.connected,
+      .dot.connecting,
+      .stats-spinner,
+      .toast,
+      .toast.dismissing,
+      #detail-content.fade-in,
+      #side-list .skeleton-row {
+        animation: none;
+        transition: none;
+      }
+    }
   </style>
 </head>
 <body>
@@ -932,14 +1080,20 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       <div id="detail-content"></div>
     </div>
   </div>
+  <div id="disconnected-banner">
+    <div class="banner-icon">⚠</div>
+    <div class="banner-title">Cannot connect to Docker daemon</div>
+    <div class="banner-subtitle">Is Docker running? Check the sidekick-docker.socketPath setting.</div>
+    <button id="retry-connect">Retry</button>
+  </div>
   <div id="status-bar">
     <span class="brand"><img src="${iconUri}" alt="" class="brand-icon" />SIDEKICK Docker</span>
     <span class="hints"></span>
-    <span class="connection"><span class="dot disconnected"></span><span class="conn-text">connecting...</span></span>
+    <span class="connection"><span class="dot connecting"></span><span class="conn-text">connecting...</span></span>
   </div>
 
   <div id="confirm-overlay">
-    <div class="dialog">
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-label="Confirm action">
       <div class="message"></div>
       <div class="buttons">
         <button class="btn-confirm">Confirm (y)</button>
@@ -952,11 +1106,11 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     <input type="text" id="filter-input" placeholder="Type to filter..." />
   </div>
   <div id="context-menu"></div>
-  <div id="sort-overlay" class="overlay-panel"></div>
-  <div id="help-overlay" class="overlay-panel"></div>
-  <div id="version-overlay" class="overlay-panel"></div>
+  <div id="sort-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Sort options"></div>
+  <div id="help-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Keyboard help"></div>
+  <div id="version-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Version info"></div>
   <div id="scroll-indicators"></div>
-  <div id="toast-container"></div>
+  <div id="toast-container" role="status" aria-live="polite"></div>
 
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
 </body>
