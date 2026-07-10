@@ -17,10 +17,17 @@ export function formatMemory(usage: number, limit: number): string {
 }
 
 export function formatPorts(ports: PortBinding[]): string {
-  return ports
-    .filter(p => p.hostPort > 0)
-    .map(p => `${p.hostPort}:${p.containerPort}/${p.protocol}`)
-    .join(', ') || '-';
+  // Deduplicate: Docker reports the same mapping once per bind address (IPv4 + IPv6).
+  const seen = new Set<string>();
+  const parts: string[] = [];
+  for (const p of ports) {
+    if (p.hostPort <= 0) continue;
+    const label = `${p.hostPort}:${p.containerPort}/${p.protocol}`;
+    if (seen.has(label)) continue;
+    seen.add(label);
+    parts.push(label);
+  }
+  return parts.join(', ') || '-';
 }
 
 export function stateIcon(state: ContainerInfo['state'] | 'not_created'): string {

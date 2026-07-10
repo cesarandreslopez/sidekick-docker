@@ -65,9 +65,11 @@ The dashboard has 5 panels, each mapped to a number key:
 | `j` / `Down` | Move down |
 | `k` / `Up` | Move up |
 | `g` | Jump to top |
-| `G` | Jump to bottom |
+| `G` | Jump to bottom (resumes log follow) |
+| `PgUp` / `PgDn` | Page up / down |
+| `Ctrl+U` / `Ctrl+D` | Half page up / down |
 | `Tab` | Toggle focus between side list and detail pane |
-| `Enter` | Focus detail pane |
+| `Enter` / `l` / `Right` | Focus detail pane |
 | `Esc` | Back to side list / close overlay / clear filter |
 | `h` / `Left` | Back to side list (when in detail pane) |
 
@@ -99,7 +101,8 @@ The dashboard has 5 panels, each mapped to a number key:
 | `s` | Start |
 | `S` | Stop |
 | `r` | Restart |
-| `R` | Remove (with confirmation) |
+| `p` / `u` | Pause / Unpause |
+| `d` | Remove (with confirmation) |
 | `e` | Exec into container |
 | `c` | Copy logs to clipboard |
 
@@ -108,10 +111,16 @@ The dashboard has 5 panels, each mapped to a number key:
 | Key | Action |
 |-----|--------|
 | `u` | Up (start project) |
-| `d` | Down (stop project) |
+| `D` | Down (stop project, with confirmation) |
 | `r` | Restart |
 | `S` | Stop |
 | `c` | Copy logs to clipboard |
+
+### Mouse
+
+Click to select items, switch panels/tabs, and press overlay buttons; right-click
+opens the actions menu; wheel scrolls (scrolling up in logs pauses follow — jump
+to the bottom or press `G` to resume).
 
 ## Features
 
