@@ -103,7 +103,7 @@ const ALLOWED_DEPS = {
                      'shared/stats', 'shared/log'], // barrel index.ts re-exports all sub-modules
 
   // === CLI package ===
-  'cli/utils':      [],
+  'cli/utils':      ['shared'], // connect/textTable wrap DockerClient + shared formatters
   'cli/formatters': ['shared'],
   'cli/state':      ['shared'],
   'cli/panels':     ['cli/state', 'cli/formatters', 'shared'],

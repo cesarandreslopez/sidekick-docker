@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { formatBytes, formatCpu, formatPorts, stateIcon, truncate, stripCursorEscapes, colorizeEnvLine, colorizeBool, colorizeId, colorizePercent } from './formatters';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import type { LogEntry } from 'sidekick-docker-shared';
+import { formatBytes, formatCpu, formatPorts, stateIcon, truncate, stripCursorEscapes, colorizeEnvLine, colorizeBool, colorizeId, colorizePercent, colorizeLogEntry, renderLogLines, sectionHeader, ansi, setColorEnabled, isColorEnabled } from './formatters';
+
+// Vitest runs non-TTY, so detectColor() disables color at import; the
+// color-asserting tests below need it forced on.
+beforeEach(() => setColorEnabled(true));
+afterEach(() => setColorEnabled(true));
 
 describe('formatters', () => {
   describe('formatBytes', () => {
@@ -133,6 +139,63 @@ describe('formatters', () => {
       const result = colorizePercent(95);
       expect(result).toContain('\x1b[31m'); // red
       expect(result).toContain('95.0%');
+    });
+  });
+
+  describe('color gating', () => {
+    it('isColorEnabled reflects setColorEnabled', () => {
+      setColorEnabled(false);
+      expect(isColorEnabled()).toBe(false);
+      setColorEnabled(true);
+      expect(isColorEnabled()).toBe(true);
+    });
+
+    describe('when disabled', () => {
+      beforeEach(() => setColorEnabled(false));
+
+      it('ansi helpers return input unchanged', () => {
+        expect(ansi.red('x')).toBe('x');
+        expect(ansi.green('x')).toBe('x');
+        expect(ansi.yellow('x')).toBe('x');
+        expect(ansi.gray('x')).toBe('x');
+        expect(ansi.cyan('x')).toBe('x');
+        expect(ansi.brand('x')).toBe('x');
+        expect(ansi.dim('x')).toBe('x');
+        expect(ansi.bold('x')).toBe('x');
+      });
+
+      it('colorize helpers return plain text', () => {
+        expect(colorizeBool(true)).toBe('Yes');
+        expect(colorizeBool(false)).toBe('No');
+        expect(colorizePercent(95)).toBe('95.0%');
+        expect(colorizeId('abc123')).toBe('abc123');
+        expect(colorizeEnvLine('MY_VAR=hello')).toBe('MY_VAR=hello');
+        expect(sectionHeader('Ports')).toBe('Ports');
+      });
+
+      it('colorizeLogEntry emits no escape codes (cache reset on toggle)', () => {
+        const entry: LogEntry = { timestamp: null, stream: 'stdout', message: 'GET /health 200' };
+        setColorEnabled(true);
+        expect(colorizeLogEntry(entry)).toContain('\x1b[');
+        setColorEnabled(false);
+        expect(colorizeLogEntry(entry)).toBe('GET /health 200');
+      });
+
+      it('highlightMatches background is suppressed', () => {
+        const entry: LogEntry = { timestamp: null, stream: 'stdout', message: 'hello world' };
+        expect(colorizeLogEntry(entry, [{ start: 6, length: 5 }])).toBe('hello world');
+      });
+
+      it('renderLogLines emits no escape codes', () => {
+        const logs: LogEntry[] = [
+          { timestamp: null, stream: 'stdout', message: 'started server' },
+          { timestamp: null, stream: 'stderr', message: 'error: boom' },
+        ];
+        const counts = { error: 1, warn: 0, info: 0, debug: 0, other: 1, total: 2 };
+        for (const line of renderLogLines(logs, '', 'exact', counts)) {
+          expect(line).not.toContain('\x1b[');
+        }
+      });
     });
   });
 });

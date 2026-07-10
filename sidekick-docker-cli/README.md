@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cesarandreslopez/sidekick-docker/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cesarandreslopez/sidekick-docker)
 
-A terminal dashboard for Docker. Manage containers, Compose projects, images, volumes, and networks — all from a single, keyboard-driven TUI.
+A terminal dashboard for Docker. Manage containers, Compose projects, images, volumes, and networks — all from a single, keyboard-driven TUI. Includes scriptable `ps` and `logs` commands for non-interactive use.
 
 <p align="center">
   <img src="../assets/sidekick_docker_cli.gif" alt="Sidekick Docker CLI Demo" width="800">
@@ -38,7 +38,9 @@ sidekick-docker logs <container> --tail 50
 
 | Flag | Description |
 |------|-------------|
-| `--socket <path>` | Custom Docker socket path |
+| `--socket <endpoint>` | Docker endpoint: socket path, `unix://` or `tcp://host[:port]` URL |
+| `--no-color` | Disable colored output (also honors `NO_COLOR` / `FORCE_COLOR`) |
+| `--verbose` | Show full error details |
 | `--version` | Show version |
 | `--help` | Show help |
 
@@ -129,11 +131,21 @@ The dashboard has 5 panels, each mapped to a number key:
 
 ## Configuration
 
-### Custom Docker Socket
+### Custom Docker Endpoint
+
+`--socket` accepts a socket path, a `unix://` URL, or a `tcp://host[:port]` URL (port defaults to 2375; `https://` or port 2376 uses TLS):
 
 ```bash
 sidekick-docker --socket /var/run/docker.sock
+sidekick-docker --socket unix:///run/user/1000/docker.sock
 sidekick-docker --socket tcp://192.168.1.100:2375
+```
+
+When `--socket` is not given, the standard `DOCKER_HOST` environment variable is honored (including `ssh://` endpoints), along with `DOCKER_TLS_VERIFY` and `DOCKER_CERT_PATH`:
+
+```bash
+DOCKER_HOST=tcp://192.168.1.100:2375 sidekick-docker ps
+DOCKER_HOST=ssh://user@remote-host sidekick-docker
 ```
 
 ## Documentation

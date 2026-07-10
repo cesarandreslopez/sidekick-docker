@@ -1,7 +1,8 @@
 import React from 'react';
 import { spawnSync } from 'child_process';
 import type { Command } from 'commander';
-import { DockerClient, ComposeClient, EventWatcher, shortId } from 'sidekick-docker-shared';
+import { ComposeClient, EventWatcher, shortId } from 'sidekick-docker-shared';
+import { connectOrExit } from '../utils/connect';
 import { copyToClipboard } from '../utils/clipboard';
 import { DockerState } from '../dashboard/DockerState';
 import { ContainersPanel } from '../dashboard/panels/ContainersPanel';
@@ -18,18 +19,10 @@ import type { DashboardViewState } from '../dashboard/ink/Dashboard';
 import { enableMouse, disableMouse } from '../dashboard/ink/mouse';
 
 export async function dashboardAction(_opts: Record<string, unknown>, cmd: Command): Promise<void> {
-  const globalOpts = cmd.parent?.opts() ?? cmd.opts();
-  const socketPath = globalOpts.socket as string | undefined;
+  const globalOpts = cmd.optsWithGlobals();
 
-  // Create Docker client
-  const client = new DockerClient(socketPath ? { socketPath } : undefined);
-
-  // Test connection
-  const ok = await client.ping();
-  if (!ok) {
-    console.error('Error: Cannot connect to Docker daemon. Is Docker running?');
-    process.exit(1);
-  }
+  // Create Docker client and verify the daemon is reachable
+  const client = await connectOrExit({ socket: globalOpts.socket as string | undefined });
 
   // Create state and do initial refresh
   const cwd = process.cwd();

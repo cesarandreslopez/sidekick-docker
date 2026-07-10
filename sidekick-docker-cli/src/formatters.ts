@@ -13,9 +13,41 @@ export {
   stateColor,
 } from 'sidekick-docker-shared';
 
-export function formatUptime(status: string): string {
-  return status;
+// --- Color gating ---
+// Honors FORCE_COLOR / NO_COLOR / TTY at startup; the CLI `--no-color` flag
+// flips it off via setColorEnabled() before any command action runs.
+
+function detectColor(): boolean {
+  if (process.env.FORCE_COLOR && process.env.FORCE_COLOR !== '0') return true;
+  if (process.env.NO_COLOR) return false;
+  return process.stdout.isTTY === true;
 }
+
+let colorEnabled = detectColor();
+
+export function setColorEnabled(value: boolean): void {
+  if (value !== colorEnabled) colorizedCache = new WeakMap();
+  colorEnabled = value;
+}
+
+export function isColorEnabled(): boolean {
+  return colorEnabled;
+}
+
+const style = (open: string, close: string) => (s: string): string =>
+  colorEnabled ? `\x1b[${open}m${s}\x1b[${close}m` : s;
+
+// ANSI escape helpers (avoids chalk dependency)
+export const ansi = {
+  gray: style('90', '39'),
+  red: style('31', '39'),
+  green: style('32', '39'),
+  yellow: style('33', '39'),
+  cyan: style('36', '39'),
+  brand: style('38;2;43;76;126', '39'),
+  dim: style('2', '22'),
+  bold: style('1', '22'),
+};
 
 /** Parse Docker status string into compact uptime like "2h 14m" or "5d  3h". */
 export function compactUptime(status: string): string {
@@ -79,11 +111,11 @@ export function sparkline(values: number[], width = 40): string {
 }
 
 const SEVERITY_COLORS: Record<SeverityLevel, (s: string) => string> = {
-  error: (s: string) => `\x1b[31m${s}\x1b[39m`,
-  warn: (s: string) => `\x1b[33m${s}\x1b[39m`,
-  info: (s: string) => `\x1b[38;2;43;76;126m${s}\x1b[39m`,
-  debug: (s: string) => `\x1b[90m${s}\x1b[39m`,
-  other: (s: string) => `\x1b[90m${s}\x1b[39m`,
+  error: ansi.red,
+  warn: ansi.yellow,
+  info: ansi.brand,
+  debug: ansi.gray,
+  other: ansi.gray,
 };
 
 /** Severity-colored sparkline: each position colored by dominant severity in that time bucket. */
@@ -97,17 +129,6 @@ export function severitySparkline(series: { severity: SeverityLevel; total: numb
     return SEVERITY_COLORS[s.severity](bars[idx]);
   }).join('');
 }
-
-// ANSI escape helpers (avoids chalk dependency)
-const ansi = {
-  gray: (s: string) => `\x1b[90m${s}\x1b[39m`,
-  red: (s: string) => `\x1b[31m${s}\x1b[39m`,
-  green: (s: string) => `\x1b[32m${s}\x1b[39m`,
-  yellow: (s: string) => `\x1b[33m${s}\x1b[39m`,
-  brand: (s: string) => `\x1b[38;2;43;76;126m${s}\x1b[39m`,
-  dim: (s: string) => `\x1b[2m${s}\x1b[22m`,
-  bold: (s: string) => `\x1b[1m${s}\x1b[22m`,
-};
 
 const TOKEN_COLORS: Record<LogTokenType, ((s: string) => string) | null> = {
   'severity-error': ansi.red,
@@ -139,7 +160,7 @@ function colorizeTokens(message: string): string {
   }).join('');
 }
 
-const colorizedCache = new WeakMap<LogEntry, string>();
+let colorizedCache = new WeakMap<LogEntry, string>();
 
 export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[]): string {
   // Cache unfiltered output (filtered highlighting varies per query)
@@ -184,7 +205,8 @@ function highlightMatches(text: string, matches: FilterMatch[], baseFn?: (s: str
       parts.push(baseFn ? baseFn(segment) : segment);
     }
     // Blue background highlight for matches
-    parts.push(`\x1b[44;37m${text.slice(m.start, m.start + m.length)}\x1b[49;39m`);
+    const matched = text.slice(m.start, m.start + m.length);
+    parts.push(colorEnabled ? `\x1b[44;37m${matched}\x1b[49;39m` : matched);
     pos = m.start + m.length;
   }
 
@@ -273,10 +295,10 @@ export function renderLogLines(
   // Severity counts header
   if (severityCounts && severityCounts.total > 0) {
     const parts: string[] = [];
-    if (severityCounts.error > 0) parts.push(`\x1b[31mE:${severityCounts.error}\x1b[39m`);
-    if (severityCounts.warn > 0) parts.push(`\x1b[33mW:${severityCounts.warn}\x1b[39m`);
-    if (severityCounts.info > 0) parts.push(`\x1b[38;2;43;76;126mI:${severityCounts.info}\x1b[39m`);
-    if (severityCounts.debug > 0) parts.push(`\x1b[90mD:${severityCounts.debug}\x1b[39m`);
+    if (severityCounts.error > 0) parts.push(ansi.red(`E:${severityCounts.error}`));
+    if (severityCounts.warn > 0) parts.push(ansi.yellow(`W:${severityCounts.warn}`));
+    if (severityCounts.info > 0) parts.push(ansi.brand(`I:${severityCounts.info}`));
+    if (severityCounts.debug > 0) parts.push(ansi.gray(`D:${severityCounts.debug}`));
     if (parts.length > 0) lines.push(parts.join('  '));
   }
 
@@ -290,10 +312,10 @@ export function renderLogLines(
       }
     }
     if (lines.length <= (severityCounts ? 1 : 0)) {
-      lines.push(`\x1b[90mNo logs matching "${filterString}"\x1b[39m`);
+      lines.push(ansi.gray(`No logs matching "${filterString}"`));
     } else {
       const headerIdx = severityCounts ? 1 : 0;
-      lines.splice(headerIdx, 0, `\x1b[90m${matchCount} matches (f to filter, Tab to toggle mode)\x1b[39m`);
+      lines.splice(headerIdx, 0, ansi.gray(`${matchCount} matches (f to filter, Tab to toggle mode)`));
     }
   } else {
     for (const l of logs) {

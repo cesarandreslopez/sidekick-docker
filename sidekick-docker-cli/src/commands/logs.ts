@@ -1,23 +1,27 @@
-import { DockerClient, errorMessage, formatTimestampTime } from 'sidekick-docker-shared';
+import { errorMessage, formatTimestampTime } from 'sidekick-docker-shared';
+import { ansi } from '../formatters';
+import { connectOrExit } from '../utils/connect';
 
-export async function logsAction(container: string, opts: { follow?: boolean; tail?: string }): Promise<void> {
-  const client = new DockerClient();
+export async function logsAction(
+  container: string,
+  opts: { follow: boolean; tail: number },
+  globalOpts: { socket?: string },
+): Promise<void> {
+  const client = await connectOrExit(globalOpts);
 
-  const ok = await client.ping();
-  if (!ok) {
-    console.error('Error: Cannot connect to Docker daemon. Is Docker running?');
-    process.exit(1);
+  // Stderr so piped stdout stays clean; doubles as the "connecting" cue.
+  if (opts.follow && process.stderr.isTTY) {
+    console.error(ansi.dim(`Streaming logs for "${container}" — press Ctrl+C to stop`));
   }
 
   try {
     for await (const entry of client.streamLogs(container, {
-      follow: opts.follow ?? true,
-      tail: parseInt(opts.tail || '100', 10),
+      follow: opts.follow,
+      tail: opts.tail,
     })) {
       const ts = entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
-      const prefix = entry.stream === 'stderr' ? '\x1b[31m' : '';
-      const reset = entry.stream === 'stderr' ? '\x1b[0m' : '';
-      console.log(`${prefix}${ts} ${entry.message}${reset}`);
+      const line = `${ts} ${entry.message}`;
+      console.log(entry.stream === 'stderr' ? ansi.red(line) : line);
     }
   } catch (err) {
     const msg = errorMessage(err);
