@@ -29,9 +29,10 @@ npm run build:cli                # esbuild in sidekick-docker-cli
 npm run build:vscode             # esbuild in sidekick-docker-vscode
 
 # Tests (vitest, co-located .test.ts files)
-npm test                         # runs shared + cli tests
+npm test                         # runs shared + cli + vscode tests
 cd sidekick-docker-shared && npx vitest run              # shared only
 cd sidekick-docker-cli && npx vitest run                 # cli only
+cd sidekick-docker-vscode && npx vitest run              # vscode only (vscode API mocked via src/test/vscode.ts)
 cd sidekick-docker-shared && npx vitest run src/docker   # single directory
 cd sidekick-docker-shared && npx vitest run DockerClient  # single file by name
 
@@ -56,8 +57,16 @@ bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 
 - Streams (logs, stats, events) use `AsyncIterable` with async generators
 - Compose operations use `docker compose` CLI (not Docker API)
 - UI state uses `useReducer` in Dashboard component; domain state in `DockerState` class
-- VI keybindings: j/k navigation, g/G top/bottom, 1-5 panel switch, [/] detail tabs
-- Confirmation modal required for all destructive actions (remove, prune)
+- VI keybindings: j/k navigation, g/G top/bottom, h/l focus, 1-5 panel switch, [/] detail tabs,
+  PgUp/PgDn + Ctrl+D/U paging. TUI global bindings live in `ink/keyRegistry.ts` — the single
+  source of truth driving dispatch, the help overlay, and status-bar hints; add new global keys
+  there, not in `useKeyboardHandler`
+- Confirmation modal required for all destructive actions (remove, prune); confirm messages
+  name their target (`confirmMessage` accepts a function of the item); Enter cancels (safe default)
+- CLI colors are gated centrally in `sidekick-docker-cli/src/formatters.ts`
+  (NO_COLOR/FORCE_COLOR/isTTY + `--no-color`); never emit raw ANSI directly
+- VSCode settings are read only through `sidekick-docker-vscode/src/settings.ts`;
+  action feedback goes through `providers/actionRegistry.ts` (`runDockerAction`)
 - Tests are co-located as `.test.ts` files
 
 ## Key Entry Points
@@ -71,12 +80,15 @@ bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 
 | Domain state | `sidekick-docker-cli/src/dashboard/DockerState.ts` |
 | Docker facade | `sidekick-docker-shared/src/docker/DockerClient.ts` |
 | Shared exports | `sidekick-docker-shared/src/index.ts` |
+| TUI keybinding registry | `sidekick-docker-cli/src/dashboard/ink/keyRegistry.ts` |
 | VSCode activation | `sidekick-docker-vscode/src/extension.ts` |
 | Webview provider | `sidekick-docker-vscode/src/providers/DockerDashboardProvider.ts` |
+| Webview HTML/CSS template | `sidekick-docker-vscode/src/providers/dashboardHtml.ts` |
+| VSCode settings reader | `sidekick-docker-vscode/src/settings.ts` |
 
 ## Key Patterns
 
-- **Panel system**: Implement `SidePanel` interface for each resource type. Panels define `getItems()`, `detailTabs[]` with render functions, `getActions()`, and optional `getKeybindings()`.
+- **Panel system**: Implement `SidePanel` interface for each resource type. Panels define `getItems()`, `detailTabs[]` with render functions, and `getActions()` (per-item shortcuts, confirm metadata, handlers that may return a success-toast string). Panel-contextual *global* keys (filter, sort, compare) belong in `ink/keyRegistry.ts`.
 - **State flow**: Docker events → `EventWatcher` → `DockerState.processEvent()` → `scheduleRender()`. Fallback: 30s periodic full refresh.
 - **Stats streaming**: Selection-driven (expensive). `StatsStreamManager.select(id)` starts stream → pushes to `StatsCollector` ring buffer (60 samples) → sparklines.
 - **Log streaming**: Selection-driven. `LogStreamManager.select(id)` starts stream → ring buffer (1000 lines).
@@ -145,7 +157,7 @@ npx madge --circular --extensions ts,tsx src/            # no circular deps
 
 ### Known Technical Debt
 
-- God files: `DockerDashboardProvider.ts` (959 LOC), `webview/dashboard.ts` (776 LOC), `Dashboard.tsx` (533 LOC)
+- `webview/dashboard.ts` is still large (~1080 LOC of renderers; keyboard/overlays/HTML
+  extracted to their own modules); `Dashboard.tsx` ~690 LOC
 - `noUncheckedIndexedAccess` not yet enabled (50+ errors to fix)
-- VSCode package has zero test coverage
 - See `specs/_archive/` for refactoring history and `specs/*/design.md` for module design docs

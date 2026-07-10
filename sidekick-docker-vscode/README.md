@@ -41,7 +41,30 @@ Open the command palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and run:
 Sidekick Docker: Open Dashboard
 ```
 
-The dashboard opens as a webview panel with the same layout and capabilities as the terminal TUI.
+or press `Ctrl+Alt+D` (`Cmd+Alt+D` on macOS). The dashboard opens as a webview panel
+with the same layout and capabilities as the terminal TUI, and survives window reloads.
+
+### Commands
+
+| Command | Description |
+|---------|-------------|
+| `Sidekick Docker: Open Dashboard` | Open the dashboard (`Ctrl/Cmd+Alt+D`) |
+| `Sidekick Docker: Open Dashboard to the Side` | Open in a split editor column |
+| `Sidekick Docker: Refresh Containers` | Refresh the tree view (`Ctrl/Cmd+Alt+R` when focused) |
+| `Sidekick Docker: Start/Stop/Restart Container...` | Quick-pick a container to act on |
+
+The activity-bar **Containers** tree groups containers by state (and by Compose
+project), with start/stop/restart/pause/unpause/remove in the context menu and a
+status-bar item showing running/total counts.
+
+### Settings
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `sidekick-docker.socketPath` | `""` | Docker endpoint: socket path, `unix://`, or `tcp://host[:port]`. Empty uses the platform default (or `DOCKER_HOST`). |
+| `sidekick-docker.refreshIntervalSeconds` | `30` | Fallback full-refresh interval (min 5). |
+| `sidekick-docker.statusBar.visible` | `true` | Show the status-bar container counts. |
+| `sidekick-docker.exec.defaultShell` | `/bin/sh` | Shell used by "Exec into container". |
 
 ## Features
 
