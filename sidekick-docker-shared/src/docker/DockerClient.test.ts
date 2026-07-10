@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DockerClient } from './DockerClient';
+import { DockerClient, demuxFrames, looksMultiplexed } from './DockerClient';
 
 // Mock dockerode
 vi.mock('dockerode', () => {
@@ -134,5 +134,85 @@ describe('DockerClient', () => {
   it('pruneNetworks returns deleted networks', async () => {
     const result = await client.pruneNetworks();
     expect(result.networksDeleted).toEqual(['net1']);
+  });
+
+  it('pingDetailed preserves the underlying error', async () => {
+    const failing = new DockerClient();
+    const err = Object.assign(new Error('connect ENOENT /var/run/docker.sock'), { code: 'ENOENT' });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (failing as any).docker.ping = vi.fn().mockRejectedValue(err);
+    const result = await failing.pingDetailed();
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error).toBe(err);
+    expect(await failing.ping()).toBe(false);
+  });
+});
+
+function frame(streamType: 1 | 2, payload: string): Buffer {
+  const body = Buffer.from(payload, 'utf8');
+  const header = Buffer.alloc(8);
+  header[0] = streamType;
+  header.writeUInt32BE(body.length, 4);
+  return Buffer.concat([header, body]);
+}
+
+describe('demuxFrames', () => {
+  it('splits multiplexed stdout and stderr frames', () => {
+    const buf = Buffer.concat([frame(1, 'out line\n'), frame(2, 'err line\n')]);
+    const { frames, rest } = demuxFrames(buf);
+    expect(frames).toEqual([
+      { stream: 'stdout', payload: 'out line\n' },
+      { stream: 'stderr', payload: 'err line\n' },
+    ]);
+    expect(rest.length).toBe(0);
+  });
+
+  it('returns the trailing incomplete frame as rest', () => {
+    const full = frame(1, 'complete\n');
+    const partial = frame(2, 'partial payload').subarray(0, 10);
+    const { frames, rest } = demuxFrames(Buffer.concat([full, partial]));
+    expect(frames).toHaveLength(1);
+    expect(frames[0].payload).toBe('complete\n');
+    expect(rest.length).toBe(10);
+  });
+});
+
+describe('looksMultiplexed', () => {
+  it('detects a multiplexed header', () => {
+    expect(looksMultiplexed(frame(1, 'hello'))).toBe(true);
+    expect(looksMultiplexed(frame(2, 'hello'))).toBe(true);
+  });
+
+  it('rejects plain text and short buffers', () => {
+    expect(looksMultiplexed(Buffer.from('2024-01-15T10:30:00Z hi\n'))).toBe(false);
+    expect(looksMultiplexed(Buffer.from([1, 0]))).toBe(false);
+  });
+});
+
+describe('streamLogs (non-follow buffer path)', () => {
+  it('demultiplexes a one-shot Buffer result with stream attribution', async () => {
+    const buf = Buffer.concat([
+      frame(1, '2024-01-15T10:30:00.000Z out line\n'),
+      frame(2, '2024-01-15T10:30:01.000Z err line\n'),
+    ]);
+    const c = new DockerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (c as any).docker.getContainer = vi.fn().mockReturnValue({ logs: vi.fn().mockResolvedValue(buf) });
+    const entries = [];
+    for await (const entry of c.streamLogs('abc', { follow: false })) entries.push(entry);
+    expect(entries).toHaveLength(2);
+    expect(entries[0]).toMatchObject({ stream: 'stdout', message: 'out line' });
+    expect(entries[1]).toMatchObject({ stream: 'stderr', message: 'err line' });
+  });
+
+  it('falls back to plain-text parsing for TTY output', async () => {
+    const buf = Buffer.from('plain tty line\nsecond line\n', 'utf8');
+    const c = new DockerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (c as any).docker.getContainer = vi.fn().mockReturnValue({ logs: vi.fn().mockResolvedValue(buf) });
+    const entries = [];
+    for await (const entry of c.streamLogs('abc', { follow: false })) entries.push(entry);
+    expect(entries.map(e => e.message)).toEqual(['plain tty line', 'second line']);
+    expect(entries.every(e => e.stream === 'stdout')).toBe(true);
   });
 });

@@ -3,7 +3,8 @@ export * from './types';
 
 // Docker client
 export { DockerClient } from './docker/DockerClient';
-export type { DockerClientOptions, LogStreamOptions } from './docker/DockerClient';
+export type { DockerClientOptions, LogStreamOptions, PingResult } from './docker/DockerClient';
+export { parseDockerEndpoint, describeDockerEndpoint } from './docker/endpoint';
 
 // Compose
 export { ComposeDetector } from './compose/ComposeDetector';
@@ -51,7 +52,7 @@ export {
 export { ReconnectScheduler, INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY, MAX_RECONNECT_ATTEMPTS } from './events/reconnect';
 
 // Errors
-export { errorMessage } from './errors';
+export { errorMessage, errorCode, explainDockerUnreachable } from './errors';
 
 // Constants
 export const MAX_LOG_LINES = 1000;

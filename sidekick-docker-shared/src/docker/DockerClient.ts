@@ -35,7 +35,10 @@ export interface DockerClientOptions {
   socketPath?: string;
   host?: string;
   port?: number;
+  protocol?: 'http' | 'https';
 }
+
+export type PingResult = { ok: true } | { ok: false; error: unknown };
 
 export interface LogStreamOptions {
   tail?: number;
@@ -53,11 +56,16 @@ export class DockerClient {
   }
 
   async ping(): Promise<boolean> {
+    return (await this.pingDetailed()).ok;
+  }
+
+  /** Like ping(), but preserves the underlying error so callers can explain the failure. */
+  async pingDetailed(): Promise<PingResult> {
     try {
       await this.docker.ping();
-      return true;
-    } catch {
-      return false;
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error };
     }
   }
 
@@ -142,10 +150,22 @@ export class DockerClient {
     // Header: [stream_type(1), 0, 0, 0, size(4)]
     // stream_type: 1=stdout, 2=stderr
     if (typeof stream === 'string' || Buffer.isBuffer(stream)) {
-      const text = Buffer.isBuffer(stream) ? stream.toString('utf8') : stream;
-      for (const line of text.split('\n')) {
-        if (line) {
-          yield parseLogLine(line, 'stdout');
+      // Non-follow requests resolve to a single Buffer; non-TTY containers still
+      // use the multiplexed frame format, TTY containers return plain text.
+      const buf = Buffer.isBuffer(stream) ? stream : Buffer.from(stream, 'utf8');
+      if (looksMultiplexed(buf)) {
+        for (const frame of demuxFrames(buf).frames) {
+          for (const line of frame.payload.split('\n')) {
+            if (line.trim()) {
+              yield parseLogLine(line, frame.stream);
+            }
+          }
+        }
+      } else {
+        for (const line of buf.toString('utf8').split('\n')) {
+          if (line) {
+            yield parseLogLine(line, 'stdout');
+          }
         }
       }
       return;
@@ -168,31 +188,18 @@ export class DockerClient {
         const combined = Buffer.concat(buffer);
         buffer.length = 0;
 
-        let offset = 0;
-        while (offset + 8 <= combined.length) {
-          const streamType = combined[offset];
-          const size = combined.readUInt32BE(offset + 4);
-
-          if (offset + 8 + size > combined.length) {
-            // Incomplete frame, save remainder (copy to release combined buffer)
-            buffer.push(Buffer.from(combined.subarray(offset)));
-            break;
-          }
-
-          const payload = combined.subarray(offset + 8, offset + 8 + size).toString('utf8');
-          const streamName: 'stdout' | 'stderr' = streamType === 2 ? 'stderr' : 'stdout';
-
-          for (const line of payload.split('\n')) {
+        const { frames, rest } = demuxFrames(combined);
+        for (const frame of frames) {
+          for (const line of frame.payload.split('\n')) {
             if (line.trim()) {
-              yield parseLogLine(line, streamName);
+              yield parseLogLine(line, frame.stream);
             }
           }
-
-          offset += 8 + size;
         }
 
-        if (offset < combined.length && buffer.length === 0) {
-          buffer.push(Buffer.from(combined.subarray(offset)));
+        if (rest.length > 0) {
+          // Incomplete frame, save remainder (copy to release combined buffer)
+          buffer.push(Buffer.from(rest));
         }
       }
     } finally {
@@ -486,6 +493,39 @@ function mapResourceType(type: string): DockerResourceType {
 
 function cleanDockerInstruction(raw: string): string {
   return raw.replace(/^\/bin\/sh -c (#\(nop\)\s+)?/, '').trim();
+}
+
+export interface DemuxedFrame {
+  stream: 'stdout' | 'stderr';
+  payload: string;
+}
+
+/**
+ * Split a Docker multiplexed log buffer into complete frames.
+ * Frame layout: [stream_type(1), 0, 0, 0, size_be(4)] + payload.
+ * `rest` holds trailing bytes of an incomplete frame (subarray view — copy before retaining).
+ */
+export function demuxFrames(buf: Buffer): { frames: DemuxedFrame[]; rest: Buffer } {
+  const frames: DemuxedFrame[] = [];
+  let offset = 0;
+  while (offset + 8 <= buf.length) {
+    const streamType = buf[offset];
+    const size = buf.readUInt32BE(offset + 4);
+    if (offset + 8 + size > buf.length) break;
+    frames.push({
+      stream: streamType === 2 ? 'stderr' : 'stdout',
+      payload: buf.subarray(offset + 8, offset + 8 + size).toString('utf8'),
+    });
+    offset += 8 + size;
+  }
+  return { frames, rest: buf.subarray(offset) };
+}
+
+/** Heuristic: does this buffer start with a multiplexed-frame header? */
+export function looksMultiplexed(buf: Buffer): boolean {
+  return buf.length >= 8
+    && (buf[0] === 0 || buf[0] === 1 || buf[0] === 2)
+    && buf[1] === 0 && buf[2] === 0 && buf[3] === 0;
 }
 
 function parseLogLine(line: string, defaultStream: 'stdout' | 'stderr'): LogEntry {
