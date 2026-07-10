@@ -37,11 +37,6 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     state.refresh().then(() => scheduleRender()).catch(e => console.debug('refresh failed:', e));
   };
 
-  // Error callback — panels report action failures
-  const onError = (msg: string) => {
-    console.debug('panel action failed:', msg);
-  };
-
   let logFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let composeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
   let secondaryLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -255,11 +250,11 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Create panels (onExec wired below after render is available)
   const panels: SidePanel[] = [
-    new ContainersPanel(client, onAction, onError),
-    new ServicesPanel(composeClient, onAction, cwd, onError),
-    new ImagesPanel(client, onAction, onError),
-    new VolumesPanel(client, onAction, onError),
-    new NetworksPanel(client, onAction, onError),
+    new ContainersPanel(client, onAction),
+    new ServicesPanel(composeClient, onAction, cwd),
+    new ImagesPanel(client, onAction),
+    new VolumesPanel(client, onAction),
+    new NetworksPanel(client, onAction),
   ];
 
   // Start event watcher for real-time updates

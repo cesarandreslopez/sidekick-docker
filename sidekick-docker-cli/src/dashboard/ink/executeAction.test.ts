@@ -13,20 +13,34 @@ function harness() {
 }
 
 describe('executeAction', () => {
-  it('shows progress then success for async actions', async () => {
+  it('shows a progress toast then success for async actions', async () => {
     const h = harness();
     const action: PanelAction = { key: 's', label: 'Start', handler: () => Promise.resolve() };
     executeAction(action, item, h.dispatch, h.addToast, h.removeToast);
-    expect(h.addToast).toHaveBeenCalledWith('Start…', 'info');
+    expect(h.addToast).toHaveBeenCalledWith('Start…', 'info', undefined, { progress: true });
     await vi.waitFor(() => expect(h.addToast).toHaveBeenCalledWith('Start', 'success'));
     expect(h.removeToast).toHaveBeenCalledWith(42);
   });
 
-  it('shows an error toast when the async action rejects', async () => {
+  it('uses a resolved string as the success toast text', async () => {
     const h = harness();
-    const action: PanelAction = { key: 's', label: 'Remove', handler: () => Promise.reject(new Error('in use')) };
+    const action: PanelAction = { key: 'P', label: 'Prune', handler: () => Promise.resolve('Pruned — 1.2 GB reclaimed') };
     executeAction(action, item, h.dispatch, h.addToast, h.removeToast);
-    await vi.waitFor(() => expect(h.addToast).toHaveBeenCalledWith('Remove failed', 'error'));
+    await vi.waitFor(() => expect(h.addToast).toHaveBeenCalledWith('Pruned — 1.2 GB reclaimed', 'success'));
+  });
+
+  it('surfaces the real error text when the async action rejects', async () => {
+    const h = harness();
+    const action: PanelAction = { key: 's', label: 'Remove', handler: () => Promise.reject(new Error('network has active endpoints')) };
+    executeAction(action, item, h.dispatch, h.addToast, h.removeToast);
+    await vi.waitFor(() => expect(h.addToast).toHaveBeenCalledWith('Remove failed: network has active endpoints', 'error'));
+  });
+
+  it('shows an immediate success toast (not a spinner) for sync string results', () => {
+    const h = harness();
+    const action: PanelAction = { key: 'c', label: 'Copy Logs', handler: () => 'Copied 12 lines' };
+    executeAction(action, item, h.dispatch, h.addToast, h.removeToast);
+    expect(h.addToast).toHaveBeenCalledWith('Copied 12 lines', 'success');
   });
 
   it('routes confirm actions through SET_CONFIRM without running the handler', () => {

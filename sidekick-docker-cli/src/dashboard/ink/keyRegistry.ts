@@ -22,6 +22,7 @@ export interface KeyContext {
     selectPrev(): void;
     selectFirst(): void;
     selectLast(): void;
+    setSelected(index: number): void;
   };
   addToast: (message: string, severity: ToastSeverity, duration?: number) => number;
   exit: () => void;
@@ -46,6 +47,34 @@ export interface KeyBindingSpec {
 
 function isLogsTab(ctx: KeyContext): boolean {
   return ctx.panel.id === 'containers' && ctx.tabIdx === 0;
+}
+
+/** True when the active detail tab tails content (logs) — used for follow-pause semantics. */
+function isAutoScrollTab(ctx: KeyContext): boolean {
+  return ctx.detailTabs[ctx.tabIdx]?.autoScrollBottom === true;
+}
+
+/** Move the side-list selection by a page-sized delta, mirroring the wheel path. */
+function pageSideSelection(ctx: KeyContext, delta: number): void {
+  if (ctx.currentItems.length === 0) return;
+  ctx.dispatch({ type: 'SCROLL_SIDE', delta, itemCount: ctx.currentItems.length });
+  const newIdx = Math.max(0, Math.min(ctx.clampedSelection + delta, ctx.currentItems.length - 1));
+  ctx.sideScroll.setSelected(newIdx);
+}
+
+function pageScroll(ctx: KeyContext, direction: 1 | -1, half: boolean): void {
+  const page = half ? Math.max(1, Math.floor(ctx.detailViewportHeight / 2)) : Math.max(1, ctx.detailViewportHeight);
+  if (ctx.state.focusTarget === 'side') {
+    pageSideSelection(ctx, direction * page);
+    return;
+  }
+  ctx.dispatch({
+    type: 'SCROLL_DETAIL_DELTA',
+    delta: direction * page,
+    totalLines: ctx.detailLines.length,
+    viewportHeight: ctx.detailViewportHeight,
+    followTab: isAutoScrollTab(ctx),
+  });
 }
 
 export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
@@ -250,8 +279,25 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
         delta: down ? 1 : -1,
         totalLines: ctx.detailLines.length,
         viewportHeight: ctx.detailViewportHeight,
+        followTab: isAutoScrollTab(ctx),
       });
     },
+  },
+  {
+    id: 'page-scroll',
+    keys: ['PgUp/PgDn'],
+    match: (_input, key) => key.pageUp || key.pageDown,
+    label: 'Page up / down',
+    category: 'Navigation',
+    run: (ctx, _input, key) => pageScroll(ctx, key.pageDown ? 1 : -1, false),
+  },
+  {
+    id: 'half-page-scroll',
+    keys: ['Ctrl+d/u'],
+    match: (input, key) => key.ctrl && (input === 'd' || input === 'u'),
+    label: 'Half page down / up',
+    category: 'Navigation',
+    run: (ctx, input) => pageScroll(ctx, input === 'd' ? 1 : -1, true),
   },
   {
     id: 'jump-edges',
@@ -271,9 +317,13 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
         }
         return;
       }
+      // G lands at the bottom, which resumes follow on logs tabs.
       ctx.dispatch({
         type: 'SCROLL_DETAIL',
         offset: top ? 0 : Math.max(0, ctx.detailLines.length - ctx.detailViewportHeight),
+        followTab: isAutoScrollTab(ctx),
+        totalLines: ctx.detailLines.length,
+        viewportHeight: ctx.detailViewportHeight,
       });
     },
   },
@@ -298,6 +348,18 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     run: (ctx) => {
       if (ctx.state.focusTarget === 'detail') {
         ctx.dispatch({ type: 'SET_FOCUS', target: 'side' });
+      }
+    },
+  },
+  {
+    id: 'focus-detail',
+    keys: ['l/→'],
+    match: (input, key) => input === 'l' || key.rightArrow,
+    label: 'Open detail pane',
+    category: 'Navigation',
+    run: (ctx) => {
+      if (ctx.state.focusTarget === 'side') {
+        ctx.dispatch({ type: 'SET_FOCUS', target: 'detail' });
       }
     },
   },

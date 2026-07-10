@@ -17,7 +17,7 @@ import { HelpOverlay } from './HelpOverlay';
 import { FilterOverlay } from './FilterOverlay';
 import { ContextMenuOverlay } from './ContextMenuOverlay';
 import { ConfirmOverlay } from './ConfirmOverlay';
-import { ToastNotification } from './ToastNotification';
+import { ToastStack } from './ToastStack';
 import { TooSmallOverlay } from './TooSmallOverlay';
 import { ExecOverlay } from './ExecOverlay';
 import { MouseProvider } from './mouse';
@@ -41,10 +41,10 @@ const SIDE_PANEL_WIDTH_WIDE = 42;
 const MIN_SCREEN_WIDTH = 60;
 const MIN_SCREEN_HEIGHT = 15;
 const RESERVED_UI_ROWS = 5;
-const TOAST_DURATIONS = { error: 4000, warning: 3000, info: 30000, success: 2000 } as const;
-const QUICK_INFO_DURATION = 2000;
+const TOAST_DURATIONS = { error: 6000, warning: 3000, info: 2500, success: 2000 } as const;
+const MAX_QUEUED_TOASTS = 5;
 
-function reducer(state: DashboardUIState, action: Action): DashboardUIState {
+export function reducer(state: DashboardUIState, action: Action): DashboardUIState {
   switch (action.type) {
     case 'SWITCH_PANEL':
       return {
@@ -57,18 +57,19 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
         overlay: null,
         detailScrollOffset: 0,
         detailScrollPerTab: {},
+        logFollow: true,
       };
     case 'SELECT_ITEM':
-      return { ...state, selectedItemIndex: action.index, detailTabIndex: 0, detailScrollOffset: 0, detailScrollPerTab: {}, secondaryDetailScrollOffset: 0 };
+      return { ...state, selectedItemIndex: action.index, detailTabIndex: 0, detailScrollOffset: 0, detailScrollPerTab: {}, secondaryDetailScrollOffset: 0, logFollow: true };
     case 'SET_DETAIL_TAB': {
       const saved = { ...state.detailScrollPerTab, [state.detailTabIndex]: state.detailScrollOffset };
-      return { ...state, detailTabIndex: action.index, detailScrollOffset: saved[action.index] ?? 0, detailScrollPerTab: saved };
+      return { ...state, detailTabIndex: action.index, detailScrollOffset: saved[action.index] ?? 0, detailScrollPerTab: saved, logFollow: true };
     }
     case 'CYCLE_DETAIL_TAB': {
       if (action.tabCount <= 1) return state;
       const next = (state.detailTabIndex + action.direction + action.tabCount) % action.tabCount;
       const saved = { ...state.detailScrollPerTab, [state.detailTabIndex]: state.detailScrollOffset };
-      return { ...state, detailTabIndex: next, detailScrollOffset: saved[next] ?? 0, detailScrollPerTab: saved };
+      return { ...state, detailTabIndex: next, detailScrollOffset: saved[next] ?? 0, detailScrollPerTab: saved, logFollow: true };
     }
     case 'CYCLE_LAYOUT': {
       const next: LayoutMode = state.layoutMode === 'normal' ? 'wide' : state.layoutMode === 'wide' ? 'expanded' : 'normal';
@@ -83,15 +84,24 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
     case 'SET_FILTER':
       return { ...state, filterString: action.value };
     case 'SCROLL_DETAIL': {
+      // followTab marks a user-initiated scroll on a logs (auto-scroll) tab:
+      // follow pauses unless the jump lands at the bottom.
+      if (action.followTab && action.totalLines !== undefined && action.viewportHeight !== undefined) {
+        const maxOffset = Math.max(0, action.totalLines - action.viewportHeight);
+        return { ...state, detailScrollOffset: action.offset, logFollow: action.offset >= maxOffset };
+      }
       return { ...state, detailScrollOffset: action.offset };
     }
     case 'SCROLL_DETAIL_DELTA': {
       const maxOffset = Math.max(0, action.totalLines - action.viewportHeight);
       const next = Math.max(0, Math.min(state.detailScrollOffset + action.delta, maxOffset));
+      if (action.followTab) {
+        return { ...state, detailScrollOffset: next, logFollow: next >= maxOffset };
+      }
       return { ...state, detailScrollOffset: next };
     }
     case 'ADD_TOAST':
-      return { ...state, toasts: [...state.toasts, action.toast] };
+      return { ...state, toasts: [...state.toasts, action.toast].slice(-MAX_QUEUED_TOASTS) };
     case 'REMOVE_TOAST':
       return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };
     case 'CONTEXT_MENU_NAV': {
@@ -102,7 +112,7 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
     case 'SCROLL_SIDE': {
       if (action.itemCount === 0) return state;
       const next = Math.max(0, Math.min(state.selectedItemIndex + action.delta, action.itemCount - 1));
-      return { ...state, selectedItemIndex: next, detailTabIndex: 0, detailScrollOffset: 0 };
+      return { ...state, selectedItemIndex: next, detailTabIndex: 0, detailScrollOffset: 0, logFollow: true };
     }
     case 'SET_CONFIRM':
       return { ...state, confirmAction: action.action, confirmMessage: action.message, confirmSeverity: action.severity ?? 'high', overlay: action.action ? 'confirm' : null };
@@ -159,7 +169,7 @@ function reducer(state: DashboardUIState, action: Action): DashboardUIState {
   }
 }
 
-const initialState: DashboardUIState = {
+export const initialState: DashboardUIState = {
   activePanelIndex: 0,
   selectedItemIndex: 0,
   detailTabIndex: 0,
@@ -179,6 +189,7 @@ const initialState: DashboardUIState = {
   execContainerName: '',
   logFilterString: '',
   logFilterMode: 'exact',
+  logFollow: true,
   showAllContainers: true,
   sortField: 'state' as SortField,
   sortReversed: false,
@@ -288,11 +299,15 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     }
   }, [columns, rows, state.overlay]);
 
-  const addToast = useCallback((message: string, severity: 'error' | 'warning' | 'info' | 'success', duration?: number) => {
+  const addToast = useCallback((message: string, severity: 'error' | 'warning' | 'info' | 'success', duration?: number, opts?: { progress?: boolean }) => {
     const id = ++toastIdRef.current;
-    const dur = duration ?? TOAST_DURATIONS[severity];
-    dispatch({ type: 'ADD_TOAST', toast: { id, message, severity, expiresAt: Date.now() + dur } });
-    setTimeout(() => dispatch({ type: 'REMOVE_TOAST', id }), dur);
+    const progress = opts?.progress ?? false;
+    dispatch({ type: 'ADD_TOAST', toast: { id, message, severity, progress } });
+    if (!progress) {
+      // Progress toasts persist until the action settles (removed explicitly).
+      const dur = duration ?? TOAST_DURATIONS[severity];
+      setTimeout(() => dispatch({ type: 'REMOVE_TOAST', id }), dur);
+    }
     return id;
   }, []);
 
@@ -427,14 +442,16 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   }
   const detailViewportHeight = Math.max(1, rows - RESERVED_UI_ROWS);
 
-  // Auto-scroll to bottom when the active tab requests it (e.g. Logs)
+  // Auto-scroll to bottom when the active tab requests it (e.g. Logs),
+  // unless the user paused following by scrolling up.
   const activeTab = detailTabs[tabIdx];
   const shouldAutoScroll = activeTab?.autoScrollBottom ?? false;
+  const followPaused = shouldAutoScroll && !state.logFollow;
   useEffect(() => {
-    if (shouldAutoScroll && detailLines.length > detailViewportHeight) {
+    if (shouldAutoScroll && state.logFollow && detailLines.length > detailViewportHeight) {
       dispatch({ type: 'SCROLL_DETAIL', offset: detailLines.length - detailViewportHeight });
     }
-  }, [shouldAutoScroll, detailLines.length, detailViewportHeight]);
+  }, [shouldAutoScroll, state.logFollow, detailLines.length, detailViewportHeight]);
 
   // Compare mode: compute secondary log lines
   const isCompareActive = compareItemId != null && shouldAutoScroll;
@@ -453,12 +470,12 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     return [];
   }, [isCompareActive, panel.id, enrichedMetrics.secondaryContainerLogs, enrichedMetrics.secondaryComposeLogs, enrichedMetrics.secondaryLogSeverityCounts, state.logFilterString, state.logFilterMode]);
 
-  // Auto-scroll secondary pane
+  // Auto-scroll secondary pane (compare panes follow together with the primary)
   useEffect(() => {
-    if (isCompareActive && secondaryDetailLines.length > detailViewportHeight) {
+    if (isCompareActive && state.logFollow && secondaryDetailLines.length > detailViewportHeight) {
       dispatch({ type: 'SCROLL_SECONDARY_DETAIL', offset: secondaryDetailLines.length - detailViewportHeight });
     }
-  }, [isCompareActive, secondaryDetailLines.length, detailViewportHeight]);
+  }, [isCompareActive, state.logFollow, secondaryDetailLines.length, detailViewportHeight]);
 
   // Find the compare item's label for the pane header
   const compareItemLabel = React.useMemo(() => {
@@ -492,7 +509,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   // Mouse input (extracted hook)
   const handleMouse = useMouseHandler({
     state, dispatch, panels, panelCounts, currentItems, clampedSelection,
-    sideWidth, sideScroll, detailLines, detailViewportHeight, detailTabs, rows, rotatePhrase,
+    sideWidth, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, rotatePhrase,
   });
 
   // Shared context for global keybindings, help rendering, and status-bar hints
@@ -547,7 +564,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
               />
             )}
             <Box flexDirection="column" flexGrow={1}>
-              <DetailTabBar tabs={detailTabs} activeIndex={state.detailTabIndex} />
+              <DetailTabBar tabs={detailTabs} activeIndex={state.detailTabIndex} followPaused={followPaused} />
               {isCompareActive ? (
                 <CompareDetailPane
                   primaryLines={detailLines}
@@ -639,8 +656,8 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
           />
         )}
 
-        {state.toasts.length > 0 && (
-          <ToastNotification toast={state.toasts[state.toasts.length - 1]} />
+        {state.overlay !== 'exec' && (
+          <ToastStack toasts={state.toasts} width={columns} />
         )}
       </Box>
     </MouseProvider>

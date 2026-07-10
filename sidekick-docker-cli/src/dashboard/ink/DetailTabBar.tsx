@@ -5,13 +5,21 @@ import type { DetailTab } from '../panels/types';
 interface DetailTabBarProps {
   tabs: DetailTab[];
   activeIndex: number;
+  /** True when a logs tab has auto-follow paused by a manual scroll. */
+  followPaused?: boolean;
 }
 
-export function DetailTabBar({ tabs, activeIndex }: DetailTabBarProps): React.ReactElement {
+export function DetailTabBar({ tabs, activeIndex, followPaused }: DetailTabBarProps): React.ReactElement {
   if (tabs.length <= 1) {
     return (
       <Box>
         {tabs.length === 1 && <Text color="gray" dimColor>{` ${tabs[0].label}`}</Text>}
+        {followPaused && (
+          <>
+            <Box flexGrow={1} />
+            <Text color="yellow">{'⏸ follow paused — G to resume'}</Text>
+          </>
+        )}
       </Box>
     );
   }
@@ -33,7 +41,9 @@ export function DetailTabBar({ tabs, activeIndex }: DetailTabBarProps): React.Re
         );
       })}
       <Box flexGrow={1} />
-      <Text color="gray" dimColor>{'[/] cycle tabs'}</Text>
+      {followPaused
+        ? <Text color="yellow">{'⏸ follow paused — G to resume'}</Text>
+        : <Text color="gray" dimColor>{'[/] cycle tabs'}</Text>}
     </Box>
   );
 }

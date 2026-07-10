@@ -1,9 +1,9 @@
 import type { VolumeInfo } from 'sidekick-docker-shared';
 import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError, panelData } from './types';
+import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { truncate, colorizeDetailKey, colorizeBool } from '../../formatters';
+import { formatBytes, truncate, colorizeDetailKey, colorizeBool } from '../../formatters';
 
 export class VolumesPanel implements SidePanel {
   readonly id = 'volumes';
@@ -12,12 +12,10 @@ export class VolumesPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
-  private onError: (msg: string) => void;
 
-  constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
+  constructor(client: DockerClient, onAction: () => void) {
     this.client = client;
     this.onAction = onAction;
-    this.onError = onError ?? defaultOnError;
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -72,7 +70,10 @@ export class VolumesPanel implements SidePanel {
         confirmMessage: 'Prune all unused volumes?',
         confirmSeverity: 'batch',
         handler: () => {
-          return this.client.pruneVolumes().then(() => { this.onAction(); });
+          return this.client.pruneVolumes().then((r) => {
+            this.onAction();
+            return `Pruned — ${formatBytes(r.spaceReclaimed)} reclaimed`;
+          });
         },
       },
     ];

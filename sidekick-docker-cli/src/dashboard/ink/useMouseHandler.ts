@@ -18,12 +18,13 @@ interface MouseContext {
   detailLines: string[];
   detailViewportHeight: number;
   detailTabs: DetailTab[];
+  tabIdx: number;
   rows: number;
   rotatePhrase: () => void;
 }
 
 export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) => void {
-  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, sideWidth, sideScroll, detailLines, detailViewportHeight, detailTabs, rows, rotatePhrase } = ctx;
+  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, sideWidth, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, rotatePhrase } = ctx;
 
   return useCallback((event: TerminalMouseEvent) => {
     rotatePhrase();
@@ -48,7 +49,9 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         sideScroll.setSelected(newIdx);
       } else {
         const delta = event.scrollDirection === 'down' ? 3 : -3;
-        dispatch({ type: 'SCROLL_DETAIL_DELTA', delta, totalLines: detailLines.length, viewportHeight: detailViewportHeight });
+        // Wheel-up on a logs tab pauses follow; reaching the bottom resumes it.
+        const followTab = detailTabs[tabIdx]?.autoScrollBottom === true;
+        dispatch({ type: 'SCROLL_DETAIL_DELTA', delta, totalLines: detailLines.length, viewportHeight: detailViewportHeight, followTab });
       }
       return;
     }
@@ -109,5 +112,5 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
       }
     }
-  }, [state.overlay, state.activePanelIndex, sideWidth, currentItems.length, clampedSelection, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, rows, rotatePhrase, dispatch]);
+  }, [state.overlay, state.activePanelIndex, sideWidth, currentItems.length, clampedSelection, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, rotatePhrase, dispatch]);
 }

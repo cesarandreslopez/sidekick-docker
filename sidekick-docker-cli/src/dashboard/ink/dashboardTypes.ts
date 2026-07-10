@@ -12,8 +12,16 @@ export interface ToastEntry {
   id: number;
   message: string;
   severity: ToastSeverity;
-  expiresAt: number;
+  /** In-flight action indicator: renders a spinner and never auto-expires. */
+  progress?: boolean;
 }
+
+export type AddToast = (
+  message: string,
+  severity: ToastSeverity,
+  duration?: number,
+  opts?: { progress?: boolean },
+) => number;
 
 export interface DashboardUIState {
   activePanelIndex: number;
@@ -36,6 +44,8 @@ export interface DashboardUIState {
   execContainerName: string;
   logFilterString: string;
   logFilterMode: FilterMode;
+  /** Auto-scroll (tail) mode for logs tabs; paused when the user scrolls up. */
+  logFollow: boolean;
   showAllContainers: boolean;
   sortField: SortField;
   sortReversed: boolean;
@@ -55,8 +65,8 @@ export type Action =
   | { type: 'SET_FOCUS'; target: FocusTarget }
   | { type: 'SET_OVERLAY'; overlay: OverlayKind }
   | { type: 'SET_FILTER'; value: string }
-  | { type: 'SCROLL_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number }
-  | { type: 'SCROLL_DETAIL'; offset: number }
+  | { type: 'SCROLL_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number; followTab?: boolean }
+  | { type: 'SCROLL_DETAIL'; offset: number; followTab?: boolean; totalLines?: number; viewportHeight?: number }
   | { type: 'ADD_TOAST'; toast: ToastEntry }
   | { type: 'REMOVE_TOAST'; id: number }
   | { type: 'CONTEXT_MENU_NAV'; delta: number; itemCount: number }

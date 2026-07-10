@@ -1,7 +1,7 @@
 import type { ImageInfo, ImageLayer } from 'sidekick-docker-shared';
 import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError, panelData } from './types';
+import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { formatBytes, truncate, colorizeDetailKey, colorizeId, colorizeBool, sectionHeader } from '../../formatters';
 
@@ -12,12 +12,10 @@ export class ImagesPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
-  private onError: (msg: string) => void;
 
-  constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
+  constructor(client: DockerClient, onAction: () => void) {
     this.client = client;
     this.onAction = onAction;
-    this.onError = onError ?? defaultOnError;
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -98,7 +96,10 @@ export class ImagesPanel implements SidePanel {
         confirmMessage: 'Prune all dangling images?',
         confirmSeverity: 'batch',
         handler: () => {
-          return this.client.pruneImages().then(() => { this.onAction(); });
+          return this.client.pruneImages().then((r) => {
+            this.onAction();
+            return `Pruned — ${formatBytes(r.spaceReclaimed)} reclaimed`;
+          });
         },
       },
     ];

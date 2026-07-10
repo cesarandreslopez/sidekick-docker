@@ -1,7 +1,7 @@
 import type { ContainerInfo, FilesystemChange } from 'sidekick-docker-shared';
 import { DockerClient, filterLine, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError, panelData } from './types';
+import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
 
@@ -12,15 +12,13 @@ export class ContainersPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
-  private onError: (msg: string) => void;
   private onExec?: (containerId: string) => void;
   private onCopyLogs?: (text: string) => void;
   private lastMetrics: DockerDashboardMetrics | null = null;
 
-  constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
+  constructor(client: DockerClient, onAction: () => void) {
     this.client = client;
     this.onAction = onAction;
-    this.onError = onError ?? defaultOnError;
   }
 
   setOnExec(handler: (containerId: string) => void): void {
@@ -274,6 +272,7 @@ export class ContainersPanel implements SidePanel {
             lines = logs.map(l => l.message);
           }
           this.onCopyLogs(lines.join('\n'));
+          return `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`;
         },
       },
     ];

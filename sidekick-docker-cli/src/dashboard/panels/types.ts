@@ -18,17 +18,17 @@ export interface PanelItem {
 export interface PanelAction {
   key: string;
   label: string;
-  /** Return a Promise to get async feedback (in-progress → success/error toasts). */
-  handler: (item: PanelItem) => void | Promise<void>;
+  /**
+   * Return a Promise to get async feedback (in-progress → success/error toasts).
+   * A resolved/returned string becomes the success toast text (e.g. "Pruned — 1.2 GB reclaimed").
+   */
+  handler: (item: PanelItem) => void | string | Promise<void | string>;
   condition?: (item: PanelItem) => boolean;
   confirm?: boolean;
   confirmMessage?: string;
   /** Risk level for confirmation dialog: 'low' (yellow), 'high' (red, default), 'batch' (red, shows count). */
   confirmSeverity?: 'low' | 'high' | 'batch';
 }
-
-/** Default error handler for panel actions — logs to debug console. */
-export const defaultOnError = (msg: string): void => { console.debug(msg); };
 
 /** A tab in the detail pane for a selected item. */
 export interface DetailTab {

@@ -1,27 +1,42 @@
+import { errorMessage } from 'sidekick-docker-shared';
 import type { PanelAction, PanelItem } from '../panels/types';
-import type { Action, ToastSeverity } from './dashboardTypes';
+import type { Action, AddToast } from './dashboardTypes';
 
-export function isPromise(value: unknown): value is Promise<void> {
+export function isPromise(value: unknown): value is Promise<void | string> {
   return value != null && typeof (value as Promise<void>).then === 'function';
 }
 
-/** Execute a panel action with async feedback: in-progress spinner → success/error toast. */
+/**
+ * Execute a panel action with feedback:
+ * - async handlers get a progress toast (spinner, no auto-expiry) that resolves
+ *   into a success toast (the handler's returned string, or the action label)
+ *   or an error toast carrying the real Docker error text;
+ * - sync handlers get an immediate success toast (returned string or label).
+ */
 export function executeAction(
   action: PanelAction,
   item: PanelItem,
   dispatch: (action: Action) => void,
-  addToast: (message: string, severity: ToastSeverity, duration?: number) => number,
+  addToast: AddToast,
   removeToast: (id: number) => void,
 ): void {
   const run = () => {
     const result = action.handler(item);
     if (isPromise(result)) {
-      const progressId = addToast(`${action.label}…`, 'info');
+      const progressId = addToast(`${action.label}…`, 'info', undefined, { progress: true });
       result
-        .then(() => { removeToast(progressId); addToast(action.label, 'success'); })
-        .catch(() => { removeToast(progressId); addToast(`${action.label} failed`, 'error'); });
+        .then((msg) => {
+          removeToast(progressId);
+          addToast(typeof msg === 'string' ? msg : action.label, 'success');
+        })
+        .catch((err: unknown) => {
+          removeToast(progressId);
+          addToast(`${action.label} failed: ${errorMessage(err)}`, 'error');
+        });
+    } else if (typeof result === 'string') {
+      addToast(result, 'success');
     } else {
-      addToast(action.label, 'info', 2000);
+      addToast(action.label, 'success');
     }
   };
 

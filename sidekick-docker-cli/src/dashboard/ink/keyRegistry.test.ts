@@ -71,7 +71,7 @@ function makeCtx(overrides: Partial<KeyContext> = {}): KeyContext {
     detailViewportHeight: 10,
     detailTabs: panel.detailTabs,
     tabIdx: 0,
-    sideScroll: { selectNext: vi.fn(), selectPrev: vi.fn(), selectFirst: vi.fn(), selectLast: vi.fn() },
+    sideScroll: { selectNext: vi.fn(), selectPrev: vi.fn(), selectFirst: vi.fn(), selectLast: vi.fn(), setSelected: vi.fn() },
     addToast: vi.fn().mockReturnValue(1),
     exit: vi.fn(),
     secondaryDetailLineCount: 0,
@@ -112,6 +112,12 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
       { input: '', key: bareKey({ return: true }), id: 'descend' },
       { input: 'h', id: 'focus-back' },
       { input: '', key: bareKey({ leftArrow: true }), id: 'focus-back' },
+      { input: 'l', id: 'focus-detail' },
+      { input: '', key: bareKey({ rightArrow: true }), id: 'focus-detail' },
+      { input: '', key: bareKey({ pageDown: true }), id: 'page-scroll' },
+      { input: '', key: bareKey({ pageUp: true }), id: 'page-scroll' },
+      { input: 'd', key: bareKey({ ctrl: true }), id: 'half-page-scroll' },
+      { input: 'u', key: bareKey({ ctrl: true }), id: 'half-page-scroll' },
       { input: '', key: bareKey({ escape: true }), id: 'escape' },
     ];
     for (const c of cases) {

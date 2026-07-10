@@ -1,7 +1,7 @@
 import type { NetworkInfo } from 'sidekick-docker-shared';
 import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError, panelData } from './types';
+import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { truncate, colorizeDetailKey, colorizeId, colorizeBool, colorizeNetworkContainer } from '../../formatters';
 
@@ -12,12 +12,10 @@ export class NetworksPanel implements SidePanel {
 
   private client: DockerClient;
   private onAction: () => void;
-  private onError: (msg: string) => void;
 
-  constructor(client: DockerClient, onAction: () => void, onError?: (msg: string) => void) {
+  constructor(client: DockerClient, onAction: () => void) {
     this.client = client;
     this.onAction = onAction;
-    this.onError = onError ?? defaultOnError;
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -85,7 +83,11 @@ export class NetworksPanel implements SidePanel {
         confirmMessage: 'Prune all unused networks?',
         confirmSeverity: 'batch',
         handler: () => {
-          return this.client.pruneNetworks().then(() => { this.onAction(); });
+          return this.client.pruneNetworks().then((r) => {
+            this.onAction();
+            const n = r.networksDeleted.length;
+            return `Pruned ${n} network${n === 1 ? '' : 's'}`;
+          });
         },
       },
     ];

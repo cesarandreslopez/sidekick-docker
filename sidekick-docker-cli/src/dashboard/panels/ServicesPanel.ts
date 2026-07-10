@@ -1,7 +1,7 @@
 import type { ComposeService, ComposeProject } from 'sidekick-docker-shared';
 import { ComposeClient, filterLine } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { defaultOnError, panelData } from './types';
+import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, truncate, colorizeDetailKey, colorizeState, colorizeId, renderLogLines } from '../../formatters';
 
@@ -20,15 +20,13 @@ export class ServicesPanel implements SidePanel {
 
   private composeClient: ComposeClient;
   private onAction: () => void;
-  private onError: (msg: string) => void;
   private cwd: string | undefined;
   private onCopyLogs?: (text: string) => void;
   private lastMetrics: DockerDashboardMetrics | null = null;
 
-  constructor(composeClient: ComposeClient, onAction: () => void, cwd?: string, onError?: (msg: string) => void) {
+  constructor(composeClient: ComposeClient, onAction: () => void, cwd?: string) {
     this.composeClient = composeClient;
     this.onAction = onAction;
-    this.onError = onError ?? defaultOnError;
     this.cwd = cwd;
   }
 
@@ -184,6 +182,7 @@ export class ServicesPanel implements SidePanel {
             lines = logs.map(l => l.message);
           }
           this.onCopyLogs(lines.join('\n'));
+          return `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`;
         },
       },
     ];
