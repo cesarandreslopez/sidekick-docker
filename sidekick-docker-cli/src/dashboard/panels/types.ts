@@ -21,7 +21,12 @@ export interface PanelAction {
   /**
    * Return a Promise to get async feedback (in-progress → success/error toasts).
    * A resolved/returned string becomes the success toast text (e.g. "Pruned — 1.2 GB reclaimed").
+   *
+   * `void` here is deliberate and cannot be `undefined`: most handlers are written as
+   * `() => { client.stopContainer(id); }`, whose inferred return type is `void` — which is
+   * not assignable to `string | undefined`.
    */
+  // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
   handler: (item: PanelItem) => void | string | Promise<void | string>;
   condition?: (item: PanelItem) => boolean;
   confirm?: boolean;

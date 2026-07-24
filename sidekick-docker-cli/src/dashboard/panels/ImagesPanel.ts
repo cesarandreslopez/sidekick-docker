@@ -1,4 +1,4 @@
-import type { ImageInfo, ImageLayer } from 'sidekick-docker-shared';
+import type { ImageInfo } from 'sidekick-docker-shared';
 import { DockerClient, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';

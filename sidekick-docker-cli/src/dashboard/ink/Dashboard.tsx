@@ -231,7 +231,6 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     if (phraseTimerRef.current) clearTimeout(phraseTimerRef.current);
     phraseTimerRef.current = setTimeout(() => rotatePhraseRef.current?.(), 7000);
   };
-  const rotatePhrase = useCallback(() => rotatePhraseRef.current?.(), []);
   useEffect(() => {
     phraseTimerRef.current = setTimeout(() => rotatePhraseRef.current?.(), 7000);
     return () => { if (phraseTimerRef.current) clearTimeout(phraseTimerRef.current); };
@@ -392,7 +391,6 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       items.sort((a, b) => dir * (a.sortKey - b.sortKey));
     }
     return { currentItems: items, totalItemCount: total };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel, metrics, state.showAllContainers, state.filterString, state.sortField, state.sortReversed]);
   const clampedSelection = Math.min(state.selectedItemIndex, Math.max(0, currentItems.length - 1));
 
@@ -422,7 +420,6 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     if (compareItemId && selectedItem?.id === compareItemId) {
       dispatch({ type: 'PIN_COMPARE', panelId: panel.id, itemId: compareItemId });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedItem?.id, compareItemId, panel.id]);
 
   useEffect(() => {
@@ -542,7 +539,6 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     if (state.overlay === 'context-menu' && (!selectedItem || applicableActions.length === 0)) {
       dispatch({ type: 'SET_OVERLAY', overlay: null });
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.overlay, selectedItem, applicableActions.length]);
 
   // Render

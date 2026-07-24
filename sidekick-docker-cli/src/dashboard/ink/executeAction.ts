@@ -2,8 +2,8 @@ import { errorMessage } from 'sidekick-docker-shared';
 import type { PanelAction, PanelItem } from '../panels/types';
 import type { Action, AddToast } from './dashboardTypes';
 
-export function isPromise(value: unknown): value is Promise<void | string> {
-  return value != null && typeof (value as Promise<void>).then === 'function';
+export function isPromise(value: unknown): value is Promise<unknown> {
+  return value != null && typeof (value as Promise<unknown>).then === 'function';
 }
 
 /**

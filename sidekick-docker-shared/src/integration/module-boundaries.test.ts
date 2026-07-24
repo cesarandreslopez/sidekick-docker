@@ -6,8 +6,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { StatsCollector } from '../stats/StatsCollector';
-import { formatPorts, stateIcon, stateColor, formatBytes, formatCpu, formatMemory, truncate } from '../formatters';
-import { tokenizeLogLine, filterLine, detectSeverity, parseLine, detectFormat, LogAnalytics, LogTemplateEngine, LogSeverityTimeSeries } from '../log/index';
+import { formatPorts, stateIcon, stateColor } from '../formatters';
+import { tokenizeLogLine, filterLine, detectSeverity, parseLine, detectFormat, LogAnalytics } from '../log/index';
 import { errorMessage } from '../errors';
 import type { ContainerStats } from '../types/container';
 import type { PortBinding } from '../types/container';

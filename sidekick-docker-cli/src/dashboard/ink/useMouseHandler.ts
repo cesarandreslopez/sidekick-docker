@@ -36,18 +36,22 @@ interface MouseContext {
 
 export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) => void {
   const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast } = ctx;
+  // Read the individual fields outside the callback: closing over `state` itself would make
+  // the whole object the dependency, which the compiler cannot reconcile with the field-level
+  // dependency array below (react-hooks/preserve-manual-memoization).
+  const { overlay, activePanelIndex, confirmAction, confirmSeverity } = state;
 
   return useCallback((event: TerminalMouseEvent) => {
     // Text-entry overlays: ignore all mouse events (raw escape bytes leak into the input)
-    if (state.overlay === 'filter' || state.overlay === 'log-filter') return;
+    if (overlay === 'filter' || overlay === 'log-filter') return;
     // Overlays are clickable: buttons/rows activate, clicks outside dismiss.
-    if (state.overlay) {
+    if (overlay) {
       if (event.type !== 'click' || event.button !== 'left') return;
       const { x, y } = event;
-      switch (state.overlay) {
+      switch (overlay) {
         case 'confirm': {
-          if (confirmHit(x, y, state.confirmSeverity) === 'yes') {
-            state.confirmAction?.();
+          if (confirmHit(x, y, confirmSeverity) === 'yes') {
+            confirmAction?.();
           }
           // No / outside = cancel (safe default)
           dispatch({ type: 'SET_CONFIRM', action: null, message: '' });
@@ -134,7 +138,7 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
         const tabWidth = String(panels[i].shortcutKey).length + panels[i].title.length + 3 + countLen + 1;
         if (x >= col && x < col + tabWidth) {
-          panels[state.activePanelIndex]?.onDeactivate?.();
+          panels[activePanelIndex]?.onDeactivate?.();
           dispatch({ type: 'SWITCH_PANEL', index: i });
           panels[i]?.onActivate?.();
           return;
@@ -177,5 +181,5 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
       }
     }
-  }, [state.overlay, state.activePanelIndex, state.confirmAction, state.confirmSeverity, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, addToast, removeToast, dispatch]);
+  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, addToast, removeToast, dispatch]);
 }
