@@ -82,7 +82,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       transition: background 0.1s ease;
     }
     #tab-bar .tab:hover {
-      background: var(--vscode-tab-hoverBackground, rgba(255,255,255,0.05));
+      background: var(--vscode-tab-hoverBackground, rgba(128,128,128,0.10));
     }
     #tab-bar .tab.active {
       color: var(--vscode-tab-activeForeground, var(--vscode-foreground));
@@ -258,11 +258,11 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       transition: background 0.1s ease, color 0.1s ease;
     }
     #detail-tab-bar .detail-tab:hover {
-      background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.1));
+      background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15));
     }
     #detail-tab-bar .detail-tab.active {
       color: var(--vscode-foreground);
-      background: var(--vscode-toolbar-activeBackground, rgba(255,255,255,0.15));
+      background: var(--vscode-toolbar-activeBackground, rgba(128,128,128,0.20));
     }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     #detail-content {
@@ -334,7 +334,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       padding: 0 4px;
     }
     .log-line:nth-child(even) {
-      background: rgba(128,128,128,0.04);
+      background: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.06));
     }
     .log-line:hover {
       background: var(--vscode-list-hoverBackground);
@@ -439,7 +439,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       transition: background 0.1s ease, color 0.1s ease;
     }
     .log-filter-bar .copy-logs-btn:hover {
-      background: var(--vscode-toolbar-hoverBackground, rgba(255,255,255,0.1));
+      background: var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15));
       color: var(--vscode-foreground);
     }
 
@@ -490,7 +490,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .stat-row-label .stat-value { }
     .stat-bar-track {
       height: 6px;
-      background: var(--vscode-editor-inactiveSelectionBackground, rgba(255,255,255,0.08));
+      background: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.12));
       border-radius: 3px;
       overflow: hidden;
     }
@@ -567,7 +567,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       gap: 6px;
       font-weight: 600;
       padding-right: 12px;
-      border-right: 1px solid rgba(255,255,255,0.2);
+      border-right: 1px solid var(--vscode-statusBar-border, var(--vscode-contrastBorder, transparent));
     }
     #status-bar .hints {
       flex-grow: 1;
@@ -579,22 +579,22 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       font-size: 11px;
     }
     #status-bar .filter-indicator {
-      color: #cca700;
+      color: var(--vscode-statusBarItem-warningForeground, var(--vscode-editorWarning-foreground, #cca700));
       padding: 0 8px;
-      border-left: 1px solid rgba(255,255,255,0.2);
-      border-right: 1px solid rgba(255,255,255,0.2);
+      border-left: 1px solid var(--vscode-statusBar-border, var(--vscode-contrastBorder, transparent));
+      border-right: 1px solid var(--vscode-statusBar-border, var(--vscode-contrastBorder, transparent));
     }
     #status-bar .connection {
       display: flex;
       align-items: center;
       gap: 4px;
       padding-left: 8px;
-      border-left: 1px solid rgba(255,255,255,0.2);
+      border-left: 1px solid var(--vscode-statusBar-border, var(--vscode-contrastBorder, transparent));
     }
     #status-bar .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
-    #status-bar .dot.connected { background: #3fb950; animation: pulse 2s ease-in-out infinite; }
+    #status-bar .dot.connected { background: var(--vscode-testing-iconPassed, #3fb950); animation: pulse 2s ease-in-out infinite; }
     #status-bar .dot.connecting { background: var(--vscode-editorWarning-foreground, #cca700); animation: pulse 1s ease-in-out infinite; }
-    #status-bar .dot.disconnected { background: #f85149; }
+    #status-bar .dot.disconnected { background: var(--vscode-errorForeground, #f85149); }
     #status-bar .hint-chip {
       cursor: pointer;
       padding: 1px 5px;
@@ -602,7 +602,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       margin-left: 4px;
     }
     #status-bar .hint-chip:hover {
-      background: rgba(255,255,255,0.15);
+      background: var(--vscode-statusBarItem-hoverBackground, var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)));
     }
 
     /* ─── KV grid ──────────────────────────────────────────────── */
@@ -662,7 +662,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     #confirm-overlay {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.5);
+      background: var(--vscode-widget-shadow, rgba(0,0,0,0.4));
       backdrop-filter: blur(2px);
       z-index: 100;
       display: flex;
@@ -773,7 +773,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       font-size: 12px;
       background: var(--vscode-editor-background);
       border: 1px solid var(--vscode-panel-border);
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0,0,0,0.3));
       max-width: 350px;
       word-break: break-word;
       animation: toastIn 0.2s ease-out;
@@ -817,7 +817,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       border-radius: 4px;
       padding: 4px 0;
       min-width: 160px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0,0,0,0.3));
       visibility: hidden;
       opacity: 0;
       transform: scale(0.95);
@@ -864,7 +864,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .overlay-panel {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.5);
+      background: var(--vscode-widget-shadow, rgba(0,0,0,0.4));
       backdrop-filter: blur(2px);
       z-index: 96;
       display: flex;
@@ -982,7 +982,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       font-size: 10px;
       padding: 1px 6px;
       border-radius: 3px;
-      background: rgba(255,255,255,0.1);
+      background: var(--vscode-statusBarItem-hoverBackground, var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15)));
       text-transform: capitalize;
     }
 
@@ -1075,6 +1075,13 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
 
     /* ─── Reduced motion ─────────────────────────────────────────── */
     @media (prefers-reduced-motion: reduce) {
+      /* These four were missed: the stat bars, side-row hover, and the
+         confirm/context-menu scale transforms all still animated. */
+      .stat-bar-fill { transition: none !important; }
+      #side-list .side-item { transition: none !important; }
+      #confirm-overlay .dialog { transition: none !important; transform: none !important; }
+      #context-menu { transition: none !important; transform: none !important; }
+
       .dot.connected,
       .dot.connecting,
       .stats-spinner,

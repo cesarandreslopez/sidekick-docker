@@ -22,6 +22,9 @@ interface SideListProps {
   listState?: ListState;
 }
 
+/** Columns consumed before the label text: the selection marker and the state icon. */
+const MARKER_AND_ICON_COLS = 2;
+
 const EMPTY_HINTS: Record<string, string[]> = {
   containers: ['Run a container to get started:', '  docker run -d nginx'],
   images: ['Pull an image to get started:', '  docker pull nginx'],
@@ -79,12 +82,15 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
         const leftWidth = innerWidth - rightLen - (rightLen ? 1 : 0);
         if (isSelected && focused) {
           // Focused selection: icon preserves its color, rest uses brand inverse
-          const restText = rest.length < leftWidth - prefix.length - 1
-            ? rest + ' '.repeat(leftWidth - prefix.length - 1 - rest.length)
-            : rest.substring(0, leftWidth - prefix.length - 1);
+          const restWidth = Math.max(0, leftWidth - prefix.length - MARKER_AND_ICON_COLS);
+          const restText = rest.length < restWidth
+            ? rest + ' '.repeat(restWidth - rest.length)
+            : rest.substring(0, restWidth);
           return (
             <Box key={item.id}>
-              <Text color="#2B4C7E" bold inverse wrap="truncate">{` ${prefix}`}</Text>
+              {/* '>' rather than a space: inverse video is stripped under
+                  NO_COLOR, which would otherwise leave selection invisible. */}
+              <Text color="#2B4C7E" bold inverse>{`>${prefix}`}</Text>
               <Text color={item.iconColor || '#2B4C7E'} bold inverse>{icon}</Text>
               <Text color="#2B4C7E" bold inverse wrap="truncate">{restText}</Text>
               {rightLen > 0 && (
@@ -95,22 +101,30 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
           );
         }
 
-        // Normal rendering: icon gets its own color
-        const iconColor = item.iconColor || (isSelected ? '#2B4C7E' : 'white');
-        const textColor = isSelected ? '#2B4C7E' : 'white';
+        // Normal rendering: icon gets its own color. Unselected rows use the
+        // terminal's own foreground — an explicit 'white' disappears entirely
+        // on a light-background terminal.
+        const iconColor = item.iconColor || (isSelected ? '#2B4C7E' : undefined);
+        const textColor = isSelected ? '#2B4C7E' : undefined;
+        // Selection in an unfocused list was signalled by colour alone, which
+        // is invisible with NO_COLOR or on a monochrome terminal.
+        const marker = isSelected ? '>' : ' ';
 
         return (
           <Box key={item.id}>
-            <Text color={textColor} bold={isSelected} wrap="truncate">
-              {` ${prefix}`}
+            {/* marker occupies the same column the leading space did, so no
+                width arithmetic below needs to change. */}
+            <Text color={textColor} bold={isSelected}>
+              {`${marker}${prefix}`}
             </Text>
             <Text color={iconColor} bold={isSelected}>
               {icon}
             </Text>
             <Text color={textColor} bold={isSelected} wrap="truncate">
-              {rest.length < leftWidth - prefix.length - 1
-                ? rest + ' '.repeat(leftWidth - prefix.length - 1 - rest.length)
-                : rest.substring(0, leftWidth - prefix.length - 1)}
+              {(() => {
+                const restWidth = Math.max(0, leftWidth - prefix.length - MARKER_AND_ICON_COLS);
+                return rest.length < restWidth ? rest + ' '.repeat(restWidth - rest.length) : rest.substring(0, restWidth);
+              })()}
             </Text>
             {rightLen > 0 && (
               <Text color={item.rightColor || 'gray'} bold={isSelected}>
@@ -125,29 +139,29 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
       )}
       {items.length === 0 && filterString && (
         <Box flexDirection="column" paddingTop={1}>
-          <Text color="yellow">{` \u2717 No matches for "${filterString}"`}</Text>
-          <Text color="gray" dimColor>{' Press Esc to clear filter'}</Text>
+          <Text color="yellow" wrap="truncate">{` \u2717 No matches for "${filterString}"`}</Text>
+          <Text color="gray" dimColor wrap="truncate">{' Press Esc to clear filter'}</Text>
         </Box>
       )}
       {items.length === 0 && !filterString && listState === 'disconnected' && (
         <Box flexDirection="column" paddingTop={1}>
-          <Text color="red">{' \u25CB Docker daemon unreachable'}</Text>
-          <Text color="gray" dimColor>{' Waiting to reconnect\u2026'}</Text>
+          <Text color="red" wrap="truncate">{' \u25CB Docker daemon unreachable'}</Text>
+          <Text color="gray" dimColor wrap="truncate">{' Waiting to reconnect\u2026'}</Text>
         </Box>
       )}
       {items.length === 0 && !filterString && listState === 'loading' && (
         <Box flexDirection="column" paddingTop={1}>
-          <Text color="gray">{' Connecting to Docker\u2026'}</Text>
+          <Text color="gray" wrap="truncate">{' Connecting to Docker\u2026'}</Text>
         </Box>
       )}
       {items.length === 0 && !filterString && listState === 'ready' && (
         <Box flexDirection="column" paddingTop={1}>
-          <Text color="gray">{` \u2500 No ${panelTitle.toLowerCase()} found`}</Text>
+          <Text color="gray" wrap="truncate">{` \u2500 No ${panelTitle.toLowerCase()} found`}</Text>
           {panelId && EMPTY_HINTS[panelId] && (
             <>
               <Text>{''}</Text>
-              <Text color="gray" dimColor>{` ${EMPTY_HINTS[panelId][0]}`}</Text>
-              <Text color="#2B4C7E" bold>{` ${EMPTY_HINTS[panelId][1]}`}</Text>
+              <Text color="gray" dimColor wrap="truncate">{` ${EMPTY_HINTS[panelId][0]}`}</Text>
+              <Text color="#2B4C7E" bold wrap="truncate">{` ${EMPTY_HINTS[panelId][1]}`}</Text>
             </>
           )}
         </Box>

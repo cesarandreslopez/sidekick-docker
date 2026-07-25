@@ -41,7 +41,9 @@ export function SortOverlay({ selectedIndex, currentField, reversed, maxWidth }:
         return (
           <Box key={opt.field}>
             <Text
-              color={isSelected ? '#2B4C7E' : (isCurrent ? 'yellow' : 'white')}
+              // undefined = the terminal's own foreground; an explicit
+              // 'white' is invisible on a light background.
+              color={isSelected ? '#2B4C7E' : (isCurrent ? 'yellow' : undefined)}
               bold={isSelected}
               inverse={isSelected}
             >
