@@ -80,6 +80,13 @@ export interface DockerServiceOptions {
   refreshIntervalMs?: number;
   /** Directory for compose file detection and fallback cwd for compose actions. Undefined = no workspace. */
   cwd?: string;
+  /**
+   * Whether the workspace is trusted. Compose actions spawn `docker compose`,
+   * which executes a compose file the workspace controls, so they are refused
+   * when false — matching `capabilities.untrustedWorkspaces: "limited"` in the
+   * manifest. Defaults to true so non-VSCode callers and tests are unaffected.
+   */
+  isTrusted?: boolean;
 }
 
 export interface DashboardViewState {
@@ -168,6 +175,7 @@ export class DockerService {
   private callbacks: DockerServiceCallbacks;
   private disposed = false;
   private cwd: string | undefined;
+  private isTrusted: boolean;
   private refreshIntervalMs: number;
   private initialized = false;
   private viewState: DashboardViewState = {
@@ -188,10 +196,18 @@ export class DockerService {
     this.composeClient = new ComposeClient(options?.cliEnv);
     this.callbacks = callbacks;
     this.cwd = options?.cwd;
+    this.isTrusted = options?.isTrusted ?? true;
     this.refreshIntervalMs = options?.refreshIntervalMs ?? 30_000;
     this.statsSampler = new StatsSampler({
       sample: (id) => this.client.sampleStats(id),
-      push: (id, stats) => { this.statsCollector.push(id, stats); },
+      push: (id, stats) => {
+        this.statsCollector.push(id, stats);
+        // The collector lives in the extension host; the webview sorts from its
+        // own `state.stats`, fed only by 'updateStats'. Without this the sampler
+        // filled the collector and the list still compared zeros — the very bug
+        // the sampler was added to fix.
+        this.callbacks.onStatsChange({ containerId: id, stats: serializeStats(stats), loading: false });
+      },
       onChange: () => { this.scheduleStateUpdate(); },
     });
   }
@@ -227,6 +243,7 @@ export class DockerService {
       this.stopComposeLogStream();
       this.stopSecondaryLogStream();
       this.stopSecondaryComposeLogStream();
+      this.statsSampler.setIds([]);
       return;
     }
 
@@ -286,6 +303,12 @@ export class DockerService {
       this.composeProjects = this.composeDetector.detect(containers, fileConfig);
       this.lastRefresh = new Date();
       this.daemonConnected = true;
+
+      // The sampler's id set is derived from this.containers, so it has to be
+      // re-derived whenever the list changes. Driving it only from
+      // setViewState left containers started after a stats sort was applied
+      // permanently unsampled, i.e. sorting as zero.
+      if (this.initialized) this.applyStreamDemand();
     } catch {
       this.daemonConnected = false;
     }
@@ -370,6 +393,10 @@ export class DockerService {
       this.stopComposeLogStream();
       this.stopSecondaryLogStream();
       this.stopSecondaryComposeLogStream();
+      // The sampler is not a stream, so it survives the stopXStream calls. Left
+      // running it polls one request per running container every 3s behind a
+      // dashboard nobody is looking at.
+      this.statsSampler.setIds([]);
       return;
     }
 
@@ -392,7 +419,12 @@ export class DockerService {
     // the selected one. Running containers only; stopped ones report zeros.
     this.statsSampler.setIds(
       this.viewState.activePanelId === 'containers' && needsLiveStats(this.viewState.sortField)
-        ? this.containers.filter(c => c.state === 'running').map(c => c.id)
+        // Skip whichever container has a live stream: it already produces
+        // richer updates (with history series), and sampling it too would both
+        // duplicate the request and race the stream's own values.
+        ? this.containers
+            .filter(c => c.state === 'running' && c.id !== this.statsContainerId)
+            .map(c => c.id)
         : [],
     );
 
@@ -518,6 +550,11 @@ export class DockerService {
         this.scheduleLogFlush(containerId);
       }
       this.flushLogs(containerId);
+      // A stream that ran to completion clears the backoff. Without this the
+      // delay doubles on every container restart and, after MAX_RECONNECT_ATTEMPTS,
+      // schedule() refuses outright — so "streams recover after a restart"
+      // silently stops being true for the rest of the selection.
+      this.logReconnect.reset();
     } catch { /* stream ended or errored */ }
     this.reconnectStream(
       this.logReconnect,
@@ -553,6 +590,7 @@ export class DockerService {
           });
         }
       }
+      this.statsReconnect.reset();
     } catch { /* stream ended or errored */ }
     this.reconnectStream(
       this.statsReconnect,
@@ -614,6 +652,7 @@ export class DockerService {
         this.scheduleComposeLogFlush(projectName, serviceName);
       }
       this.flushComposeLogs(projectName, serviceName);
+      this.composeLogReconnect.reset();
     } catch { /* stream ended or errored */ }
     this.reconnectStream(
       this.composeLogReconnect,
@@ -662,6 +701,7 @@ export class DockerService {
         this.scheduleSecondaryLogFlush(containerId);
       }
       this.flushSecondaryLogs(containerId);
+      this.secondaryLogReconnect.reset();
     } catch { /* stream ended or errored */ }
     this.reconnectStream(
       this.secondaryLogReconnect,
@@ -729,6 +769,7 @@ export class DockerService {
         this.scheduleSecondaryComposeLogFlush(projectName, serviceName);
       }
       this.flushSecondaryComposeLogs(projectName, serviceName);
+      this.secondaryComposeLogReconnect.reset();
     } catch { /* stream ended or errored */ }
     this.reconnectStream(
       this.secondaryComposeLogReconnect,
@@ -940,19 +981,35 @@ export class DockerService {
     this.scheduleStateUpdate();
   }
 
+  /**
+   * Refuse compose in an untrusted workspace. Must be called *before* the
+   * ComposeClient call — `runCompose` receives an already-invoked promise, so
+   * a guard there would fire after the process had already spawned.
+   */
+  private assertComposeAllowed(action: string): void {
+    if (this.isTrusted) return;
+    throw new Error(
+      `${action} is disabled in an untrusted workspace — running compose would execute this workspace's compose file. Trust the folder to enable it.`,
+    );
+  }
+
   async composeUp(projectName: string): Promise<void> {
+    this.assertComposeAllowed('Up');
     await this.runCompose('Up', this.composeClient.up(projectName, await this.composeCwd(projectName)));
   }
 
   async composeDown(projectName: string): Promise<void> {
+    this.assertComposeAllowed('Down');
     await this.runCompose('Down', this.composeClient.down(projectName, await this.composeCwd(projectName)));
   }
 
   async composeRestart(projectName: string, serviceName?: string): Promise<void> {
+    this.assertComposeAllowed('Restart');
     await this.runCompose('Restart', this.composeClient.restart(projectName, serviceName, await this.composeCwd(projectName)));
   }
 
   async composeStop(projectName: string, serviceName?: string): Promise<void> {
+    this.assertComposeAllowed('Stop');
     await this.runCompose('Stop', this.composeClient.stop(projectName, serviceName, await this.composeCwd(projectName)));
   }
 

@@ -548,6 +548,21 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       padding: 0 10px;
       gap: 12px;
     }
+    /*
+     * The brand/hints/indicators are re-rendered as one innerHTML blob, so they
+     * live inside this wrapper rather than being direct children of #status-bar.
+     * It has to carry the flex context they were written against: without it
+     * .hints loses flex-grow, .brand takes its own line, and the connection
+     * indicator stops being right-aligned.
+     */
+    #status-bar-main {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+    }
     @keyframes pulse {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.5; }

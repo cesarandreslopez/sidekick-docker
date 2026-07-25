@@ -387,15 +387,17 @@ export class DockerClient {
     const volumes = result.Volumes || [];
     // Get containers to check volume usage
     const containers = await this.docker.listContainers({ all: true });
-    // Keep *which* containers use each volume, not just whether any do.
-    const volumeUsers = new Map<string, string[]>();
+    // Keep *which* containers use each volume, not just whether any do. A Set
+    // because one container can mount the same named volume at more than one
+    // path, and it should still be listed once.
+    const volumeUsers = new Map<string, Set<string>>();
     for (const c of containers) {
       const containerName = (c.Names?.[0] || c.Id).replace(/^\//, '');
       for (const mount of c.Mounts || []) {
         if (!mount.Name) continue;
         const users = volumeUsers.get(mount.Name);
-        if (users) users.push(containerName);
-        else volumeUsers.set(mount.Name, [containerName]);
+        if (users) users.add(containerName);
+        else volumeUsers.set(mount.Name, new Set([containerName]));
       }
     }
 
@@ -407,7 +409,7 @@ export class DockerClient {
         mountpoint: validated.Mountpoint,
         created: new Date(validated.CreatedAt || 0),
         isInUse: volumeUsers.has(validated.Name),
-        usedBy: volumeUsers.get(validated.Name) ?? [],
+        usedBy: [...(volumeUsers.get(validated.Name) ?? [])],
       };
     });
   }

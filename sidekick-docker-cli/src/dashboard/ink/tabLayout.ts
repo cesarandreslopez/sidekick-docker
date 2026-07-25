@@ -61,7 +61,11 @@ export function shouldCompactTabs(
     (sum, p, i) => sum + panelTabWidth(p.shortcutKey, p.title, counts[i], false),
     0,
   );
-  return full + layoutIndicatorWidth(layoutMode) > totalWidth;
+  // +1 for the phrase spacer's marginLeft in TabBar. The spacer itself shrinks
+  // to nothing, but a margin does not, so at the exact width where the tabs and
+  // the indicator just fit, that stray column pushed the bar to totalWidth + 1
+  // and wrapped it.
+  return full + 1 + layoutIndicatorWidth(layoutMode) > totalWidth;
 }
 
 /**
@@ -105,10 +109,26 @@ export function detailTabWindow(
 ): DetailTabWindow {
   const total = labels.reduce((sum, l) => sum + detailTabWidth(l), 0);
   const showSuffix = total + suffixLength + 1 <= paneWidth;
-  const budget = showSuffix ? paneWidth - suffixLength - 1 : paneWidth;
+  const fullBudget = showSuffix ? paneWidth - suffixLength - 1 : paneWidth;
 
+  if (total <= fullBudget) {
+    return { start: 0, count: labels.length, showSuffix, hasLeftMarker: false };
+  }
+
+  // Windowing is needed, so DetailTabBar will draw at least one overflow marker
+  // ('‹' before the first tab, '›' after the last). Those columns are part of
+  // the rendered row: leaving them out of the budget is what made the strip
+  // render paneWidth+1 and wrap onto a second line. Whether '‹' appears depends
+  // on the window, which depends on the budget, so settle it with a fixed point
+  // — at most two passes, since the marker count only ever moves 1 -> 2.
+  let reserved = 1;
   let start = 0;
-  if (total > budget) {
+  let count = 0;
+
+  for (let pass = 0; pass < 2; pass++) {
+    const budget = Math.max(1, fullBudget - reserved);
+
+    start = 0;
     let used = 0;
     for (let i = 0; i <= activeIndex && i < labels.length; i++) {
       used += detailTabWidth(labels[i]);
@@ -117,15 +137,19 @@ export function detailTabWindow(
         start++;
       }
     }
-  }
 
-  let remaining = budget;
-  let count = 0;
-  for (let i = start; i < labels.length; i++) {
-    const w = detailTabWidth(labels[i]);
-    if (w > remaining) break;
-    remaining -= w;
-    count++;
+    let remaining = budget;
+    count = 0;
+    for (let i = start; i < labels.length; i++) {
+      const w = detailTabWidth(labels[i]);
+      if (w > remaining) break;
+      remaining -= w;
+      count++;
+    }
+
+    const markers = (start > 0 ? 1 : 0) + (start + count < labels.length ? 1 : 0);
+    if (markers === reserved) break;
+    reserved = markers;
   }
 
   return { start, count: Math.max(1, count), showSuffix, hasLeftMarker: start > 0 };

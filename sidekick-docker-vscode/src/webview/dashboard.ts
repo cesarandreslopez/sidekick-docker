@@ -275,7 +275,24 @@ function renderAll(): void {
   $sideList.classList.toggle('focused', state.focusTarget === 'side');
   // aria-activedescendant is only announced while the owning listbox has DOM
   // focus. Without this the per-row ARIA below is built and never used.
-  if (state.focusTarget === 'side' && document.activeElement !== $sideList && !isTypingTarget(document.activeElement)) {
+  //
+  // But renderAll() also runs on every background update (a stats tick, a log
+  // flush), and an open overlay is aria-modal with its own focus management.
+  // Pulling focus back to the list from under it strands the dialog: the
+  // buttons stop being reachable and Enter no longer hits the safe default.
+  const overlayOwnsFocus =
+    state.confirmVisible ||
+    state.filterVisible ||
+    state.sortOverlayVisible ||
+    state.helpOverlayVisible ||
+    state.versionOverlayVisible ||
+    state.contextMenuVisible;
+  if (
+    state.focusTarget === 'side' &&
+    !overlayOwnsFocus &&
+    document.activeElement !== $sideList &&
+    !isTypingTarget(document.activeElement)
+  ) {
     $sideList.focus({ preventScroll: true });
   }
   const $detailPane = document.getElementById('detail-pane')!;
@@ -983,16 +1000,22 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     }
 
     case 'updateStats': {
+      // Two producers feed this: the live stream for the selected container
+      // (carries history series) and the one-shot sampler for every other row
+      // (values only, so list sorting has real numbers). Merge rather than
+      // replace, so a sampler tick can never blank the streamed container's
+      // sparklines just because it had no histories to send.
+      const prev = state.stats.get(msg.containerId);
       state.stats.set(msg.containerId, {
         stats: msg.stats,
         loading: msg.loading,
-        cpuHistory: msg.cpuHistory,
-        memoryHistory: msg.memoryHistory,
-        networkRxRateHistory: msg.networkRxRateHistory,
-        networkTxRateHistory: msg.networkTxRateHistory,
-        blockReadRateHistory: msg.blockReadRateHistory,
-        blockWriteRateHistory: msg.blockWriteRateHistory,
-        logSeveritySeries: msg.logSeveritySeries,
+        cpuHistory: msg.cpuHistory ?? prev?.cpuHistory,
+        memoryHistory: msg.memoryHistory ?? prev?.memoryHistory,
+        networkRxRateHistory: msg.networkRxRateHistory ?? prev?.networkRxRateHistory,
+        networkTxRateHistory: msg.networkTxRateHistory ?? prev?.networkTxRateHistory,
+        blockReadRateHistory: msg.blockReadRateHistory ?? prev?.blockReadRateHistory,
+        blockWriteRateHistory: msg.blockWriteRateHistory ?? prev?.blockWriteRateHistory,
+        logSeveritySeries: msg.logSeveritySeries ?? prev?.logSeveritySeries,
       });
       if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Stats')) {
         patchActiveStats(msg.containerId);

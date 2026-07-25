@@ -98,6 +98,47 @@ describe('StatsSampler', () => {
     sampler.dispose();
   });
 
+  it('keeps exactly one timer chain when ids change during an in-flight sweep', async () => {
+    // A sweep can outlive the tick that started it. While it is in flight the
+    // fired-but-not-yet-cleared handle is still in `timer`, so a setIds() pair
+    // arms a fresh chain — and the old sweep's completion used to null that
+    // handle out and schedule a *second* one. Two chains then sampled forever
+    // at twice the rate, and stopTimer could only ever reach the last.
+    vi.useFakeTimers();
+    try {
+      let sampleCount = 0;
+      let release: (() => void) | undefined;
+      const sampler = new StatsSampler({
+        sample: async () => {
+          sampleCount += 1;
+          // Hold the first timer-driven sweep open across the id change.
+          if (sampleCount === 2) await new Promise<void>(resolve => { release = resolve; });
+          return makeStats(1);
+        },
+        push: () => { /* not under test */ },
+        onChange: () => { /* not under test */ },
+        intervalMs: 10,
+      });
+
+      sampler.setIds(['a']);
+      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(10);
+      expect(release).toBeTypeOf('function');
+
+      sampler.setIds([]);
+      sampler.setIds(['a']);
+
+      release?.();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(vi.getTimerCount()).toBe(1);
+      sampler.dispose();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('samples nothing after dispose, including samples already in flight', async () => {
     const { sampler, pushed } = makeSampler();
     sampler.setIds(['a', 'b']);

@@ -269,6 +269,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
       cliEnv: settings.cliEnv,
       refreshIntervalMs: settings.refreshIntervalMs,
       cwd,
+      isTrusted: vscode.workspace.isTrusted,
     });
 
     const ok = await service.initialize();

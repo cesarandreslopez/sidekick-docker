@@ -19,7 +19,8 @@ const PANELS = [
 const COUNTS = [{ total: 3, running: 2 }, { total: 0 }, { total: 21 }, { total: 1 }, { total: 3 }];
 
 /** The Containers detail tabs, the widest set in the app. */
-const CONTAINER_TABS = ['Logs', 'Stats', 'Env', 'Config', 'Files', 'Patterns'];
+/** The real Containers detail tabs, in order (see ContainersPanel.ts). */
+const CONTAINER_TABS = ['Logs', 'Stats', 'Env', 'Config', 'Labels', 'Files', 'Patterns'];
 
 describe('panelCountLabel', () => {
   it('renders running/total when running is known', () => {
@@ -107,5 +108,44 @@ describe('detailTabWindow', () => {
   it('always renders at least one tab, even absurdly narrow', () => {
     const win = detailTabWindow(CONTAINER_TABS, 0, 4, DETAIL_TAB_SUFFIX_LENGTH);
     expect(win.count).toBeGreaterThanOrEqual(1);
+  });
+
+  it('never renders wider than the pane, markers included', () => {
+    // The '‹' and '›' markers DetailTabBar draws are part of the row. Leaving
+    // them out of the budget made the strip render paneWidth + 1 and wrap onto
+    // a second row — which also shifts every row useMouseHandler counts on.
+    for (let paneWidth = 12; paneWidth <= 120; paneWidth++) {
+      for (let active = 0; active < CONTAINER_TABS.length; active++) {
+        const win = detailTabWindow(CONTAINER_TABS, active, paneWidth, DETAIL_TAB_SUFFIX_LENGTH);
+        const tabs = CONTAINER_TABS
+          .slice(win.start, win.start + win.count)
+          .reduce((sum, l) => sum + detailTabWidth(l), 0);
+        const markers =
+          (win.hasLeftMarker ? 1 : 0) +
+          (win.start + win.count < CONTAINER_TABS.length ? 1 : 0);
+        const suffix = win.showSuffix ? DETAIL_TAB_SUFFIX_LENGTH : 0;
+
+        // The one unavoidable exception: a pane too narrow for even a single
+        // tab still renders one, because showing nothing is worse.
+        if (win.count === 1 && tabs + markers > paneWidth) continue;
+
+        expect(
+          tabs + markers + suffix,
+          `paneWidth=${paneWidth} active=${active} start=${win.start} count=${win.count}`,
+        ).toBeLessThanOrEqual(paneWidth);
+      }
+    }
+  });
+
+  it('reserves a column for the left marker once the window has scrolled', () => {
+    // hasLeftMarker implies a '‹' is drawn, so the tabs must fit in one column
+    // less than the budget they would otherwise have had.
+    const paneWidth = 34;
+    const win = detailTabWindow(CONTAINER_TABS, CONTAINER_TABS.length - 1, paneWidth, DETAIL_TAB_SUFFIX_LENGTH);
+    expect(win.hasLeftMarker).toBe(true);
+    const tabs = CONTAINER_TABS
+      .slice(win.start, win.start + win.count)
+      .reduce((sum, l) => sum + detailTabWidth(l), 0);
+    expect(tabs + 1).toBeLessThanOrEqual(paneWidth);
   });
 });

@@ -96,7 +96,11 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
               {rightLen > 0 && (
                 <Text color="#2B4C7E" bold inverse>{` ${rightLabel}`}</Text>
               )}
-              {!rightLen && <Text color="#2B4C7E" bold inverse>{' '}</Text>}
+              {/* No trailing filler here: restText is already padded out to
+                  restWidth, so the row totals exactly innerWidth — the same as
+                  the unfocused branch below. An extra column made the row
+                  innerWidth + 1, and Ink squeezed the leading '>' instead,
+                  which is the selection marker. */}
             </Box>
           );
         }

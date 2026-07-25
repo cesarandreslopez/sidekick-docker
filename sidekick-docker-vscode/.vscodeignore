@@ -2,6 +2,12 @@
 src/**
 tsconfig.json
 esbuild.cjs
+vitest.config.ts
 node_modules/**
 *.vsix
 .gitignore
+
+# The production build stops *emitting* sourcemaps; it does not delete maps a
+# previous dev build already wrote. Without this, `vsce package` ships ~1.7 MB
+# of orphaned maps that no longer match the minified bundle.
+out/**/*.map

@@ -42,6 +42,8 @@ export const workspace = {
     return { dispose() { /* noop */ } };
   },
   workspaceFolders: undefined as readonly { uri: { fsPath: string } }[] | undefined,
+  /** Workspace trust; compose is gated on this (see utils/workspace.ts). */
+  isTrusted: true,
   onDidChangeWorkspaceFolders(): { dispose(): void } {
     return { dispose() { /* noop */ } };
   },

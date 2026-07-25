@@ -127,15 +127,29 @@ export async function statsAction(opts: FormatOpts, globalOpts: GlobalOpts): Pro
   const client = await connectOrExit(globalOpts);
   const running = (await client.listContainers(true)).filter(c => c.state === 'running');
 
+  let failed = 0;
   const samples = await Promise.all(running.map(async (c) => {
     try {
       return { container: c, stats: await client.sampleStats(c.id) };
     } catch {
       // Container stopped between listing and sampling.
+      failed++;
       return null;
     }
   }));
   const rows = samples.filter((s): s is NonNullable<typeof s> => s !== null);
+
+  // Dropping every sample silently and then printing "No running containers."
+  // reports a healthy empty host, at exit 0, when the truth is that sampling
+  // failed. A scriptable command must not lie about that.
+  if (failed > 0) {
+    console.error(`Warning: ${failed} of ${running.length} container(s) could not be sampled.`);
+  }
+  if (running.length > 0 && rows.length === 0) {
+    console.error('Error: no container could be sampled.');
+    process.exitCode = 1;
+    return;
+  }
 
   emit(rows, opts, {
     id: (r) => shortId(r.container.id),
@@ -200,16 +214,39 @@ export async function inspectAction(
   _opts: FormatOpts,
   globalOpts: GlobalOpts,
 ): Promise<void> {
+  // An empty argument would make the id-prefix fallback below match every
+  // container ('' is a prefix of everything), silently inspecting an arbitrary
+  // one and exiting 0.
+  const query = nameOrId.trim();
+  if (!query) {
+    console.error('Error: no such container: (empty)');
+    process.exitCode = 1;
+    return;
+  }
+
   const client = await connectOrExit(globalOpts);
 
   // Accept a name as well as an id, matching `docker inspect`.
   const containers = await client.listContainers(true);
-  const match = containers.find(c => c.id === nameOrId)
-    ?? containers.find(c => c.name === nameOrId)
-    ?? containers.find(c => c.id.startsWith(nameOrId));
+  let match = containers.find(c => c.id === query)
+    ?? containers.find(c => c.name === query);
 
   if (!match) {
-    console.error(`Error: no such container: ${nameOrId}`);
+    // Prefix fallback. Docker refuses an ambiguous prefix rather than picking
+    // one, and so must a command whose output gets piped into other tools.
+    const prefixed = containers.filter(c => c.id.startsWith(query));
+    if (prefixed.length > 1) {
+      console.error(
+        `Error: multiple containers match "${query}": ${prefixed.map(c => shortId(c.id)).join(', ')}`,
+      );
+      process.exitCode = 1;
+      return;
+    }
+    match = prefixed[0];
+  }
+
+  if (!match) {
+    console.error(`Error: no such container: ${query}`);
     process.exitCode = 1;
     return;
   }

@@ -9,12 +9,18 @@ export interface ComposeExecResult {
 
 /** Raised when a `docker compose` invocation exits non-zero. */
 export class ComposeError extends Error {
+  readonly action: string;
   readonly exitCode: number;
   readonly stderr: string;
 
   constructor(action: string, result: ComposeExecResult) {
-    super(`${action} failed: ${composeFailureReason(result)}`);
+    // The bare reason, not "<action> failed: <reason>". Both frontends render
+    // errors as `${label} failed: ${errorMessage(err)}`, so embedding the
+    // action here produced "Up failed: Up failed: no such service". The action
+    // stays available as a property for anything that needs it.
+    super(composeFailureReason(result));
     this.name = 'ComposeError';
+    this.action = action;
     this.exitCode = result.exitCode;
     this.stderr = result.stderr;
   }

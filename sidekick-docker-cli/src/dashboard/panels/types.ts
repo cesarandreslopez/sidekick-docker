@@ -1,4 +1,5 @@
 import type { DockerDashboardMetrics } from '../DockerState';
+import { ansi } from '../../formatters';
 
 /** An item displayed in the side panel list. */
 export interface PanelItem {
@@ -50,7 +51,9 @@ export interface DetailTab {
  * indefinitely with no way to tell a slow call from a broken one.
  */
 export function detailFetchError(what: string, reason: string): string {
-  return `\x1b[31mCould not load ${what}.\x1b[39m\n\n${reason}\n\n\x1b[90mReselect the item to retry.\x1b[39m`;
+  // Through `ansi`, not raw escapes: those bypass the NO_COLOR/--no-color gate
+  // in formatters.ts and leave this message colored when everything else is not.
+  return `${ansi.red(`Could not load ${what}.`)}\n\n${reason}\n\n${ansi.gray('Reselect the item to retry.')}`;
 }
 
 /** Safely extract typed data from a PanelItem. Throws if data is null/undefined. */

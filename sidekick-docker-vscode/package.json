@@ -316,7 +316,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "vscode:prepublish": "npm run build:production",
-    "build:production": "node esbuild.cjs --production"
+    "build:production": "npm run clean && node esbuild.cjs --production"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -333,8 +333,8 @@
   ],
   "capabilities": {
     "untrustedWorkspaces": {
-      "supported": true,
-      "description": "Reads Docker state and runs Docker commands; it does not execute workspace code."
+      "supported": "limited",
+      "description": "Containers, images, volumes and networks work normally. Compose is disabled in an untrusted workspace, because running it would execute the workspace's own compose file."
     }
   }
 }

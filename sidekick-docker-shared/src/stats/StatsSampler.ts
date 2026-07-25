@@ -73,12 +73,19 @@ export class StatsSampler {
 
   private scheduleNext(): void {
     if (this.disposed || this.ids.length === 0) return;
-    this.timer = setTimeout(() => {
+    // Capture the handle so the completion callback can prove it still owns the
+    // schedule. A sweep can outlive its own tick, and `setIds` re-arms whenever
+    // it finds `timer === null`; without this check the stale chain would null
+    // out the newer chain's handle and then schedule a second one, leaving two
+    // timers running and only the last reachable from `stopTimer`.
+    const handle: ReturnType<typeof setTimeout> = setTimeout(() => {
       void this.sweep().finally(() => {
+        if (this.timer !== handle) return;
         this.timer = null;
         this.scheduleNext();
       });
     }, this.intervalMs);
+    this.timer = handle;
   }
 
   private stopTimer(): void {

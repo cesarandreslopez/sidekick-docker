@@ -17,7 +17,21 @@ describe('throwIfComposeFailed', () => {
     // `docker compose up` still rendered the success toast.
     const failed = result({ exitCode: 1, stderr: 'Error: no such service: web' });
     expect(() => throwIfComposeFailed(failed, 'Up')).toThrow(ComposeError);
-    expect(() => throwIfComposeFailed(failed, 'Up')).toThrow(/Up failed/);
+    expect(() => throwIfComposeFailed(failed, 'Up')).toThrow(/no such service: web/);
+  });
+
+  it('does not embed the action in the message', () => {
+    // Both frontends render `${label} failed: ${errorMessage(err)}`, so an
+    // action baked into the message came out as "Up failed: Up failed: …".
+    const failed = result({ exitCode: 1, stderr: 'Error: no such service: web' });
+    try {
+      throwIfComposeFailed(failed, 'Up');
+      expect.unreachable('should have thrown');
+    } catch (err) {
+      expect((err as ComposeError).message).toBe('Error: no such service: web');
+      expect((err as ComposeError).message).not.toMatch(/failed:/);
+      expect((err as ComposeError).action).toBe('Up');
+    }
   });
 
   it('carries the exit code and raw stderr on the error', () => {
@@ -29,6 +43,7 @@ describe('throwIfComposeFailed', () => {
       expect(err).toBeInstanceOf(ComposeError);
       expect((err as ComposeError).exitCode).toBe(17);
       expect((err as ComposeError).stderr).toBe('boom');
+      expect((err as ComposeError).action).toBe('Down');
     }
   });
 });
