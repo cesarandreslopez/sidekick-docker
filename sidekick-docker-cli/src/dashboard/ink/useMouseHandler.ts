@@ -5,6 +5,7 @@ import type { DashboardUIState, Action, AddToast } from './dashboardTypes';
 import { executeAction } from './executeAction';
 import { contextMenuHit, confirmHit, sortHit } from './overlayHitTest';
 import { windowLines } from './windowLines';
+import { panelTabWidth, detailTabWidth, detailTabWindow, shouldCompactTabs, DETAIL_TAB_SUFFIX_LENGTH } from './tabLayout';
 import type { SortField } from './dashboardTypes';
 
 const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
@@ -28,6 +29,8 @@ interface MouseContext {
   detailLines: string[];
   detailViewportHeight: number;
   detailTabs: DetailTab[];
+  /** Terminal width — the tab bar's compact threshold depends on it. */
+  columns: number;
   tabIdx: number;
   rows: number;
   addToast: AddToast;
@@ -35,11 +38,11 @@ interface MouseContext {
 }
 
 export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) => void {
-  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast } = ctx;
+  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast } = ctx;
   // Read the individual fields outside the callback: closing over `state` itself would make
   // the whole object the dependency, which the compiler cannot reconcile with the field-level
   // dependency array below (react-hooks/preserve-manual-memoization).
-  const { overlay, activePanelIndex, confirmAction, confirmSeverity } = state;
+  const { overlay, activePanelIndex, confirmAction, confirmSeverity, layoutMode } = state;
 
   return useCallback((event: TerminalMouseEvent) => {
     // Text-entry overlays: ignore all mouse events (raw escape bytes leak into the input)
@@ -127,16 +130,12 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
 
     // Row 0: TabBar
     if (y === 0) {
+      // Same geometry the TabBar renders with, including whether titles were
+      // dropped to fit — otherwise clicks land on the wrong panel when narrow.
+      const compact = shouldCompactTabs(panels, panelCounts, layoutMode, columns);
       let col = 0;
       for (let i = 0; i < panels.length; i++) {
-        const count = panelCounts[i];
-        let countLen = 0;
-        if (count) {
-          countLen = count.running !== undefined
-            ? ` ${count.running}/${count.total}`.length
-            : ` ${count.total}`.length;
-        }
-        const tabWidth = String(panels[i].shortcutKey).length + panels[i].title.length + 3 + countLen + 1;
+        const tabWidth = panelTabWidth(panels[i].shortcutKey, panels[i].title, panelCounts[i], compact);
         if (x >= col && x < col + tabWidth) {
           panels[activePanelIndex]?.onDeactivate?.();
           dispatch({ type: 'SWITCH_PANEL', index: i });
@@ -170,9 +169,12 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
 
       // Row 1 = DetailTabBar — check for tab click
       if (y === 1 && detailTabs.length > 1) {
-        let col = sideWidth;
-        for (let i = 0; i < detailTabs.length; i++) {
-          const tabWidth = detailTabs[i].label.length + 3;
+        // Only the windowed tabs are drawn, so hit-test that same slice.
+        const paneWidth = columns - sideWidth;
+        const win = detailTabWindow(detailTabs.map(t => t.label), tabIdx, paneWidth, DETAIL_TAB_SUFFIX_LENGTH);
+        let col = sideWidth + (win.hasLeftMarker ? 1 : 0);
+        for (let i = win.start; i < win.start + win.count && i < detailTabs.length; i++) {
+          const tabWidth = detailTabWidth(detailTabs[i].label);
           if (x >= col && x < col + tabWidth) {
             dispatch({ type: 'SET_DETAIL_TAB', index: i });
             return;
@@ -181,5 +183,5 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
       }
     }
-  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, addToast, removeToast, dispatch]);
+  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, columns, layoutMode, addToast, removeToast, dispatch]);
 }

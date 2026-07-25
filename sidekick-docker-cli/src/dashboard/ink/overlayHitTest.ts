@@ -19,6 +19,13 @@ const CONTEXT_MENU_HINT = 'j/k select  Enter/click run  Esc close';
 const SORT_OVERLAY_HINT = 'j/k select  Enter apply  R reverse  Esc close';
 export const SORT_OPTION_COUNT = 7;
 
+/**
+ * Natural box width of the sort overlay (hint + padding + borders). Exported
+ * so the component renders at exactly the width sortHit tests against — the
+ * two must not drift.
+ */
+export const SORT_OVERLAY_WIDTH = SORT_OVERLAY_HINT.length + 4;
+
 /** Rendered width of a context-menu action row: ` ${key} ` + `${label}[ ⚠] `. */
 function contextRowWidth(action: OverlayAction): number {
   return action.key.length + 2 + action.label.length + (action.confirm ? 2 : 0) + 1;
@@ -71,7 +78,7 @@ export function confirmHit(x: number, y: number, severity: 'low' | 'high' | 'bat
  */
 export function sortHit(x: number, y: number): number | null {
   const { top, left } = SORT_OVERLAY_ORIGIN;
-  const width = SORT_OVERLAY_HINT.length + 4;
+  const width = SORT_OVERLAY_WIDTH;
   if (x < left || x >= left + width) return null;
   const row = y - (top + 2);
   if (row < 0 || row >= SORT_OPTION_COUNT) return null;

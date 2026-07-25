@@ -11,7 +11,7 @@ export function VersionOverlay({ version }: VersionOverlayProps): React.ReactEle
 
   return (
     <Box flexDirection="column" flexGrow={1} padding={1}>
-      <Text bold color="magenta">{`\u26A1 ${BRAND_INLINE}`}</Text>
+      <Text bold color="magenta">{BRAND_INLINE}</Text>
       <Text color="#2B4C7E" bold>{`${BRAND_TAGLINE} v${version}`}</Text>
       <Text>{''}</Text>
       <Text color="gray" dimColor>{'\u2500'.repeat(40)}</Text>

@@ -1,7 +1,8 @@
 import type { ImageInfo } from 'sidekick-docker-shared';
 import { DockerClient, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { panelData } from './types';
+import { DockerState } from '../DockerState';
+import { panelData, detailFetchError } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { formatBytes, truncate, colorizeDetailKey, colorizeId, colorizeBool, sectionHeader } from '../../formatters';
 
@@ -37,6 +38,8 @@ export class ImagesPanel implements SidePanel {
       label: 'Layers',
       render: (item, metrics) => {
         const img = panelData<ImageInfo>(item);
+        const failure = metrics.detailErrors.get(DockerState.detailErrorKey('layers', img.id));
+        if (failure) return detailFetchError('layers', failure);
         const layers = metrics.imageLayers.get(img.id);
         if (!layers) return 'Loading layers...';
         if (layers.length === 0) return 'No layer history available.';

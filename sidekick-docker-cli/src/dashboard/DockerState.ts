@@ -11,6 +11,7 @@ import type {
 } from 'sidekick-docker-shared';
 import { DockerClient, ComposeDetector, StatsCollector, ComposeFileReader, MAX_LOG_LINES } from 'sidekick-docker-shared';
 import type { LogEntry, FilterMode, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
+import { debugLog } from '../utils/debug';
 
 export interface DockerDashboardMetrics {
   containers: ContainerInfo[];
@@ -22,6 +23,8 @@ export interface DockerDashboardMetrics {
   inspectedEnv: Map<string, string[]>;
   containerChanges: Map<string, FilesystemChange[]>;
   imageLayers: Map<string, ImageLayer[]>;
+  /** Why a detail-tab fetch failed, keyed `${kind}:${id}`. See DockerState.detailErrorKey. */
+  detailErrors: Map<string, string>;
   selectedContainerLogs: LogEntry[];
   selectedComposeLogs: LogEntry[];
   secondaryContainerLogs: LogEntry[];
@@ -56,6 +59,12 @@ export class DockerState {
   private inspectedEnv = new Map<string, string[]>();
   private containerChanges = new Map<string, FilesystemChange[]>();
   private imageLayers = new Map<string, ImageLayer[]>();
+  /**
+   * Failures from the lazy per-tab fetches (env, filesystem changes, image
+   * layers). These used to be swallowed into console.debug, which left the
+   * pane reading "Loading…" forever with no indication anything went wrong.
+   */
+  private detailErrors = new Map<string, string>();
   private lastRefresh: Date | null = null;
   private daemonConnected = false;
   private cachedFileConfig: ComposeFileConfig | null = null;
@@ -71,7 +80,7 @@ export class DockerState {
     if (this.refreshTimer) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
-      this.refresh().catch(e => console.debug('refresh failed:', e));
+      this.refresh().catch(e => { debugLog('refresh failed:', e); });
     }, 500);
   }
 
@@ -275,6 +284,18 @@ export class DockerState {
     return this.imageLayers.get(imageId);
   }
 
+  static detailErrorKey(kind: 'env' | 'changes' | 'layers', id: string): string {
+    return `${kind}:${id}`;
+  }
+
+  setDetailError(kind: 'env' | 'changes' | 'layers', id: string, message: string): void {
+    this.detailErrors.set(DockerState.detailErrorKey(kind, id), message);
+  }
+
+  clearDetailError(kind: 'env' | 'changes' | 'layers', id: string): void {
+    this.detailErrors.delete(DockerState.detailErrorKey(kind, id));
+  }
+
   getMetrics(): DockerDashboardMetrics {
     return {
       containers: this.containers,
@@ -286,6 +307,7 @@ export class DockerState {
       inspectedEnv: this.inspectedEnv,
       containerChanges: this.containerChanges,
       imageLayers: this.imageLayers,
+      detailErrors: this.detailErrors,
       selectedContainerLogs: this.selectedLogs,
       selectedComposeLogs: this.selectedComposeLogs,
       secondaryContainerLogs: this.secondaryLogs,

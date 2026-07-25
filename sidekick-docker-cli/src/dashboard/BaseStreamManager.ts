@@ -1,4 +1,5 @@
-import { ReconnectScheduler, errorMessage } from 'sidekick-docker-shared';
+import { ReconnectScheduler } from 'sidekick-docker-shared';
+import { debugLog } from '../utils/debug';
 
 /**
  * Abstract base for selection-driven stream managers.
@@ -50,7 +51,7 @@ export abstract class BaseStreamManager<TId, TItem> {
       this.reconnect.reset();
     } catch (err) {
       if (signal.aborted) return;
-      console.debug(`${this.streamLabel} stream error:`, errorMessage(err));
+      debugLog(`${this.streamLabel} stream error:`, err);
     }
 
     if (!signal.aborted && !this.aborted && this.isSameId(id, this.currentId) && generation === this.streamGeneration) {
@@ -62,7 +63,7 @@ export abstract class BaseStreamManager<TId, TItem> {
         }
       });
       if (!scheduled) {
-        console.debug(`${this.streamLabel} stream: gave up reconnecting for ${this.idLabel(id)}`);
+        debugLog(`${this.streamLabel} stream: gave up reconnecting for ${this.idLabel(id)}`);
       }
     }
   }

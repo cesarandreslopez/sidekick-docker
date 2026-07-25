@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { SortField } from './dashboardTypes';
-import { SORT_OVERLAY_ORIGIN } from './overlayHitTest';
+import { SORT_OVERLAY_ORIGIN, SORT_OVERLAY_WIDTH } from './overlayHitTest';
 
 const SORT_OPTIONS: { field: SortField; label: string }[] = [
   { field: 'state', label: 'State (running first)' },
@@ -17,9 +17,11 @@ interface SortOverlayProps {
   selectedIndex: number;
   currentField: SortField;
   reversed: boolean;
+  /** Clamp so the menu cannot run off a narrow terminal, as the other overlays do. */
+  maxWidth: number;
 }
 
-export function SortOverlay({ selectedIndex, currentField, reversed }: SortOverlayProps): React.ReactElement {
+export function SortOverlay({ selectedIndex, currentField, reversed, maxWidth }: SortOverlayProps): React.ReactElement {
   return (
     <Box
       position="absolute"
@@ -29,6 +31,7 @@ export function SortOverlay({ selectedIndex, currentField, reversed }: SortOverl
       borderStyle="single"
       borderColor="#2B4C7E"
       paddingX={1}
+      width={Math.min(maxWidth, SORT_OVERLAY_WIDTH)}
     >
       <Text bold color="#2B4C7E">{'\u2195 Sort by'}</Text>
       {SORT_OPTIONS.map((opt, i) => {

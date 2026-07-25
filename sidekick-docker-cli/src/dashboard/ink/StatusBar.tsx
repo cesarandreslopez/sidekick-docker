@@ -52,7 +52,7 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
 
   const segments: StatusSegment[] = [];
 
-  segments.push({ group: 'brand', text: ` ⚡ ${BRAND_INLINE}`, color: 'magenta', bold: true });
+  segments.push({ group: 'brand', text: ` ${BRAND_INLINE}`, color: 'magenta', bold: true });
   segments.push({ group: 'tagline', text: ` ${BRAND_TAGLINE}`, color: 'gray', dimColor: true });
   segments.push({ group: 'version', text: ` v${version}`, color: 'gray', dimColor: true });
   segments.push({ group: 'daemon', text: ` ${SEP} `, color: 'gray', dimColor: true });

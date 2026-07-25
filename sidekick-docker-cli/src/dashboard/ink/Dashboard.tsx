@@ -61,8 +61,11 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
         detailScrollPerTab: {},
         logFollow: true,
       };
+    // Keeps detailTabIndex: moving through the list used to snap the detail
+    // pane back to Logs, so comparing two containers' Stats or Config meant
+    // re-selecting the tab for every row.
     case 'SELECT_ITEM':
-      return { ...state, selectedItemIndex: action.index, detailTabIndex: 0, detailScrollOffset: 0, detailScrollPerTab: {}, secondaryDetailScrollOffset: 0, logFollow: true };
+      return { ...state, selectedItemIndex: action.index, detailScrollOffset: 0, detailScrollPerTab: {}, secondaryDetailScrollOffset: 0, logFollow: true };
     case 'SET_DETAIL_TAB': {
       const saved = { ...state.detailScrollPerTab, [state.detailTabIndex]: state.detailScrollOffset };
       return { ...state, detailTabIndex: action.index, detailScrollOffset: saved[action.index] ?? 0, detailScrollPerTab: saved, logFollow: true };
@@ -114,7 +117,7 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
     case 'SCROLL_SIDE': {
       if (action.itemCount === 0) return state;
       const next = Math.max(0, Math.min(state.selectedItemIndex + action.delta, action.itemCount - 1));
-      return { ...state, selectedItemIndex: next, detailTabIndex: 0, detailScrollOffset: 0, logFollow: true };
+      return { ...state, selectedItemIndex: next, detailScrollOffset: 0, logFollow: true };
     }
     case 'SET_CONFIRM':
       return { ...state, confirmAction: action.action, confirmMessage: action.message, confirmSeverity: action.severity ?? 'high', overlay: action.action ? 'confirm' : null };
@@ -522,7 +525,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const handleMouse = useMouseHandler({
     state, dispatch, panels, panelCounts, currentItems, clampedSelection,
     selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines,
-    detailViewportHeight: scrollViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast,
+    detailViewportHeight: scrollViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast,
   });
 
   // Read-only slice: safe to consume during render (help overlay, status hints).
@@ -569,7 +572,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     <MouseProvider onMouse={handleMouse}>
       <Box flexDirection="column" height={rows} width={columns}>
         {showNormalLayout && (
-          <TabBar panels={panels} activeIndex={state.activePanelIndex} layoutMode={state.layoutMode} phrase={phrase} panelCounts={panelCounts} />
+          <TabBar panels={panels} activeIndex={state.activePanelIndex} layoutMode={state.layoutMode} phrase={phrase} panelCounts={panelCounts} width={columns} />
         )}
 
         {showNormalLayout && (
@@ -592,7 +595,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
               />
             )}
             <Box flexDirection="column" flexGrow={1}>
-              <DetailTabBar tabs={detailTabs} activeIndex={state.detailTabIndex} followPaused={followPaused} />
+              <DetailTabBar tabs={detailTabs} activeIndex={tabIdx} followPaused={followPaused} width={columns - sideWidth} />
               {isCompareActive ? (
                 <CompareDetailPane
                   primaryLines={detailLines}
@@ -670,7 +673,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         )}
 
         {state.overlay === 'sort' && (
-          <SortOverlay selectedIndex={state.sortMenuIndex} currentField={state.sortField} reversed={state.sortReversed} />
+          <SortOverlay selectedIndex={state.sortMenuIndex} currentField={state.sortField} reversed={state.sortReversed} maxWidth={columns - 6} />
         )}
 
         {state.overlay === 'confirm' && (

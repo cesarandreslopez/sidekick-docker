@@ -35,7 +35,7 @@ export function HelpOverlay({ panels, activePanelIndex, version, bindings }: Hel
   return (
     <Box flexDirection="column" flexGrow={1} padding={1}>
       <Box>
-        <Text bold color="magenta">{`⚡ ${BRAND_INLINE} ${BRAND_TAGLINE}`}</Text>
+        <Text bold color="magenta">{`${BRAND_INLINE} ${BRAND_TAGLINE}`}</Text>
         <Text color="gray" dimColor>{` v${version}`}</Text>
       </Box>
 

@@ -226,7 +226,8 @@ shared/docker, shared/compose, shared/stats → shared/types
 shared/events → shared/docker, shared/types
 shared/core   → all six sub-modules
 
-cli/utils, cli/formatters, cli/state → shared
+cli/utils, cli/formatters → shared
+cli/state     → cli/utils, shared
 cli/panels    → cli/state, cli/formatters, shared
 cli/ink       → cli/panels, cli/state, cli/formatters, shared
 cli/commands  → cli/ink, cli/panels, cli/state, cli/formatters, cli/utils, shared

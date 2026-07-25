@@ -1,7 +1,8 @@
 import React from 'react';
 import { spawnSync } from 'child_process';
 import type { Command } from 'commander';
-import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId } from 'sidekick-docker-shared';
+import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId, errorMessage } from 'sidekick-docker-shared';
+import { debugLog } from '../utils/debug';
 import { connectOrExit } from '../utils/connect';
 import { copyToClipboard } from '../utils/clipboard';
 import { DockerState } from '../dashboard/DockerState';
@@ -38,7 +39,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Action callback — refresh state after any mutation
   const onAction = () => {
-    state.refresh().then(() => scheduleRender()).catch(e => console.debug('refresh failed:', e));
+    state.refresh().then(() => scheduleRender()).catch((e: unknown) => { debugLog('refresh failed:', e); });
   };
 
   let logFlushTimer: ReturnType<typeof setTimeout> | null = null;
@@ -198,16 +199,26 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       // Fetch env vars if not cached
       if (itemId && !state.getInspectedEnv(itemId)) {
         client.getContainerEnv(itemId).then(env => {
+          state.clearDetailError('env', itemId);
           state.setInspectedEnv(itemId, env);
           scheduleRender();
-        }).catch(e => console.debug('getContainerEnv failed:', e));
+        }).catch((e: unknown) => {
+          // Record it so the pane can say what went wrong instead of sitting
+          // on "Loading…" forever.
+          state.setDetailError('env', itemId, errorMessage(e));
+          scheduleRender();
+        });
       }
       // Fetch filesystem changes if not cached
       if (itemId && !state.getContainerChanges(itemId)) {
         client.getContainerChanges(itemId).then(changes => {
+          state.clearDetailError('changes', itemId);
           state.setContainerChanges(itemId, changes);
           scheduleRender();
-        }).catch(e => console.debug('getContainerChanges failed:', e));
+        }).catch((e: unknown) => {
+          state.setDetailError('changes', itemId, errorMessage(e));
+          scheduleRender();
+        });
       }
     } else if (panelId === 'services' && itemId) {
       void logManager.select(null);
@@ -252,9 +263,13 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       // Fetch image layers if not cached
       if (itemId && !state.getImageLayers(itemId)) {
         client.getImageHistory(itemId).then(layers => {
+          state.clearDetailError('layers', itemId);
           state.setImageLayers(itemId, layers);
           scheduleRender();
-        }).catch(e => console.debug('getImageHistory failed:', e));
+        }).catch((e: unknown) => {
+          state.setDetailError('layers', itemId, errorMessage(e));
+          scheduleRender();
+        });
       }
     } else {
       void logManager.select(null);
@@ -285,14 +300,14 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       scheduleRender();
     },
     onError: (err) => {
-      console.debug('event watcher error:', err.message);
+      debugLog('event watcher error:', err);
     },
   });
   watcher.start();
 
   // Periodic refresh fallback (30s)
   const refreshInterval = setInterval(() => {
-    state.refresh().then(() => scheduleRender()).catch(e => console.debug('periodic refresh failed:', e));
+    state.refresh().then(() => scheduleRender()).catch((e: unknown) => { debugLog('periodic refresh failed:', e); });
   }, 30_000);
 
   // Optional memory/stream diagnostics (SIDEKICK_DEBUG_STREAMS=1)
@@ -308,7 +323,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       const stdoutHWM = process.stdout.writableHighWaterMark;
       const templateDiag = logManager.getTemplateDiagnostics();
       const secondaryDiag = secondaryLogManager.getTemplateDiagnostics();
-      console.debug(`[sidekick-debug] heap=${heapMB}MB rss=${rssMB}MB ext=${extMB}MB bufs=${bufMB}MB stdout=${stdoutBuf}/${stdoutHWM} templates=${JSON.stringify(templateDiag)} secondary=${JSON.stringify(secondaryDiag)}`);
+      debugLog(`heap=${heapMB}MB rss=${rssMB}MB ext=${extMB}MB bufs=${bufMB}MB stdout=${stdoutBuf}/${stdoutHWM} templates=${JSON.stringify(templateDiag)} secondary=${JSON.stringify(secondaryDiag)}`);
     }, 60_000);
   }
 

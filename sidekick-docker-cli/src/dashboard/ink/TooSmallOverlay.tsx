@@ -16,7 +16,7 @@ export function TooSmallOverlay({ columns, rows }: TooSmallOverlayProps): React.
 
   return (
     <Box flexDirection="column" justifyContent="center" alignItems="center" height={rows} width={columns}>
-      <Text bold color="magenta">{`\u26A1 ${BRAND_INLINE}`}</Text>
+      <Text bold color="magenta">{BRAND_INLINE}</Text>
       <Text>{''}</Text>
       <Text color="yellow" bold>{'Terminal too small'}</Text>
       <Text color="gray">{`${columns}\u00D7${rows} \u2192 need ${hints.join(' and ')}`}</Text>

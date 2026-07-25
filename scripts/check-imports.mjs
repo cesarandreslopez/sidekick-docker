@@ -105,7 +105,10 @@ const ALLOWED_DEPS = {
   // === CLI package ===
   'cli/utils':      ['shared'], // connect/textTable wrap DockerClient + shared formatters
   'cli/formatters': ['shared'],
-  'cli/state':      ['shared'],
+  // utils only depends on shared, so this edge introduces no cycle. State and
+  // the stream managers need the debug sink (stderr, opt-in) because plain
+  // console.* writes to stdout, which Ink owns while the dashboard is mounted.
+  'cli/state':      ['cli/utils', 'shared'],
   'cli/panels':     ['cli/state', 'cli/formatters', 'shared'],
   'cli/ink':        ['cli/panels', 'cli/state', 'cli/formatters', 'shared'],
   'cli/commands':   ['cli/ink', 'cli/panels', 'cli/state', 'cli/formatters', 'cli/utils', 'shared'],

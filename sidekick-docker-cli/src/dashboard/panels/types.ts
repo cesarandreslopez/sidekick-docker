@@ -43,6 +43,16 @@ export interface DetailTab {
   autoScrollBottom?: boolean;
 }
 
+/**
+ * Message for a detail tab whose lazy fetch failed.
+ *
+ * These fetches used to swallow their error, leaving the pane on "Loading…"
+ * indefinitely with no way to tell a slow call from a broken one.
+ */
+export function detailFetchError(what: string, reason: string): string {
+  return `\x1b[31mCould not load ${what}.\x1b[39m\n\n${reason}\n\n\x1b[90mReselect the item to retry.\x1b[39m`;
+}
+
 /** Safely extract typed data from a PanelItem. Throws if data is null/undefined. */
 export function panelData<T>(item: PanelItem): T {
   if (item.data == null) {

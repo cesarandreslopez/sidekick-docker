@@ -41,7 +41,7 @@ export function ToastNotification({ toast }: ToastNotificationProps): React.Reac
 
   return (
     <Box justifyContent="flex-end">
-      <Text backgroundColor={SEVERITY_COLORS[toast.severity] || 'white'} color={textColor} bold>
+      <Text backgroundColor={SEVERITY_COLORS[toast.severity] || 'white'} color={textColor} bold wrap="truncate-end">
         {` ${icon} ${toast.message} `}
       </Text>
     </Box>

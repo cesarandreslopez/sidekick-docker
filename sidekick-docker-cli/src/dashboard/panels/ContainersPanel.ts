@@ -1,7 +1,8 @@
 import type { ContainerInfo } from 'sidekick-docker-shared';
 import { DockerClient, filterLine, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { panelData } from './types';
+import { DockerState } from '../DockerState';
+import { panelData, detailFetchError } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
 
@@ -97,6 +98,8 @@ export class ContainersPanel implements SidePanel {
       label: 'Env',
       render: (item, metrics) => {
         const c = panelData<ContainerInfo>(item);
+        const failure = metrics.detailErrors.get(DockerState.detailErrorKey('env', c.id));
+        if (failure) return detailFetchError('environment variables', failure);
         const env = metrics.inspectedEnv.get(c.id);
         if (!env) return 'Loading environment variables...';
         if (env.length === 0) return 'No environment variables set.';
@@ -134,6 +137,8 @@ export class ContainersPanel implements SidePanel {
       label: 'Files',
       render: (item, metrics) => {
         const c = panelData<ContainerInfo>(item);
+        const failure = metrics.detailErrors.get(DockerState.detailErrorKey('changes', c.id));
+        if (failure) return detailFetchError('filesystem changes', failure);
         const changes = metrics.containerChanges.get(c.id);
         if (!changes) return 'Loading filesystem changes...';
         if (changes.length === 0) return 'No filesystem changes detected.';
