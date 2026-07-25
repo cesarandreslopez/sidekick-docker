@@ -141,7 +141,7 @@ Utility functions for display formatting.
 ```typescript
 import { formatBytes, formatCpu, formatMemory, formatPorts, stateIcon, stateColor, truncate } from 'sidekick-docker-shared';
 
-formatBytes(1073741824);     // "1.00 GB"
+formatBytes(1073741824);     // "1.0 GB"
 formatCpu(45.23);            // "45.23%"
 stateIcon('running');        // colored icon character
 ```

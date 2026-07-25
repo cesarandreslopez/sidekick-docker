@@ -19,7 +19,8 @@ Projects appear as collapsible groups. Under each project, individual services a
 
 ### Info
 
-Service configuration details including image, ports, volumes, and environment variables.
+For a project row: name, status and its service list. For a service row:
+service name, project, image, state, container ID and published ports.
 
 ### Logs
 

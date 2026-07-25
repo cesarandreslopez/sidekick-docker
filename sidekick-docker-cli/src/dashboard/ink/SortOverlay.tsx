@@ -1,17 +1,9 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { SortField } from './dashboardTypes';
+import { SORT_OPTIONS } from './dashboardTypes';
 import { SORT_OVERLAY_ORIGIN, SORT_OVERLAY_WIDTH } from './overlayHitTest';
 
-const SORT_OPTIONS: { field: SortField; label: string }[] = [
-  { field: 'state', label: 'State (running first)' },
-  { field: 'name', label: 'Name' },
-  { field: 'cpu', label: 'CPU %' },
-  { field: 'mem', label: 'Memory %' },
-  { field: 'net', label: 'Network I/O' },
-  { field: 'io', label: 'Block I/O' },
-  { field: 'pids', label: 'PIDs' },
-];
 
 interface SortOverlayProps {
   selectedIndex: number;

@@ -29,11 +29,11 @@ import { getRandomPhrase } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes, renderLogLines } from '../../formatters';
 import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
+import { SORT_FIELDS } from './dashboardTypes';
 import { buildHelpBindings, buildContextHint } from './keyRegistry';
 import type { KeyContext, KeyQueryContext } from './keyRegistry';
 import { maxScrollOffset } from './windowLines';
 
-const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
 
 declare const __CLI_VERSION__: string;
 

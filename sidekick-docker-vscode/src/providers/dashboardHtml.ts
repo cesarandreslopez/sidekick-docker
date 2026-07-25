@@ -350,10 +350,6 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       white-space: nowrap;
     }
     .log-stderr { color: var(--vscode-errorForeground); }
-    .log-error { color: var(--vscode-errorForeground); }
-    .log-warn { color: var(--vscode-editorWarning-foreground, #cca700); }
-    .log-info { color: var(--sd-info); }
-    .log-debug { color: var(--vscode-descriptionForeground); }
 
     /* ─── Token-level log syntax highlighting ────────────────── */
     .tok-sev-error { color: var(--vscode-errorForeground); font-weight: 600; }
@@ -468,14 +464,9 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
 
     /* ─── Detail panel coloring ───────────────────────────────── */
-    .detail-key { color: var(--sd-info); }
     .detail-id { color: var(--vscode-descriptionForeground); opacity: 0.7; }
     .detail-bool-yes { color: var(--vscode-testing-iconPassed, #3fb950); }
     .detail-bool-no { color: var(--vscode-descriptionForeground); opacity: 0.7; }
-    .detail-stat-high { color: var(--vscode-errorForeground, #f85149); }
-    .detail-stat-med { color: var(--vscode-editorWarning-foreground, #cca700); }
-    .env-key { color: var(--sd-info); }
-    .env-value { }
 
     /* ─── Stats progress bars ───────────────────────────────────── */
     .stats-grid { display: flex; flex-direction: column; gap: 10px; }

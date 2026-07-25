@@ -14,7 +14,7 @@ import { servicesPanel } from './panels/services';
 import { imagesPanel } from './panels/images';
 import { volumesPanel } from './panels/volumes';
 import { networksPanel } from './panels/networks';
-import { colorizeLogEntry, escapeHtml, escapeAttr } from './formatters';
+import { colorizeLogEntry, escapeHtml, escapeAttr, renderSeverityBadges } from './formatters';
 import {
   initOverlays,
   showConfirm,
@@ -29,6 +29,7 @@ import {
   renderVersionOverlay,
 } from './overlays';
 import { handleGlobalKeydown, isTypingTarget } from './keyboard';
+import { parseComposeItemId } from '../types/composeItemId';
 import type { KeyboardContext } from './keyboard';
 import { filterLine } from 'sidekick-docker-shared/log';
 
@@ -213,21 +214,11 @@ function isNearBottom(el: HTMLElement, threshold = 24): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
 }
 
-function renderSeverityBadgesHtml(counts: { error: number; warn: number; info: number; debug: number; total: number }): string {
-  if (counts.total <= 0) return '';
-  const badges: string[] = [];
-  if (counts.error > 0) badges.push(`<span class="sev-badge error">E:${counts.error}</span>`);
-  if (counts.warn > 0) badges.push(`<span class="sev-badge warn">W:${counts.warn}</span>`);
-  if (counts.info > 0) badges.push(`<span class="sev-badge info">I:${counts.info}</span>`);
-  if (counts.debug > 0) badges.push(`<span class="sev-badge debug">D:${counts.debug}</span>`);
-  return badges.join('');
-}
-
 function getSelectedComposeLogKey(item: PanelItem | undefined): string | null {
   if (!item) return null;
-  const parts = item.id.split(':');
-  if (parts[0] === 'project') return parts.slice(1).join(':');
-  if (parts[0] === 'service') return `${parts[1]}:${parts.slice(2).join(':')}`;
+  const ref = parseComposeItemId(item.id);
+  if (ref.kind === 'project') return ref.projectName;
+  if (ref.kind === 'service') return `${ref.projectName}:${ref.serviceName}`;
   return null;
 }
 
@@ -591,7 +582,7 @@ function patchActiveContainerLogs(containerId: string): void {
   }
 
   const counts = state.logSeverityCounts.get(containerId);
-  severityEl.innerHTML = counts ? renderSeverityBadgesHtml(counts) : '';
+  severityEl.innerHTML = counts ? renderSeverityBadges(counts) : '';
 
   if (state.logFilterString) {
     renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
@@ -698,11 +689,11 @@ function selectItem(id: string, items: PanelItem[]): void {
 
   // Notify extension about compose service selection for log streaming
   if (getPanel().id === 'services') {
-    const parts = id.split(':');
-    if (parts[0] === 'project') {
-      post({ type: 'selectComposeService', projectName: parts.slice(1).join(':'), serviceName: null });
-    } else if (parts[0] === 'service') {
-      post({ type: 'selectComposeService', projectName: parts[1], serviceName: parts.slice(2).join(':') });
+    const ref = parseComposeItemId(id);
+    if (ref.kind === 'project') {
+      post({ type: 'selectComposeService', projectName: ref.projectName, serviceName: null });
+    } else if (ref.kind === 'service') {
+      post({ type: 'selectComposeService', projectName: ref.projectName, serviceName: ref.serviceName });
     }
   }
 
@@ -727,12 +718,12 @@ function copyCurrentLogs(): void {
   if (!state.selectedItemId) return;
   let entries: SerializedLogEntry[] | undefined;
   if (getPanel().id === 'services') {
-    const parts = state.selectedItemId.split(':');
+    const ref = parseComposeItemId(state.selectedItemId);
     let key = '';
-    if (parts[0] === 'project') {
-      key = parts.slice(1).join(':');
-    } else if (parts[0] === 'service') {
-      key = `${parts[1]}:${parts.slice(2).join(':')}`;
+    if (ref.kind === 'project') {
+      key = ref.projectName;
+    } else if (ref.kind === 'service') {
+      key = `${ref.projectName}:${ref.serviceName}`;
     }
     entries = key ? state.composeLogs.get(key) : undefined;
   } else {
@@ -817,7 +808,6 @@ initOverlays({
   executeContextAction,
   onFilterInput: (value) => {
     state.filterString = value;
-    post({ type: 'filterChange', filter: state.filterString });
     const items = getFilteredItems();
     renderSideList(items);
     renderStatusBar(items);

@@ -1,9 +1,9 @@
 import type { Key } from 'ink';
 import type { PanelAction, PanelItem } from '../panels/types';
-import type { Action, DashboardUIState, OverlayKind, SortField, ToastSeverity } from './dashboardTypes';
+import type { Action, DashboardUIState, OverlayKind, ToastSeverity } from './dashboardTypes';
+import { SORT_FIELDS } from './dashboardTypes';
 import { executeAction } from './executeAction';
 
-const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
 
 export interface OverlayInputContext {
   state: DashboardUIState;

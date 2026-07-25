@@ -9,6 +9,7 @@ import { getDashboardHtml } from './dashboardHtml';
 import { ACTION_META, runDockerAction } from './actionRegistry';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import { WebviewMessageSchema } from '../types/messageSchemas';
+import { parseComposeItemId } from '../types/composeItemId';
 
 type PanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
 
@@ -201,14 +202,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
         this.viewState.compareItemId = newCompare;
         // Parse compose fields if on services panel
         if (message.panelId === 'services' && newCompare) {
-          const parts = newCompare.split(':');
-          if (parts[0] === 'project') {
-            this.viewState.compareComposeProjectName = parts.slice(1).join(':');
-            this.viewState.compareComposeServiceName = null;
-          } else if (parts[0] === 'service') {
-            this.viewState.compareComposeProjectName = parts[1];
-            this.viewState.compareComposeServiceName = parts.slice(2).join(':');
-          }
+          const ref = parseComposeItemId(newCompare);
+          this.viewState.compareComposeProjectName = ref.kind === 'unknown' ? null : ref.projectName;
+          this.viewState.compareComposeServiceName = ref.kind === 'service' ? ref.serviceName : null;
         } else {
           this.viewState.compareComposeProjectName = null;
           this.viewState.compareComposeServiceName = null;
@@ -327,20 +323,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
       return;
     }
 
-    const parts = itemId.split(':');
-    if (parts[0] === 'project') {
-      this.viewState.composeProjectName = parts.slice(1).join(':');
-      this.viewState.composeServiceName = null;
-      return;
-    }
-    if (parts[0] === 'service') {
-      this.viewState.composeProjectName = parts[1] ?? null;
-      this.viewState.composeServiceName = parts.slice(2).join(':') || null;
-      return;
-    }
-
-    this.viewState.composeProjectName = null;
-    this.viewState.composeServiceName = null;
+    const ref = parseComposeItemId(itemId);
+    this.viewState.composeProjectName = ref.kind === 'unknown' ? null : ref.projectName;
+    this.viewState.composeServiceName = ref.kind === 'service' ? (ref.serviceName || null) : null;
   }
 
   private _syncServiceViewState(): void {
@@ -372,25 +357,16 @@ export class DockerDashboardProvider implements vscode.Disposable {
           break;
 
         case 'services': {
-          // itemId format: "project:projectName" or "service:projectName:serviceName"
-          const parts = itemId.split(':');
-          if (parts[0] === 'project') {
-            const projectName = parts.slice(1).join(':');
-            switch (actionType) {
-              case 'up': await service.composeUp(projectName); break;
-              case 'down': await service.composeDown(projectName); break;
-              case 'restart': await service.composeRestart(projectName); break;
-              case 'stop': await service.composeStop(projectName); break;
-            }
-          } else if (parts[0] === 'service') {
-            const projectName = parts[1];
-            const serviceName = parts.slice(2).join(':');
-            switch (actionType) {
-              case 'up': await service.composeUp(projectName); break;
-              case 'down': await service.composeDown(projectName); break;
-              case 'restart': await service.composeRestart(projectName, serviceName); break;
-              case 'stop': await service.composeStop(projectName, serviceName); break;
-            }
+          const ref = parseComposeItemId(itemId);
+          if (ref.kind === 'unknown') break;
+          // up/down always act on the whole project; restart/stop narrow to a
+          // single service when the row is one.
+          const serviceName = ref.kind === 'service' ? ref.serviceName : undefined;
+          switch (actionType) {
+            case 'up': await service.composeUp(ref.projectName); break;
+            case 'down': await service.composeDown(ref.projectName); break;
+            case 'restart': await service.composeRestart(ref.projectName, serviceName); break;
+            case 'stop': await service.composeStop(ref.projectName, serviceName); break;
           }
           break;
         }

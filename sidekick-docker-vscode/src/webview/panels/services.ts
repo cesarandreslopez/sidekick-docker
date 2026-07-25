@@ -1,12 +1,13 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot } from '../../types/messages';
 import type { WebviewState } from '../state';
+import { parseComposeItemId, composeProjectNameOf } from '../../types/composeItemId';
 import { stateIcon, stateColor, escapeHtml, escapeAttr, colorizeState, colorizeId, renderKvGrid, colorizeLogEntry } from '../formatters';
 
 function getComposeLogKey(itemId: string): string {
-  const parts = itemId.split(':');
-  if (parts[0] === 'project') return parts.slice(1).join(':');
-  if (parts[0] === 'service') return `${parts[1]}:${parts.slice(2).join(':')}`;
+  const ref = parseComposeItemId(itemId);
+  if (ref.kind === 'project') return ref.projectName;
+  if (ref.kind === 'service') return `${ref.projectName}:${ref.serviceName}`;
   return '';
 }
 
@@ -32,11 +33,9 @@ export const servicesPanel: PanelDefinition = {
       label: 'Info',
       render: (item: PanelItem, state: WebviewState): string => {
         if (!state.snapshot) return '';
-        // Parse item id: "project:name" or "service:project:name"
-        const parts = item.id.split(':');
-        if (parts[0] === 'project') {
-          const projectName = parts.slice(1).join(':');
-          const project = state.snapshot.composeProjects.find(p => p.name === projectName);
+        const ref = parseComposeItemId(item.id);
+        if (ref.kind === 'project') {
+          const project = state.snapshot.composeProjects.find(p => p.name === ref.projectName);
           if (!project) return 'Project not found.';
           let html = renderKvGrid([
             ['Project', escapeHtml(project.name)],
@@ -50,11 +49,9 @@ export const servicesPanel: PanelDefinition = {
           html += '</div>';
           return html;
         }
-        if (parts[0] === 'service') {
-          const projectName = parts[1];
-          const serviceName = parts.slice(2).join(':');
-          const project = state.snapshot.composeProjects.find(p => p.name === projectName);
-          const service = project?.services.find(s => s.name === serviceName);
+        if (ref.kind === 'service') {
+          const project = state.snapshot.composeProjects.find(p => p.name === ref.projectName);
+          const service = project?.services.find(s => s.name === ref.serviceName);
           if (!service) return 'Service not found.';
           return renderKvGrid([
             ['Service', escapeHtml(service.name)],
@@ -129,8 +126,7 @@ export const servicesPanel: PanelDefinition = {
 
   getActions(item: PanelItem): ActionDefinition[] {
     // Compose actions target the whole project, even from a service row.
-    const parts = item.id.split(':');
-    const projectName = parts[0] === 'project' ? parts.slice(1).join(':') : parts[1] ?? item.label.trim();
+    const projectName = composeProjectNameOf(item.id) ?? item.label.trim();
     return [
       { key: 'u', label: 'Up', actionType: 'up' },
       { key: 'D', label: 'Down', actionType: 'down', confirm: true, confirmMessage: `Bring down compose project "${projectName}"?`, confirmSeverity: 'high' },
@@ -141,13 +137,11 @@ export const servicesPanel: PanelDefinition = {
   },
 
   getSearchableText(item: PanelItem, snapshot: DashboardStateSnapshot): string {
-    const parts = item.id.split(':');
-    if (parts[0] === 'project') return parts.slice(1).join(':');
-    if (parts[0] === 'service') {
-      const projectName = parts[1];
-      const serviceName = parts.slice(2).join(':');
-      const project = snapshot.composeProjects.find(p => p.name === projectName);
-      const service = project?.services.find(s => s.name === serviceName);
+    const ref = parseComposeItemId(item.id);
+    if (ref.kind === 'project') return ref.projectName;
+    if (ref.kind === 'service') {
+      const project = snapshot.composeProjects.find(p => p.name === ref.projectName);
+      const service = project?.services.find(s => s.name === ref.serviceName);
       return service ? `${service.projectName} ${service.name} ${service.image}` : item.label;
     }
     return '';

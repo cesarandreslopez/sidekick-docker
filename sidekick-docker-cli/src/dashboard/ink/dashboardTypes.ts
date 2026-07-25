@@ -84,3 +84,24 @@ export type Action =
   | { type: 'PIN_COMPARE'; panelId: string; itemId: string }
   | { type: 'SCROLL_SECONDARY_DETAIL'; offset: number }
   | { type: 'SCROLL_SECONDARY_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number };
+
+/**
+ * The sort fields, in the order the sort menu lists them.
+ *
+ * Single source of truth: this list previously existed in five places —
+ * Dashboard, overlayInput, useMouseHandler, SortOverlay's labelled copy, and
+ * a hardcoded SORT_OPTION_COUNT in overlayHitTest — so adding a field meant
+ * finding all five or getting silent mismatches between the menu, the
+ * keyboard, and the click targets.
+ */
+export const SORT_OPTIONS: { field: SortField; label: string }[] = [
+  { field: 'state', label: 'State (running first)' },
+  { field: 'name', label: 'Name' },
+  { field: 'cpu', label: 'CPU %' },
+  { field: 'mem', label: 'Memory %' },
+  { field: 'net', label: 'Network I/O' },
+  { field: 'io', label: 'Block I/O' },
+  { field: 'pids', label: 'PIDs' },
+];
+
+export const SORT_FIELDS: SortField[] = SORT_OPTIONS.map(o => o.field);

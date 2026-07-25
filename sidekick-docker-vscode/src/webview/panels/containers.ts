@@ -1,22 +1,12 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, escapeAttr, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline, renderSeveritySparkline } from '../formatters';
+import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, escapeAttr, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline, renderSeveritySparkline, renderSeverityBadges } from '../formatters';
 import { filterLine, LogTemplateEngine } from 'sidekick-docker-shared/log';
-import type { SeverityCounts } from 'sidekick-docker-shared/log';
 
 
 function findContainer(id: string, snapshot: DashboardStateSnapshot): SerializedContainerInfo | undefined {
   return snapshot.containers.find(c => c.id === id);
-}
-
-function renderSeverityBadges(counts: SeverityCounts): string {
-  const badges: string[] = [];
-  if (counts.error > 0) badges.push(`<span class="sev-badge error">E:${counts.error}</span>`);
-  if (counts.warn > 0) badges.push(`<span class="sev-badge warn">W:${counts.warn}</span>`);
-  if (counts.info > 0) badges.push(`<span class="sev-badge info">I:${counts.info}</span>`);
-  if (counts.debug > 0) badges.push(`<span class="sev-badge debug">D:${counts.debug}</span>`);
-  return badges.join('');
 }
 
 function renderSingleLogPane(containerId: string, state: WebviewState, logRoot: string): string {

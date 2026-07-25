@@ -53,6 +53,19 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `d` | Remove (with confirmation) |
 | `e` | Exec into container |
 | `c` | Copy logs to clipboard |
+| `P` | Prune — remove all stopped containers (with confirmation) |
+
+Exec sessions detach with `Ctrl+]`.
+
+## Image, Volume and Network Actions (via context menu)
+
+| Key | Action |
+|-----|--------|
+| `d` | Remove the selected image / volume / network (with confirmation) |
+| `P` | Prune — remove all dangling images, unused volumes, or unused networks |
+
+Remove is offered only where it can succeed: volumes that are not in use, and
+networks that are neither built-in nor still attached to a container.
 
 ## Compose Actions (via context menu)
 

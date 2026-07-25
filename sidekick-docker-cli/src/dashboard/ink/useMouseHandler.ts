@@ -6,9 +6,8 @@ import { executeAction } from './executeAction';
 import { contextMenuHit, confirmHit, sortHit } from './overlayHitTest';
 import { windowLines } from './windowLines';
 import { panelTabWidth, detailTabWidth, detailTabWindow, shouldCompactTabs, DETAIL_TAB_SUFFIX_LENGTH } from './tabLayout';
-import type { SortField } from './dashboardTypes';
+import { SORT_FIELDS } from './dashboardTypes';
 
-const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
 
 interface MouseContext {
   state: DashboardUIState;

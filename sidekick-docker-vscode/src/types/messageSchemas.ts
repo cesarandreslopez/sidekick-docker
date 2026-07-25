@@ -16,7 +16,6 @@ export const WebviewMessageSchema = z.discriminatedUnion('type', [
     reversed: z.boolean(),
   }),
   z.object({ type: z.literal('action'), actionType: z.string(), itemId: z.string(), panelId: z.string() }),
-  z.object({ type: z.literal('filterChange'), filter: z.string() }),
   z.object({ type: z.literal('execContainer'), containerId: z.string() }),
   z.object({ type: z.literal('requestRefresh') }),
   z.object({ type: z.literal('selectComposeService'), projectName: z.string(), serviceName: z.string().nullable() }),

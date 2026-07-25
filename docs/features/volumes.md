@@ -8,14 +8,16 @@ Each volume row displays:
 
 - Volume name
 - Driver
-- Mount path
 - Usage status (whether any container references it)
+
+The mount path is shown in the Info tab rather than the row.
 
 ## Detail Tabs
 
 ### Info
 
-Volume details including driver, mount point, labels, and scope.
+Name, driver, mount point, creation time, and whether it is in use — including
+the names of the containers mounting it.
 
 ## Actions
 

@@ -7,9 +7,9 @@ The Images panel (press `3`) shows all local Docker images.
 Each image row displays:
 
 - Repository and tag
-- Image ID (short)
 - Size (formatted)
-- Age (created timestamp)
+
+The image ID and creation time are shown in the Info tab rather than the row.
 
 ## Detail Tabs
 

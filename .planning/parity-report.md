@@ -1,5 +1,10 @@
 # CLI vs VSCode Parity Analysis Report
 
+> **STALE — pre-0.3.0.** Several gaps listed below have since shipped: the sort
+> overlay, the show-all toggle, layout modes, rate sparklines, the severity
+> sparkline and async action feedback all exist in both surfaces. Treat this as
+> historical context, not a current to-do list.
+
 Comparative analysis of `sidekick-docker-cli` (Ink/React TUI) and `sidekick-docker-vscode` (webview extension) feature sets, with actionable gaps and implementation plan.
 
 ---

@@ -215,3 +215,20 @@ export function renderSeveritySparkline(series: { severity: string; total: numbe
   }).join('');
   return `<span class="sparkline" aria-hidden="true">${html}</span>`;
 }
+
+/**
+ * Severity count badges (E/W/I/D) for a log pane.
+ *
+ * Previously existed twice — once in dashboard.ts and once in
+ * panels/containers.ts — with the only difference being a total<=0 guard that
+ * one had and the other did not.
+ */
+export function renderSeverityBadges(counts: { error: number; warn: number; info: number; debug: number; total?: number }): string {
+  if (counts.total !== undefined && counts.total <= 0) return '';
+  const badges: string[] = [];
+  if (counts.error > 0) badges.push(`<span class="sev-badge error">E:${counts.error}</span>`);
+  if (counts.warn > 0) badges.push(`<span class="sev-badge warn">W:${counts.warn}</span>`);
+  if (counts.info > 0) badges.push(`<span class="sev-badge info">I:${counts.info}</span>`);
+  if (counts.debug > 0) badges.push(`<span class="sev-badge debug">D:${counts.debug}</span>`);
+  return badges.join('');
+}

@@ -150,7 +150,6 @@ export type WebviewMessage =
   | { type: 'switchDetailTab'; tabIndex: number }
   | { type: 'sortChanged'; field: 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids'; reversed: boolean }
   | { type: 'action'; actionType: string; itemId: string; panelId: string }
-  | { type: 'filterChange'; filter: string }
   | { type: 'execContainer'; containerId: string }
   | { type: 'requestRefresh' }
   | { type: 'selectComposeService'; projectName: string; serviceName: string | null }

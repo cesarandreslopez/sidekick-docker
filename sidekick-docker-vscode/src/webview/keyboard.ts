@@ -455,7 +455,6 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     e.preventDefault();
     if (state.filterString) {
       state.filterString = '';
-      ctx.post({ type: 'filterChange', filter: '' });
       ctx.renderAll();
       return;
     }

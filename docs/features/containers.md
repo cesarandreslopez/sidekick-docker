@@ -57,6 +57,11 @@ Environment variables set in the container, displayed as key-value pairs.
 
 Container configuration details — ID, name, image, state, status, health status (when available), creation time, ports, and Compose project info.
 
+### Labels
+
+Every label set on the container, sorted by key. Labels are how compose
+projects, orchestrators and image build metadata identify themselves.
+
 ### Files
 
 Shows all filesystem changes made inside the container compared to its base image. Each change is marked with a color-coded indicator:
@@ -101,6 +106,7 @@ Press `x` to open the context menu:
 | `d` | Remove | Remove a container (confirmation required) |
 | `e` | Exec | Open an interactive shell inside the container |
 | `c` | Copy Logs | Copy buffered log text to clipboard |
+| `P` | Prune | Remove all stopped containers (confirmation required) |
 
 ### Interactive Exec
 

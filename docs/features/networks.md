@@ -7,15 +7,21 @@ The Networks panel (press `5`) shows Docker networks.
 Each network row displays:
 
 - Network name
-- Driver (bridge, host, overlay, etc.)
-- Scope (local, swarm)
 - Connected containers count
+
+Driver, scope and addressing are shown in the Info tab rather than the row.
 
 ## Detail Tabs
 
 ### Info
 
-Network details including subnet, gateway, IPAM configuration, labels, and a list of connected containers with their IP addresses.
+Identity (ID, name, driver, scope, whether it is a default network, and the
+`internal` / `attachable` flags), addressing (IPAM driver plus each address
+pool's subnet, gateway and IP range), the connected containers with their IPv4
+addresses, and any labels.
+
+Attachments are derived from the container listing: Docker's `GET /networks`
+does not include them.
 
 ## Actions
 

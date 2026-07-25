@@ -3,6 +3,7 @@
  * positioning/sizing and the mouse handler uses the hit functions, so click
  * targets can never drift from what is rendered.
  */
+import { SORT_OPTIONS } from './dashboardTypes';
 
 export interface OverlayAction {
   key: string;
@@ -17,7 +18,8 @@ export const CONFIRM_OVERLAY_ORIGIN = { top: 3, left: 3 } as const;
 const CONTEXT_MENU_TITLE = '☰ Actions';
 const CONTEXT_MENU_HINT = 'j/k select  Enter/click run  Esc close';
 const SORT_OVERLAY_HINT = 'j/k select  Enter apply  R reverse  Esc close';
-export const SORT_OPTION_COUNT = 7;
+/** Derived, not hardcoded: adding a sort field must not require editing this too. */
+export const SORT_OPTION_COUNT = SORT_OPTIONS.length;
 
 /**
  * Natural box width of the sort overlay (hint + padding + borders). Exported
