@@ -1011,6 +1011,15 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .layer-cmd { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .layer-summary { padding: 8px 4px; font-size: 12px; color: var(--vscode-descriptionForeground); }
 
+    /* ─── Detail sub-sections (volume users, container labels) ───── */
+    .detail-section {
+      margin-top: 10px;
+      margin-bottom: 2px;
+      font-weight: 600;
+      color: var(--vscode-descriptionForeground);
+    }
+    .detail-row-indent { padding-left: 8px; font-size: 12px; word-break: break-all; }
+
     /* ─── Disconnected banner ────────────────────────────────────── */
     #disconnected-banner {
       position: fixed;

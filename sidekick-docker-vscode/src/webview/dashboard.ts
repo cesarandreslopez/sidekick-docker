@@ -122,6 +122,19 @@ function post(msg: WebviewMessage): void { vscode.postMessage(msg); }
 
 function getPanel(): PanelDefinition { return panels[state.activePanelIndex]; }
 
+/**
+ * Whether the pane currently showing is the named tab of the named panel.
+ *
+ * These checks used to compare `state.detailTabIndex` against literals, so
+ * inserting a tab silently repointed them — adding Labels between Config and
+ * Files made the "Files" check fire on Labels instead.
+ */
+function isViewingTab(panelId: string, tabLabel: string): boolean {
+  if (getPanel().id !== panelId) return false;
+  return getPanel().detailTabs[state.detailTabIndex]?.label === tabLabel;
+}
+
+
 function getFilteredItems(): PanelItem[] {
   if (!state.snapshot) return [];
   let items = getPanel().getItems(state.snapshot);
@@ -959,7 +972,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       if (msg.severityCounts) {
         state.logSeverityCounts.set(msg.containerId, msg.severityCounts);
       }
-      if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 0) {
+      if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Logs')) {
         patchActiveContainerLogs(msg.containerId);
       }
       break;
@@ -977,7 +990,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
         blockWriteRateHistory: msg.blockWriteRateHistory,
         logSeveritySeries: msg.logSeveritySeries,
       });
-      if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 1) {
+      if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Stats')) {
         patchActiveStats(msg.containerId);
       }
       break;
@@ -985,7 +998,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 
     case 'updateEnv': {
       state.envVars.set(msg.containerId, msg.env);
-      if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 2) {
+      if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Env')) {
         renderDetailContent(getFilteredItems());
       }
       break;
@@ -1023,7 +1036,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'updateChanges': {
       state.containerChanges.set(msg.containerId, msg.changes);
       // Re-render if viewing this container's Files tab
-      if (state.selectedItemId === msg.containerId && getPanel().id === 'containers' && state.detailTabIndex === 4) {
+      if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Files')) {
         renderDetailContent(getFilteredItems());
       }
       break;
@@ -1032,7 +1045,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'updateLayers': {
       state.imageLayers.set(msg.imageId, msg.layers);
       // Re-render if viewing this image's Layers tab
-      if (state.selectedItemId === msg.imageId && getPanel().id === 'images' && state.detailTabIndex === 1) {
+      if (state.selectedItemId === msg.imageId && isViewingTab('images', 'Layers')) {
         renderDetailContent(getFilteredItems());
       }
       break;
@@ -1041,7 +1054,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'updateComposeLogs': {
       const key = msg.serviceName ? `${msg.projectName}:${msg.serviceName}` : msg.projectName;
       state.composeLogs.set(key, msg.entries);
-      if (getPanel().id === 'services' && state.detailTabIndex === 1) {
+      if (isViewingTab('services', 'Logs')) {
         patchActiveComposeLogs(msg.projectName, msg.serviceName);
       }
       break;

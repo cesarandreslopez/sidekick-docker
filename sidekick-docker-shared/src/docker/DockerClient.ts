@@ -19,7 +19,8 @@ import {
   ContainerStateSchema,
   PortProtocolSchema,
   VolumeItemRawSchema,
-  NetworkContainerRefRawSchema,
+  ContainerNetworkAttachmentRawSchema,
+  NetworkIpamConfigRawSchema,
   ImageItemRawSchema,
   PruneImagesResponseSchema,
   PruneVolumesResponseSchema,
@@ -383,10 +384,15 @@ export class DockerClient {
     const volumes = result.Volumes || [];
     // Get containers to check volume usage
     const containers = await this.docker.listContainers({ all: true });
-    const usedVolumes = new Set<string>();
+    // Keep *which* containers use each volume, not just whether any do.
+    const volumeUsers = new Map<string, string[]>();
     for (const c of containers) {
+      const containerName = (c.Names?.[0] || c.Id).replace(/^\//, '');
       for (const mount of c.Mounts || []) {
-        if (mount.Name) usedVolumes.add(mount.Name);
+        if (!mount.Name) continue;
+        const users = volumeUsers.get(mount.Name);
+        if (users) users.push(containerName);
+        else volumeUsers.set(mount.Name, [containerName]);
       }
     }
 
@@ -397,7 +403,8 @@ export class DockerClient {
         driver: validated.Driver,
         mountpoint: validated.Mountpoint,
         created: new Date(validated.CreatedAt || 0),
-        isInUse: usedVolumes.has(validated.Name),
+        isInUse: volumeUsers.has(validated.Name),
+        usedBy: volumeUsers.get(validated.Name) ?? [],
       };
     });
   }
@@ -413,20 +420,46 @@ export class DockerClient {
   }
 
   async listNetworks(): Promise<NetworkInfo[]> {
-    const networks = await this.docker.listNetworks();
+    // GET /networks omits the Containers map entirely — only `network inspect`
+    // returns it — so attachments have to be derived from the container
+    // listing, which does carry NetworkSettings.Networks. Same cross-reference
+    // listVolumes already does for mounts.
+    const [networks, containerList] = await Promise.all([
+      this.docker.listNetworks(),
+      this.docker.listContainers({ all: true }),
+    ]);
     const defaultNetworks = ['bridge', 'host', 'none'];
 
-    return networks.map((n): NetworkInfo => {
-      const containers: NetworkContainerRef[] = [];
-      if (n.Containers) {
-        for (const [id, info] of Object.entries(n.Containers)) {
-          const validated = NetworkContainerRefRawSchema.parse(info);
-          containers.push({
-            containerId: shortId(id),
-            containerName: validated.Name || shortId(id),
-          });
-        }
+    const membersByNetwork = new Map<string, NetworkContainerRef[]>();
+    for (const c of containerList) {
+      const attached = (c as { NetworkSettings?: { Networks?: Record<string, unknown> } })
+        .NetworkSettings?.Networks ?? {};
+      for (const [netName, raw] of Object.entries(attached)) {
+        const validated = ContainerNetworkAttachmentRawSchema.parse(raw);
+        const ref: NetworkContainerRef = {
+          containerId: shortId(c.Id),
+          containerName: (c.Names?.[0] || c.Id).replace(/^\//, ''),
+          ipv4Address: validated.IPAddress || undefined,
+          ipv6Address: validated.GlobalIPv6Address || undefined,
+          macAddress: validated.MacAddress || undefined,
+        };
+        const existing = membersByNetwork.get(netName);
+        if (existing) existing.push(ref);
+        else membersByNetwork.set(netName, [ref]);
       }
+    }
+
+    return networks.map((n): NetworkInfo => {
+      const containers = membersByNetwork.get(n.Name) ?? [];
+
+      // The daemon returns the address pools on the listing; they were being
+      // dropped, which is why "which subnet is this on / what IP does this
+      // container have" was unanswerable in either frontend.
+      const ipamRaw = (n as { IPAM?: { Driver?: string; Config?: unknown[] } }).IPAM;
+      const ipam = (ipamRaw?.Config ?? []).map((entry) => {
+        const cfg = NetworkIpamConfigRawSchema.parse(entry);
+        return { subnet: cfg.Subnet, gateway: cfg.Gateway, ipRange: cfg.IPRange };
+      });
 
       return {
         id: shortId(n.Id),
@@ -435,6 +468,11 @@ export class DockerClient {
         scope: n.Scope || '',
         containers,
         isDefault: defaultNetworks.includes(n.Name),
+        ipamDriver: ipamRaw?.Driver || undefined,
+        ipam,
+        internal: Boolean((n as { Internal?: boolean }).Internal),
+        attachable: Boolean((n as { Attachable?: boolean }).Attachable),
+        labels: (n as { Labels?: Record<string, string> }).Labels ?? {},
       };
     });
   }

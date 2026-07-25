@@ -995,7 +995,9 @@ export class DockerService {
 // ─── Serialization helpers ───────────────────────────────────────────
 
 function serializeContainer(c: ContainerInfo): SerializedContainerInfo {
-  return { ...c, created: c.created.toISOString() };
+  // labels is optional upstream (the daemon may omit it); normalize here so
+  // the webview never has to guard it.
+  return { ...c, created: c.created.toISOString(), labels: c.labels ?? {} };
 }
 
 function serializeImage(i: ImageInfo): SerializedImageInfo {

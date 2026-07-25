@@ -19,19 +19,31 @@ export const networksPanel: PanelDefinition = {
         if (!state.snapshot) return '';
         const net = findNetwork(item.id, state.snapshot);
         if (!net) return '';
-        let html = renderKvGrid([
+        const rows: [string, string][] = [
           ['ID', colorizeId(net.id)],
           ['Name', escapeHtml(net.name)],
           ['Driver', escapeHtml(net.driver)],
           ['Scope', escapeHtml(net.scope)],
           ['Default', colorizeBool(net.isDefault)],
-        ]);
+          ['Internal', colorizeBool(net.internal)],
+          ['Attachable', colorizeBool(net.attachable)],
+        ];
+        // The daemon returns addressing on the listing; it used to be dropped,
+        // which made "what subnet is this" unanswerable.
+        if (net.ipamDriver) rows.push(['IPAM', escapeHtml(net.ipamDriver)]);
+        for (const pool of net.ipam) {
+          if (pool.subnet) rows.push(['Subnet', escapeHtml(pool.subnet)]);
+          if (pool.gateway) rows.push(['Gateway', escapeHtml(pool.gateway)]);
+          if (pool.ipRange) rows.push(['IP range', escapeHtml(pool.ipRange)]);
+        }
+        let html = renderKvGrid(rows);
         html += `<div style="margin-top:10px;">Containers (${net.containers.length}):</div>`;
         if (net.containers.length === 0) {
           html += '<div style="color:var(--vscode-descriptionForeground);padding-left:8px;">(none)</div>';
         } else {
           for (const c of net.containers) {
-            html += `<div style="padding-left:8px;">${colorizeNetworkContainer(c.containerName, c.containerId)}</div>`;
+            const addr = c.ipv4Address ? ` ${colorizeId(c.ipv4Address)}` : '';
+            html += `<div style="padding-left:8px;">${colorizeNetworkContainer(c.containerName, c.containerId)}${addr}</div>`;
           }
         }
         return html;

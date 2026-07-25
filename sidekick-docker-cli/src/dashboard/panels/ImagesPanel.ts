@@ -52,6 +52,10 @@ export class ImagesPanel implements SidePanel {
           const size = l.size > 0 ? formatBytes(l.size).padEnd(10) : '0 B'.padEnd(10);
           const cmd = truncate(l.createdBy, 60);
           lines.push(`  ${num}   ${size} ${cmd}`);
+          // comment and created ride along in ImageLayer and were never shown.
+          if (l.comment) {
+            lines.push(`        ${colorizeId(truncate(l.comment, 68))}`);
+          }
         }
         const largest = layers.reduce((max, l) => l.size > max.size ? l : max, layers[0]);
         const largestIdx = layers.indexOf(largest) + 1;

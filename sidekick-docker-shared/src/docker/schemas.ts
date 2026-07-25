@@ -90,11 +90,26 @@ export const VolumeItemRawSchema = z.object({
 });
 export type VolumeItemRaw = z.infer<typeof VolumeItemRawSchema>;
 
-/** Validates a network container reference from the Docker API. */
-export const NetworkContainerRefRawSchema = z.object({
-  Name: z.string().default(''),
+/**
+ * A container's entry in `NetworkSettings.Networks` from the container
+ * listing. This is where network membership actually comes from: the
+ * `/networks` list endpoint omits its own Containers map, so deriving
+ * attachments from the network listing yielded nothing.
+ */
+export const ContainerNetworkAttachmentRawSchema = z.object({
+  IPAddress: z.string().optional(),
+  GlobalIPv6Address: z.string().optional(),
+  MacAddress: z.string().optional(),
 });
-export type NetworkContainerRefRaw = z.infer<typeof NetworkContainerRefRawSchema>;
+export type ContainerNetworkAttachmentRaw = z.infer<typeof ContainerNetworkAttachmentRawSchema>;
+
+/** One IPAM address pool from the daemon's network listing. */
+export const NetworkIpamConfigRawSchema = z.object({
+  Subnet: z.string().optional(),
+  Gateway: z.string().optional(),
+  IPRange: z.string().optional(),
+});
+export type NetworkIpamConfigRaw = z.infer<typeof NetworkIpamConfigRawSchema>;
 
 /** Validates an image item from the Docker API (Dockerode listImages response). */
 export const ImageItemRawSchema = z.object({

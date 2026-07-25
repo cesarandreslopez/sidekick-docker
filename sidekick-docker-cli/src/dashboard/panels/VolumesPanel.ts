@@ -3,7 +3,7 @@ import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { formatBytes, truncate, colorizeDetailKey, colorizeBool } from '../../formatters';
+import { formatBytes, truncate, colorizeDetailKey, colorizeBool, sectionHeader } from '../../formatters';
 
 export class VolumesPanel implements SidePanel {
   readonly id = 'volumes';
@@ -24,13 +24,19 @@ export class VolumesPanel implements SidePanel {
       label: 'Info',
       render: (item) => {
         const vol = panelData<VolumeInfo>(item);
-        return [
+        const lines = [
           colorizeDetailKey(`Name:       ${vol.name}`),
           colorizeDetailKey(`Driver:     ${vol.driver}`),
           colorizeDetailKey(`Mountpoint: ${vol.mountpoint}`),
           colorizeDetailKey(`Created:    ${vol.created.toLocaleString()}`),
           colorizeDetailKey(`In Use:     ${colorizeBool(vol.isInUse)}`),
-        ].join('\n');
+        ];
+        // "In use" alone does not tell you what to stop before removing it.
+        if (vol.usedBy.length > 0) {
+          lines.push('', sectionHeader(`Used by (${vol.usedBy.length})`));
+          for (const name of vol.usedBy) lines.push(`  ${name}`);
+        }
+        return lines.join('\n');
       },
     },
   ];

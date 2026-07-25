@@ -201,6 +201,22 @@ export const containersPanel: PanelDefinition = {
       },
     },
     {
+      // labels arrive on every listContainers call and were displayed nowhere,
+      // even though they identify compose projects, orchestrators and image
+      // provenance. Mirrors the TUI's Labels tab.
+      label: 'Labels',
+      render: (item: PanelItem, state: WebviewState): string => {
+        if (!state.snapshot) return '';
+        const c = state.snapshot.containers.find(x => x.id === item.id);
+        if (!c) return '';
+        const keys = Object.keys(c.labels).sort();
+        if (keys.length === 0) {
+          return '<div class="empty-state"><div class="empty-icon">\u{1F3F7}</div><div class="empty-title">No labels</div><div class="empty-subtitle">This container has no labels set</div></div>';
+        }
+        return renderKvGrid(keys.map((k): [string, string] => [k, escapeHtml(c.labels[k])]));
+      },
+    },
+    {
       label: 'Files',
       render: (item: PanelItem, state: WebviewState): string => {
         const changes = state.containerChanges.get(item.id);

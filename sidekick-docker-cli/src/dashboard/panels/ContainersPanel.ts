@@ -134,6 +134,22 @@ export class ContainersPanel implements SidePanel {
       },
     },
     {
+      // labels arrive on every listContainers call and were displayed nowhere,
+      // even though they are how compose projects, orchestrators and image
+      // provenance are all identified.
+      label: 'Labels',
+      render: (item) => {
+        const c = panelData<ContainerInfo>(item);
+        const keys = Object.keys(c.labels ?? {}).sort();
+        if (keys.length === 0) return 'No labels set.';
+        const lines = [sectionHeader(`Labels (${keys.length})`), ''];
+        for (const k of keys) {
+          lines.push(`  ${colorizeEnvLine(`${k}=${c.labels?.[k] ?? ''}`)}`);
+        }
+        return lines.join('\n');
+      },
+    },
+    {
       label: 'Files',
       render: (item, metrics) => {
         const c = panelData<ContainerInfo>(item);

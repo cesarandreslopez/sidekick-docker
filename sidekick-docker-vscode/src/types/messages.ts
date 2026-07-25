@@ -10,6 +10,8 @@ export interface SerializedContainerInfo {
   composeProject?: string;
   composeService?: string;
   healthStatus?: 'healthy' | 'unhealthy' | 'starting';
+  /** Arrives on every listContainers call; previously stripped at the wire. */
+  labels: Record<string, string>;
 }
 
 export interface SerializedImageInfo {
@@ -26,6 +28,14 @@ export interface SerializedVolumeInfo {
   mountpoint: string;
   created: string;
   isInUse: boolean;
+  /** Containers mounting this volume, so "in use" says by what. */
+  usedBy: string[];
+}
+
+export interface SerializedNetworkIpamConfig {
+  subnet?: string;
+  gateway?: string;
+  ipRange?: string;
 }
 
 export interface SerializedNetworkInfo {
@@ -33,8 +43,19 @@ export interface SerializedNetworkInfo {
   name: string;
   driver: string;
   scope: string;
-  containers: { containerId: string; containerName: string }[];
+  containers: {
+    containerId: string;
+    containerName: string;
+    ipv4Address?: string;
+    ipv6Address?: string;
+    macAddress?: string;
+  }[];
   isDefault: boolean;
+  ipamDriver?: string;
+  ipam: SerializedNetworkIpamConfig[];
+  internal: boolean;
+  attachable: boolean;
+  labels: Record<string, string>;
 }
 
 export interface SerializedComposeService {

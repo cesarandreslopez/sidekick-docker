@@ -19,13 +19,21 @@ export const volumesPanel: PanelDefinition = {
         if (!state.snapshot) return '';
         const vol = findVolume(item.id, state.snapshot);
         if (!vol) return '';
-        return renderKvGrid([
+        let html = renderKvGrid([
           ['Name', escapeHtml(vol.name)],
           ['Driver', escapeHtml(vol.driver)],
           ['Mountpoint', escapeHtml(vol.mountpoint)],
           ['Created', escapeHtml(new Date(vol.created).toLocaleString())],
           ['In Use', colorizeBool(vol.isInUse)],
         ]);
+        // "In use" alone does not say what to stop before removing it.
+        if (vol.usedBy.length > 0) {
+          html += `<div class="detail-section">Used by (${vol.usedBy.length})</div>`;
+          for (const name of vol.usedBy) {
+            html += `<div class="detail-row-indent">${escapeHtml(name)}</div>`;
+          }
+        }
+        return html;
       },
     },
   ] as DetailTabDefinition[],

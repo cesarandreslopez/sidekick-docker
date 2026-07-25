@@ -3,7 +3,7 @@ import { DockerClient } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { truncate, colorizeDetailKey, colorizeId, colorizeBool, colorizeNetworkContainer } from '../../formatters';
+import { truncate, colorizeDetailKey, colorizeId, colorizeBool, colorizeNetworkContainer, colorizeEnvLine, sectionHeader } from '../../formatters';
 
 export class NetworksPanel implements SidePanel {
   readonly id = 'networks';
@@ -25,19 +25,45 @@ export class NetworksPanel implements SidePanel {
       render: (item) => {
         const net = panelData<NetworkInfo>(item);
         const lines = [
-          colorizeDetailKey(`ID:      ${colorizeId(net.id)}`),
-          colorizeDetailKey(`Name:    ${net.name}`),
-          colorizeDetailKey(`Driver:  ${net.driver}`),
-          colorizeDetailKey(`Scope:   ${net.scope}`),
-          colorizeDetailKey(`Default: ${colorizeBool(net.isDefault)}`),
-          '',
-          `Containers (${net.containers.length}):`,
+          sectionHeader('Identity'),
+          colorizeDetailKey(`  ID:         ${colorizeId(net.id)}`),
+          colorizeDetailKey(`  Name:       ${net.name}`),
+          colorizeDetailKey(`  Driver:     ${net.driver}`),
+          colorizeDetailKey(`  Scope:      ${net.scope}`),
+          colorizeDetailKey(`  Default:    ${colorizeBool(net.isDefault)}`),
+          colorizeDetailKey(`  Internal:   ${colorizeBool(net.internal)}`),
+          colorizeDetailKey(`  Attachable: ${colorizeBool(net.attachable)}`),
         ];
+
+        // Addressing: the daemon has always returned this; it used to be discarded.
+        lines.push('', sectionHeader('Addressing'));
+        if (net.ipamDriver) {
+          lines.push(colorizeDetailKey(`  IPAM:       ${net.ipamDriver}`));
+        }
+        if (net.ipam.length === 0) {
+          lines.push('  (no address pools configured)');
+        }
+        for (const pool of net.ipam) {
+          if (pool.subnet) lines.push(colorizeDetailKey(`  Subnet:     ${pool.subnet}`));
+          if (pool.gateway) lines.push(colorizeDetailKey(`  Gateway:    ${pool.gateway}`));
+          if (pool.ipRange) lines.push(colorizeDetailKey(`  IP range:   ${pool.ipRange}`));
+        }
+
+        lines.push('', sectionHeader(`Containers (${net.containers.length})`));
         for (const c of net.containers) {
-          lines.push(`  ${colorizeNetworkContainer(c.containerName, c.containerId)}`);
+          const addr = c.ipv4Address ? `  ${colorizeId(c.ipv4Address)}` : '';
+          lines.push(`  ${colorizeNetworkContainer(c.containerName, c.containerId)}${addr}`);
         }
         if (net.containers.length === 0) {
           lines.push('  (none)');
+        }
+
+        const labelKeys = Object.keys(net.labels);
+        if (labelKeys.length > 0) {
+          lines.push('', sectionHeader(`Labels (${labelKeys.length})`));
+          for (const k of labelKeys.sort()) {
+            lines.push(`  ${colorizeEnvLine(`${k}=${net.labels[k]}`)}`);
+          }
         }
         return lines.join('\n');
       },
