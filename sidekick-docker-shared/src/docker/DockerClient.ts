@@ -286,6 +286,25 @@ export class DockerClient {
     };
   }
 
+  /**
+   * Take a single stats reading without opening a stream.
+   *
+   * `streamStats` is selection-driven because a live stream per container is
+   * expensive, which leaves list-wide concerns (sorting by CPU, showing a
+   * CPU/MEM column) with no data for unselected rows. This is the cheap
+   * counterpart: one request, no stream to tear down.
+   *
+   * The daemon embeds `precpu_stats` in a `stream:false` response, so CPU
+   * percentage is computable from this single reading — `parseStats` falls
+   * back to it when no previous sample is supplied.
+   */
+  async sampleStats(id: string): Promise<ContainerStats> {
+    const container = this.docker.getContainer(id);
+    const snapshot = await container.stats({ stream: false });
+    const validated = DockerStatsRawSchema.parse(snapshot);
+    return this.parseStats(validated, 0, 0).stats;
+  }
+
   async *streamStats(id: string, signal?: AbortSignal): AsyncIterable<ContainerStats> {
     const container = this.docker.getContainer(id);
 

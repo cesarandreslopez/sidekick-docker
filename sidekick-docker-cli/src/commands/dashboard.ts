@@ -1,7 +1,7 @@
 import React from 'react';
 import { spawnSync } from 'child_process';
 import type { Command } from 'commander';
-import { ComposeClient, EventWatcher, dockerCliEnv, shortId } from 'sidekick-docker-shared';
+import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId } from 'sidekick-docker-shared';
 import { connectOrExit } from '../utils/connect';
 import { copyToClipboard } from '../utils/clipboard';
 import { DockerState } from '../dashboard/DockerState';
@@ -115,6 +115,14 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     scheduleRender();
   });
 
+  // Fills in stats for every row when the list itself needs them (sorting by a
+  // stats field). statsManager alone only ever covers the selected container.
+  const statsSampler = new StatsSampler({
+    sample: (id) => client.sampleStats(id),
+    push: (id, stats) => { state.getStatsCollector().push(id, stats); },
+    onChange: () => { scheduleRender(); },
+  });
+
   const composeLogManager = new ComposeLogStreamManager(composeClient, () => {
     if (composeLogFlushTimer) return;
     composeLogFlushTimer = setTimeout(() => {
@@ -164,6 +172,14 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       || sortField === 'net'
       || sortField === 'io'
       || sortField === 'pids';
+
+    // Sorting compares every row, so it needs a sample per container — not
+    // just the selected one. Running containers only; stopped ones report zeros.
+    statsSampler.setIds(
+      wantsLiveStats && panelId === 'containers'
+        ? state.getRunningContainerIds()
+        : [],
+    );
 
     if (panelId === 'containers') {
       void logManager.select(detailTabIndex === 0 ? itemId : null);
@@ -374,6 +390,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     try { logManager.dispose(); } catch { /* ignore */ }
     try { secondaryLogManager.dispose(); } catch { /* ignore */ }
     try { statsManager.dispose(); } catch { /* ignore */ }
+    try { statsSampler.dispose(); } catch { /* ignore */ }
     try { composeLogManager.dispose(); } catch { /* ignore */ }
     try { secondaryComposeLogManager.dispose(); } catch { /* ignore */ }
     try { if (logFlushTimer) clearTimeout(logFlushTimer); } catch { /* ignore */ }

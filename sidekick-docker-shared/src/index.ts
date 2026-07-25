@@ -16,6 +16,8 @@ export type { ComposeFileConfig, ComposeFileServiceConfig } from './compose/Comp
 
 // Stats
 export { StatsCollector } from './stats/StatsCollector';
+export { StatsSampler, STATS_SAMPLE_INTERVAL_MS } from './stats/StatsSampler';
+export type { StatsSamplerOptions } from './stats/StatsSampler';
 
 // Log analysis
 export { tokenizeLogLine } from './log/LogTokenizer';

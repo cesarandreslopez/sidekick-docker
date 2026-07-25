@@ -243,6 +243,14 @@ export class DockerState {
     return this.statsCollector;
   }
 
+  /**
+   * Ids of containers that can report stats. Stopped containers return zeros,
+   * so sampling them is wasted work.
+   */
+  getRunningContainerIds(): string[] {
+    return this.containers.filter(c => c.state === 'running').map(c => c.id);
+  }
+
   setInspectedEnv(containerId: string, env: string[]): void {
     this.inspectedEnv.set(containerId, env);
   }

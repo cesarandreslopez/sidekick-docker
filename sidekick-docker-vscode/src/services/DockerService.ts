@@ -7,6 +7,7 @@ import {
   ComposeFileReader,
   EventWatcher,
   StatsCollector,
+  StatsSampler,
   MAX_LOG_LINES,
   shortId,
 } from 'sidekick-docker-shared';
@@ -91,6 +92,11 @@ export class DockerService {
   private composeDetector = new ComposeDetector();
   private composeFileReader = new ComposeFileReader();
   private statsCollector = new StatsCollector();
+  /**
+   * Fills in stats for every row when the list needs them (a stats-based sort).
+   * The single stats *stream* only ever covers the selected container.
+   */
+  private statsSampler: StatsSampler;
   private watcher: EventWatcher | null = null;
 
   private containers: ContainerInfo[] = [];
@@ -161,6 +167,11 @@ export class DockerService {
     this.callbacks = callbacks;
     this.cwd = options?.cwd;
     this.refreshIntervalMs = options?.refreshIntervalMs ?? 30_000;
+    this.statsSampler = new StatsSampler({
+      sample: (id) => this.client.sampleStats(id),
+      push: (id, stats) => { this.statsCollector.push(id, stats); },
+      onChange: () => { this.scheduleStateUpdate(); },
+    });
   }
 
   async initialize(): Promise<boolean> {
@@ -354,6 +365,14 @@ export class DockerService {
     // Secondary compare streams: only when on Logs tab and a compare item is pinned
     const wantsSecondaryContainerLogs = wantsContainerLogs && this.viewState.compareItemId !== null;
     const wantsSecondaryComposeLogs = wantsComposeLogs && this.viewState.compareComposeProjectName !== null;
+
+    // Sorting compares every row, so it needs a sample per container — not just
+    // the selected one. Running containers only; stopped ones report zeros.
+    this.statsSampler.setIds(
+      this.viewState.activePanelId === 'containers' && needsLiveStats(this.viewState.sortField)
+        ? this.containers.filter(c => c.state === 'running').map(c => c.id)
+        : [],
+    );
 
     this.ensureLogStream(wantsContainerLogs ? selectedItemId : null);
     this.ensureStatsStream(wantsContainerStats ? selectedItemId : null);
@@ -872,6 +891,7 @@ export class DockerService {
     this.disposed = true;
     this.stopLogStream();
     this.stopStatsStream();
+    this.statsSampler.dispose();
     this.stopComposeLogStream();
     this.stopSecondaryLogStream();
     this.stopSecondaryComposeLogStream();
