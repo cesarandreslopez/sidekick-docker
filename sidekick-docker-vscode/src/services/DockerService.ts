@@ -1,16 +1,16 @@
-import { existsSync } from 'fs';
-import { dirname } from 'path';
 import {
   DockerClient,
   ComposeClient,
   ComposeDetector,
   ComposeFileReader,
   EventWatcher,
+  ReconnectScheduler,
   StatsCollector,
   StatsSampler,
   MAX_LOG_LINES,
   shortId,
   throwIfComposeFailed,
+  resolveComposeCwd,
   formatBytes,
 } from 'sidekick-docker-shared';
 import { LogAnalytics, LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/log';
@@ -71,6 +71,12 @@ export type DashboardPanelId = 'containers' | 'services' | 'images' | 'volumes' 
 
 export interface DockerServiceOptions {
   clientOptions?: DockerClientOptions;
+  /**
+   * Environment overrides for spawned `docker compose` processes, so they
+   * target the same endpoint as the API client (see `dockerCliEnv`). Without
+   * it, the socketPath setting is silently ignored by every compose action.
+   */
+  cliEnv?: Record<string, string>;
   refreshIntervalMs?: number;
   /** Directory for compose file detection and fallback cwd for compose actions. Undefined = no workspace. */
   cwd?: string;
@@ -91,7 +97,7 @@ export interface DashboardViewState {
 
 export class DockerService {
   private client: DockerClient;
-  private composeClient = new ComposeClient();
+  private composeClient: ComposeClient;
   private composeDetector = new ComposeDetector();
   private composeFileReader = new ComposeFileReader();
   private statsCollector = new StatsCollector();
@@ -124,6 +130,18 @@ export class DockerService {
   // Stats streaming
   private statsContainerId: string | null = null;
   private statsAborted = false;
+
+  /**
+   * Backoff state per stream. The CLI's stream managers get reconnection from
+   * BaseStreamManager; these loops had none, so a container restart ended the
+   * stream for good and the pane silently stopped updating until the user
+   * reselected it.
+   */
+  private logReconnect = new ReconnectScheduler();
+  private statsReconnect = new ReconnectScheduler();
+  private composeLogReconnect = new ReconnectScheduler();
+  private secondaryLogReconnect = new ReconnectScheduler();
+  private secondaryComposeLogReconnect = new ReconnectScheduler();
 
   // Compose log streaming
   private composeLogProject: string | null = null;
@@ -167,6 +185,7 @@ export class DockerService {
 
   constructor(callbacks: DockerServiceCallbacks, options?: DockerServiceOptions) {
     this.client = new DockerClient(options?.clientOptions);
+    this.composeClient = new ComposeClient(options?.cliEnv);
     this.callbacks = callbacks;
     this.cwd = options?.cwd;
     this.refreshIntervalMs = options?.refreshIntervalMs ?? 30_000;
@@ -456,6 +475,30 @@ export class DockerService {
     }
   }
 
+  /**
+   * Restart a stream that ended while its target is still selected.
+   *
+   * A stream ends for two very different reasons: the user moved away (in
+   * which case `stillWanted` is false and we must not resurrect it), or the
+   * container restarted / the daemon hiccuped (in which case the pane should
+   * recover on its own). Backoff is capped, so a container that never comes
+   * back stops being retried instead of spinning.
+   */
+  private reconnectStream(
+    scheduler: ReconnectScheduler,
+    stillWanted: () => boolean,
+    restart: () => void,
+  ): void {
+    if (this.disposed || !stillWanted()) {
+      scheduler.clear();
+      return;
+    }
+    scheduler.schedule(() => {
+      if (this.disposed || !stillWanted()) return;
+      restart();
+    });
+  }
+
   private async streamLogs(containerId: string): Promise<void> {
     // Ensure severity tracking exists for this container
     if (!this.logSeverityTimeSeries.has(containerId)) {
@@ -475,7 +518,12 @@ export class DockerService {
         this.scheduleLogFlush(containerId);
       }
       this.flushLogs(containerId);
-    } catch { /* stream ended */ }
+    } catch { /* stream ended or errored */ }
+    this.reconnectStream(
+      this.logReconnect,
+      () => !this.logAborted && this.logContainerId === containerId,
+      () => { void this.streamLogs(containerId); },
+    );
   }
 
   private async streamStats(containerId: string): Promise<void> {
@@ -505,10 +553,17 @@ export class DockerService {
           });
         }
       }
-    } catch { /* stream ended */ }
+    } catch { /* stream ended or errored */ }
+    this.reconnectStream(
+      this.statsReconnect,
+      () => !this.statsAborted && this.statsContainerId === containerId,
+      () => { void this.streamStats(containerId); },
+    );
   }
 
   private stopLogStream(): void {
+    this.logReconnect.clear();
+    this.logReconnect.reset();
     if (this.logContainerId) {
       this.flushLogs(this.logContainerId);
     }
@@ -522,6 +577,8 @@ export class DockerService {
   }
 
   private stopStatsStream(): void {
+    this.statsReconnect.clear();
+    this.statsReconnect.reset();
     this.statsAborted = true;
     this.statsContainerId = null;
   }
@@ -557,10 +614,19 @@ export class DockerService {
         this.scheduleComposeLogFlush(projectName, serviceName);
       }
       this.flushComposeLogs(projectName, serviceName);
-    } catch { /* stream ended */ }
+    } catch { /* stream ended or errored */ }
+    this.reconnectStream(
+      this.composeLogReconnect,
+      () => !this.composeLogAborted
+        && this.composeLogProject === projectName
+        && this.composeLogService === serviceName,
+      () => { void this.streamComposeLogs(projectName, serviceName); },
+    );
   }
 
   private stopComposeLogStream(): void {
+    this.composeLogReconnect.clear();
+    this.composeLogReconnect.reset();
     if (this.composeLogProject) {
       this.flushComposeLogs(this.composeLogProject, this.composeLogService);
     }
@@ -596,10 +662,17 @@ export class DockerService {
         this.scheduleSecondaryLogFlush(containerId);
       }
       this.flushSecondaryLogs(containerId);
-    } catch { /* stream ended */ }
+    } catch { /* stream ended or errored */ }
+    this.reconnectStream(
+      this.secondaryLogReconnect,
+      () => !this.secondaryLogAborted && this.secondaryLogContainerId === containerId,
+      () => { void this.streamSecondaryLogs(containerId); },
+    );
   }
 
   private stopSecondaryLogStream(): void {
+    this.secondaryLogReconnect.clear();
+    this.secondaryLogReconnect.reset();
     if (this.secondaryLogContainerId) {
       this.flushSecondaryLogs(this.secondaryLogContainerId);
     }
@@ -656,10 +729,19 @@ export class DockerService {
         this.scheduleSecondaryComposeLogFlush(projectName, serviceName);
       }
       this.flushSecondaryComposeLogs(projectName, serviceName);
-    } catch { /* stream ended */ }
+    } catch { /* stream ended or errored */ }
+    this.reconnectStream(
+      this.secondaryComposeLogReconnect,
+      () => !this.secondaryComposeLogAborted
+        && this.secondaryComposeLogProject === projectName
+        && this.secondaryComposeLogService === serviceName,
+      () => { void this.streamSecondaryComposeLogs(projectName, serviceName); },
+    );
   }
 
   private stopSecondaryComposeLogStream(): void {
+    this.secondaryComposeLogReconnect.clear();
+    this.secondaryComposeLogReconnect.reset();
     if (this.secondaryComposeLogProject) {
       this.flushSecondaryComposeLogs(this.secondaryComposeLogProject, this.secondaryComposeLogService);
     }
@@ -832,9 +914,7 @@ export class DockerService {
       }
     }
 
-    if (workingDir && existsSync(workingDir)) return workingDir;
-    if (configFile && existsSync(configFile)) return dirname(configFile);
-    return this.cwd;
+    return resolveComposeCwd({ workingDir, configFile }, this.cwd);
   }
 
   /**

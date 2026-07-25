@@ -270,6 +270,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
       },
     }, {
       clientOptions: settings.clientOptions,
+      cliEnv: settings.cliEnv,
       refreshIntervalMs: settings.refreshIntervalMs,
       cwd,
     });
@@ -440,10 +441,14 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
   private _openExecTerminal(containerId: string): void {
     const name = this.service?.getContainerName(containerId) ?? shortId(containerId);
+    const settings = getSettings();
     const terminal = vscode.window.createTerminal({
       name: `Exec: ${name}`,
       shellPath: 'docker',
-      shellArgs: ['exec', '-it', containerId, getSettings().execShell],
+      shellArgs: ['exec', '-it', containerId, settings.execShell],
+      // Without this the spawned `docker` ignores the socketPath setting and
+      // execs into whatever the default daemon has, not what is on screen.
+      env: settings.cliEnv,
     });
     terminal.show();
   }

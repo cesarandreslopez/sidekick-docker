@@ -28,6 +28,13 @@ export interface ExecManagerOptions {
   rows: number;
   onData: (data: string) => void;
   onExit: () => void;
+  /**
+   * Endpoint overrides for the spawned `docker` process (see `dockerCliEnv`).
+   * A subprocess cannot see the endpoint dockerode was configured with, so
+   * without this `--socket` silently exec'd into a container on a different
+   * daemon than the one on screen.
+   */
+  env?: Record<string, string>;
 }
 
 export class ExecManager {
@@ -50,7 +57,7 @@ export class ExecManager {
       name: 'xterm-256color',
       cols: opts.cols,
       rows: opts.rows - 2, // Reserve space for header
-      env: process.env as Record<string, string>,
+      env: { ...process.env, ...opts.env } as Record<string, string>,
     });
 
     this.disposables.push(

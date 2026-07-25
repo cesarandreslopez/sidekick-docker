@@ -206,6 +206,8 @@ interface DashboardProps {
   onViewStateChange?: (viewState: DashboardViewState) => void;
   execTriggerRef?: React.RefObject<((containerId: string, containerName: string) => void) | null>;
   onExecFallback?: (containerId: string) => void;
+  /** Endpoint overrides for the spawned `docker exec` process (see `dockerCliEnv`). */
+  dockerEnv?: Record<string, string>;
 }
 
 export interface DashboardViewState {
@@ -216,7 +218,7 @@ export interface DashboardViewState {
   compareItemId: string | null;
 }
 
-export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback }: DashboardProps): React.ReactElement {
+export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { columns, rows } = useTerminalSize();
   const { exit } = useApp();
@@ -251,6 +253,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         containerName,
         cols: columns,
         rows,
+        env: dockerEnv,
         onData: (data) => {
           const cleaned = stripCursorEscapes(data);
           dispatch({ type: 'EXEC_APPEND_OUTPUT', data: cleaned });
@@ -271,7 +274,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       });
     };
     return () => { execTriggerRef.current = null; };
-  }, [execTriggerRef, onExecFallback, columns, rows]);
+  }, [execTriggerRef, onExecFallback, columns, rows, dockerEnv]);
 
   // Forward raw stdin to PTY when exec overlay is active
   useEffect(() => {

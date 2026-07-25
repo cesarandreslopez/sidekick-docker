@@ -30,9 +30,11 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   const state = new DockerState(client, cwd);
   await state.refresh();
 
-  // Create compose client targeting the same daemon as the API client —
-  // spawned `docker compose` processes don't see --socket on their own.
-  const composeClient = new ComposeClient(socket ? dockerCliEnv(socket) : undefined);
+  // Subprocesses cannot see the endpoint dockerode was configured with, so
+  // every spawned `docker` (compose, exec) needs these overrides or --socket
+  // is silently ignored and they talk to the default daemon instead.
+  const cliEnv = socket ? dockerCliEnv(socket) : undefined;
+  const composeClient = new ComposeClient(cliEnv);
 
   // Action callback — refresh state after any mutation
   const onAction = () => {
@@ -59,6 +61,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           onViewStateChange,
           execTriggerRef,
           onExecFallback,
+          dockerEnv: cliEnv,
         }),
       );
     }, 200);
@@ -320,6 +323,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
     spawnSync('docker', ['exec', '-it', containerId, '/bin/sh'], {
       stdio: 'inherit',
+      env: { ...process.env, ...cliEnv },
     });
 
     // Re-create the Ink instance after the shell exits
@@ -330,6 +334,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
         onViewStateChange,
         execTriggerRef,
         onExecFallback,
+        dockerEnv: cliEnv,
       }),
     );
     enableMouse();
@@ -345,6 +350,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       onViewStateChange,
       execTriggerRef,
       onExecFallback,
+      dockerEnv: cliEnv,
     }),
   );
 

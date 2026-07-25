@@ -6,5 +6,7 @@ export { ComposeClient, ComposeError, composeFailureReason, throwIfComposeFailed
 export type { ComposeExecResult } from './ComposeClient';
 export { ComposeDetector } from './ComposeDetector';
 export type { ComposeProjectSource } from './ComposeDetector';
+export { resolveComposeCwd } from './composeCwd';
+export type { ComposeProjectSourceLocation } from './composeCwd';
 export { ComposeFileReader } from './ComposeFileReader';
 export type { ComposeFileConfig, ComposeFileServiceConfig } from './ComposeFileReader';

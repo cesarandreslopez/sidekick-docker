@@ -1,5 +1,5 @@
 import type { ComposeService, ComposeProject, ComposeExecResult } from 'sidekick-docker-shared';
-import { ComposeClient, filterLine, throwIfComposeFailed } from 'sidekick-docker-shared';
+import { ComposeClient, filterLine, throwIfComposeFailed, resolveComposeCwd } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -119,6 +119,22 @@ export class ServicesPanel implements SidePanel {
   }
 
   /**
+   * Directory to run this project's compose command in.
+   *
+   * The panel used to pass a single cwd captured at construction — the
+   * process's own working directory — for every project. Running the TUI from
+   * ~ and hitting Up on a project created in ~/work/api ran compose in the
+   * wrong place. Resolve from the project's own recorded location instead.
+   */
+  private cwdFor(d: ServiceItemData): string | undefined {
+    const projectName = getProjectName(d);
+    const project = d.type === 'project'
+      ? d.project
+      : this.lastMetrics?.composeProjects.find(p => p.name === projectName);
+    return resolveComposeCwd(project, this.cwd);
+  }
+
+  /**
    * Await a compose run and raise on a non-zero exit.
    *
    * ComposeExecResult carries exitCode and stderr, but every call site used to
@@ -138,7 +154,7 @@ export class ServicesPanel implements SidePanel {
         label: 'Up',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          return this.runCompose('Up', this.composeClient.up(getProjectName(d), this.cwd));
+          return this.runCompose('Up', this.composeClient.up(getProjectName(d), this.cwdFor(d)));
         },
         condition: (item) => item.data !== null,
       },
@@ -150,7 +166,7 @@ export class ServicesPanel implements SidePanel {
         confirmSeverity: 'high',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          return this.runCompose('Down', this.composeClient.down(getProjectName(d), this.cwd));
+          return this.runCompose('Down', this.composeClient.down(getProjectName(d), this.cwdFor(d)));
         },
         condition: (item) => item.data !== null,
       },
@@ -160,8 +176,8 @@ export class ServicesPanel implements SidePanel {
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
           return this.runCompose('Restart', d.type === 'service'
-            ? this.composeClient.restart(d.service.projectName, d.service.name, this.cwd)
-            : this.composeClient.restart(d.project.name, undefined, this.cwd));
+            ? this.composeClient.restart(d.service.projectName, d.service.name, this.cwdFor(d))
+            : this.composeClient.restart(d.project.name, undefined, this.cwdFor(d)));
         },
         condition: (item) => item.data !== null,
       },
@@ -171,8 +187,8 @@ export class ServicesPanel implements SidePanel {
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
           return this.runCompose('Stop', d.type === 'service'
-            ? this.composeClient.stop(d.service.projectName, d.service.name, this.cwd)
-            : this.composeClient.stop(d.project.name, undefined, this.cwd));
+            ? this.composeClient.stop(d.service.projectName, d.service.name, this.cwdFor(d))
+            : this.composeClient.stop(d.project.name, undefined, this.cwdFor(d)));
         },
         condition: (item) => item.data !== null,
       },
