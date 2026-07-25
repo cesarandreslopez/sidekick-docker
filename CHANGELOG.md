@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-07-24
+
 ### Fixed
 
 - **Sorting containers by CPU, memory, network, block I/O or PIDs compared
@@ -70,6 +72,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - VSCode declares `extensionKind: workspace`, so Remote-SSH and dev-container
   sessions target the remote daemon; and ships a minified bundle via a
   `vscode:prepublish` hook that was missing.
+- VSCode runs in an untrusted workspace with `untrustedWorkspaces: "limited"`.
+  Containers, images, volumes and networks behave normally; compose is disabled,
+  because `docker compose config`/`up` reads and executes a compose file the
+  workspace itself controls. Previously the extension was disabled outright in
+  Restricted Mode.
 - Accessibility: the webview list now takes focus so screen readers announce
   selection, decorative glyphs are hidden, mouse-only affordances became real
   buttons, and modal overlays manage focus.
@@ -559,6 +566,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.4.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.0
+[0.3.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.3.0
+[0.2.6]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.6
+[0.2.5]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.5
+[0.2.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.4
 [0.2.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.3
 [0.2.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.2
 [0.2.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.1

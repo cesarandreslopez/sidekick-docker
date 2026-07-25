@@ -5,6 +5,34 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-24
+
+### Added
+
+- `Sidekick Docker: Exec into Container...` and `Sidekick Docker: Show Container Logs...` — reachable from the container tree and the command palette. Exec was previously reachable only from inside the webview, despite a documented `sidekick-docker.exec.defaultShell` setting that most users had no way to exercise
+- Clicking a tree item opens it; unhealthy and starting containers are now visually distinct in the tree
+- Container prune; images, volumes and networks already had it
+- Labels tab for containers, and network addressing (subnet, gateway, IPAM, per-container IPs) in the Networks Info tab
+- Volume Info lists the containers mounting each volume
+
+### Fixed
+
+- **Sorting containers by CPU, memory, network, block I/O or PIDs compared zeros.** Stats are streamed one container at a time by design, so nothing held a sample for any unselected row. A one-shot sampler now fills every other running container while a stats sort is active
+- **Log and stats streams never recovered.** A container restart ended them permanently while the pane still looked live
+- **Failed operations reported success.** `docker compose` exit codes and stderr were discarded at every call site, so a failed `up` still rendered the success toast; prune results were discarded, so reclaimed space could not be reported
+- **Networks never listed their containers.** Docker's `GET /networks` omits the container map, so every network reported zero attachments — which also meant the "cannot remove a network in use" guard never fired. Attachments are now derived from the container listing
+- **The `socketPath` setting was ignored by spawned `docker` processes.** Compose and exec inherited the ambient environment, so they could target a different daemon than the one on screen
+- Detail tabs could sit on "Loading…" forever — Env, Files and Layers swallowed fetch errors and now show what failed
+
+### Changed
+
+- Declares `extensionKind: workspace`, so Remote-SSH and dev-container sessions target the remote daemon rather than the local one
+- Runs in an untrusted workspace with `capabilities.untrustedWorkspaces: "limited"` — containers, images, volumes and networks behave normally, while compose is disabled, because `docker compose config`/`up` reads and executes a compose file the workspace itself controls. Previously the extension was disabled outright in Restricted Mode
+- Ships a minified bundle — a `vscode:prepublish` hook was missing, so published builds carried unminified sources and sourcemaps
+- `@types/vscode` is pinned to match `engines.vscode`, which it previously floated 24 minor versions above
+- Accessibility: the webview list now takes focus so screen readers announce selection, decorative glyphs are hidden from assistive tech, mouse-only affordances became real buttons, and modal overlays manage focus
+- The dashboard works outside a dark theme — hardcoded status colours became theme variables
+
 ## [0.3.0] - 2026-07-10
 
 ### Added
@@ -169,6 +197,11 @@ _No changes — CLI-only bugfix release._
 - Container config detail view
 - Docker event watching for real-time state updates
 
+[0.4.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.0
+[0.3.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.3.0
+[0.2.6]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.6
+[0.2.5]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.5
+[0.2.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.4
 [0.2.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.3
 [0.2.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.2
 [0.2.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.1

@@ -6,6 +6,82 @@ All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-24
+
+### Fixed
+
+- **Sorting containers by CPU, memory, network, block I/O or PIDs compared
+  zeros.** Stats are streamed one container at a time by design, so the
+  collector held no sample for any unselected row. A new one-shot sampler fills
+  every running container while a stats sort is active.
+- **Failed operations reported success.** `docker compose` exit codes and
+  stderr were discarded at every call site, so a failed `up` rendered the
+  success toast. Clipboard failures reported "Copied N lines" with no clipboard
+  tool installed. VSCode discarded prune results and could not report reclaimed
+  space.
+- **Networks never listed their containers.** Docker's `GET /networks` omits
+  the container map, so every network reported zero attachments — which also
+  meant the "cannot remove a network in use" guard never fired. Attachments are
+  now derived from the container listing.
+- **Compose actions ran in the wrong directory (CLI).** The panel used the
+  process's working directory for every project instead of the project's own
+  recorded location.
+- **`--socket` and the `socketPath` setting were ignored by spawned `docker`
+  processes.** Compose and exec inherited the ambient environment, so they
+  could target a different daemon than the one on screen.
+- **VSCode log and stats streams never recovered.** A container restart ended
+  them permanently while the pane still looked live.
+- **`console.debug` corrupted the TUI.** Nine call sites wrote to stdout while
+  Ink owned the screen. Diagnostics now go to stderr behind
+  `SIDEKICK_DEBUG_STREAMS`.
+- **Detail tabs could sit on "Loading…" forever.** Env, Files and Layers
+  swallowed fetch errors; they now show what failed.
+- **Tab bars wrapped into three rows at 80 columns**, and every list row
+  silently lost its leading character to an off-by-one in the width budget.
+- Moving through the list no longer resets the detail pane to Logs.
+- Doubled `⚡` in the TUI brand mark.
+
+### Added
+
+- `sidekick-docker images`, `volumes`, `networks`, `stats`, `df` and `inspect`
+  — scriptable commands following the existing `ps` contract.
+- Container prune in both surfaces; images, volumes and networks already had it.
+- `DockerClient.diskUsage()` (`docker system df`), including build cache, which
+  was reported nowhere.
+- Labels tab for containers, and network addressing (subnet, gateway, IPAM,
+  per-container IPs) in the Networks Info tab.
+- Volume Info lists the containers mounting each volume.
+- VSCode: `Exec into Container...` and `Show Container Logs...` commands,
+  reachable from the tree and the command palette. Exec was previously
+  reachable only from inside the webview, despite a documented
+  `exec.defaultShell` setting.
+- VSCode: clicking a tree item opens it; unhealthy and starting containers are
+  now visually distinct.
+
+### Changed
+
+- **BREAKING (CLI):** requires Node >= 22.12.0. Ink 7 and Commander 15 need it,
+  and Node 20 is end-of-life.
+- Dependencies: Ink 7, Commander 15, dockerode 5, TypeScript 6.0.3, Vitest 4,
+  ESLint 10, `@types/dockerode` 4. TypeScript 7 is deferred while
+  typescript-eslint's peer range excludes it.
+- Removed the unused `js-yaml` runtime dependency from the shared package.
+- `@types/vscode` is pinned to match `engines.vscode`, which it previously
+  floated 24 minor versions above.
+- VSCode declares `extensionKind: workspace`, so Remote-SSH and dev-container
+  sessions target the remote daemon; and ships a minified bundle via a
+  `vscode:prepublish` hook that was missing.
+- VSCode runs in an untrusted workspace with `untrustedWorkspaces: "limited"`.
+  Containers, images, volumes and networks behave normally; compose is disabled,
+  because `docker compose config`/`up` reads and executes a compose file the
+  workspace itself controls. Previously the extension was disabled outright in
+  Restricted Mode.
+- Accessibility: the webview list now takes focus so screen readers announce
+  selection, decorative glyphs are hidden, mouse-only affordances became real
+  buttons, and modal overlays manage focus.
+- Both surfaces work outside a dark theme: hardcoded status colours became
+  theme variables, and the TUI inherits the terminal's own foreground.
+
 ## [0.3.0] - 2026-07-10
 
 ### Added

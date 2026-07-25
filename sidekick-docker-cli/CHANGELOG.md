@@ -5,6 +5,35 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-07-24
+
+### Added
+
+- `sidekick-docker images`, `volumes`, `networks`, `stats`, `df` and `inspect` — scriptable commands following the existing `ps` contract, each with `--format <table|json>` and the shared `--socket`/`--no-color`/`--verbose` handling
+- `df` reports build cache, which nothing else in either surface surfaced; `inspect` prints the raw container payload (mounts, restart policy, resource limits, health history) and exits non-zero when no container matches
+- Container prune on the Containers panel; images, volumes and networks already had it
+- Labels tab for containers, and network addressing (subnet, gateway, IPAM, per-container IPs) in the Networks Info tab
+- Volume Info lists the containers mounting each volume
+
+### Fixed
+
+- **Sorting containers by CPU, memory, network, block I/O or PIDs compared zeros.** Stats are streamed one container at a time by design, so the collector held no sample for any unselected row. A new one-shot sampler fills every running container while a stats sort is active
+- **Failed operations reported success.** `docker compose` exit codes and stderr were discarded at every call site, so a failed `up` still rendered the success toast; Copy Logs reported "Copied N lines" with no clipboard tool installed
+- **Networks never listed their containers.** Docker's `GET /networks` omits the container map, so every network reported zero attachments — which also meant the "cannot remove a network in use" guard never fired. Attachments are now derived from the container listing
+- **Compose actions ran in the wrong directory.** The panel used the process's working directory for every project instead of the project's own recorded location
+- **`--socket` was ignored by spawned `docker` processes.** Compose and exec inherited the ambient environment, so they could target a different daemon than the one on screen
+- **`console.debug` corrupted the TUI.** Nine call sites wrote to stdout while Ink owned the screen; diagnostics now go to stderr behind `SIDEKICK_DEBUG_STREAMS`
+- **Detail tabs could sit on "Loading…" forever** — Env, Files and Layers swallowed fetch errors and now show what failed
+- Tab bars wrapped into three rows at 80 columns, and every list row silently lost its leading character to an off-by-one in the width budget
+- Moving through the list no longer resets the detail pane to Logs
+- Doubled `⚡` in the brand mark
+
+### Changed
+
+- **BREAKING:** requires Node >= 22.12.0. Ink 7 and Commander 15 need it, and Node 20 is end-of-life
+- Dependencies: Ink 7, Commander 15, dockerode 5, TypeScript 6.0.3, Vitest 4, ESLint 10, `@types/dockerode` 4. TypeScript 7 is deferred while typescript-eslint's peer range excludes it
+- The TUI works outside a dark theme — hardcoded status colours became theme-aware, and the TUI inherits the terminal's own foreground
+
 ## [0.3.0] - 2026-07-10
 
 ### Added
@@ -224,6 +253,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sidekick-docker logs <container>` — stream container logs
 - `--socket <path>` flag for custom Docker socket
 
+[0.4.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.0
+[0.3.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.3.0
+[0.2.6]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.6
+[0.2.5]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.5
+[0.2.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.4
 [0.2.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.3
 [0.2.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.2
 [0.2.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.1
