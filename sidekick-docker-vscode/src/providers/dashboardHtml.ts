@@ -4,10 +4,6 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
   const scriptUri = webview.asWebviewUri(
     vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'dashboard.js')
   );
-  const iconUri = webview.asWebviewUri(
-    vscode.Uri.joinPath(extensionUri, 'images', 'icon-64.png')
-  );
-
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -32,6 +28,24 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     :focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: -1px;
+    }
+
+    /*
+     * These affordances were <span>s: clickable with a mouse, invisible to
+     * assistive tech and unreachable by keyboard. They are real <button>s now,
+     * so strip the user-agent chrome and let their existing rules style them.
+     */
+    .hint-chip,
+    .pin-btn,
+    .row-actions-btn,
+    .filter-mode,
+    .copy-logs-btn {
+      background: none;
+      border: none;
+      font: inherit;
+      color: inherit;
+      cursor: pointer;
+      line-height: inherit;
     }
     body {
       font-family: var(--vscode-font-family, 'Segoe WPC', 'Segoe UI', sans-serif);
@@ -554,12 +568,6 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       font-weight: 600;
       padding-right: 12px;
       border-right: 1px solid rgba(255,255,255,0.2);
-    }
-    #status-bar .brand-icon {
-      width: 16px;
-      height: 16px;
-      border-radius: 3px;
-      flex-shrink: 0;
     }
     #status-bar .hints {
       flex-grow: 1;
@@ -1096,9 +1104,8 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     <button id="retry-connect">Retry</button>
   </div>
   <div id="status-bar">
-    <span class="brand"><img src="${iconUri}" alt="" class="brand-icon" />SIDEKICK Docker</span>
-    <span class="hints"></span>
-    <span class="connection"><span class="dot connecting"></span><span class="conn-text">connecting...</span></span>
+    <span id="status-bar-main"></span>
+    <span class="connection" id="connection-status" role="status" aria-live="polite"><span class="dot connecting" aria-hidden="true"></span><span class="conn-text">connecting...</span></span>
   </div>
 
   <div id="confirm-overlay">

@@ -28,7 +28,7 @@ import {
   renderHelpOverlay,
   renderVersionOverlay,
 } from './overlays';
-import { handleGlobalKeydown } from './keyboard';
+import { handleGlobalKeydown, isTypingTarget } from './keyboard';
 import type { KeyboardContext } from './keyboard';
 import { filterLine } from 'sidekick-docker-shared/log';
 
@@ -107,6 +107,8 @@ const $sideList = document.getElementById('side-list')!;
 const $detailTabBar = document.getElementById('detail-tab-bar')!;
 const $detailContent = document.getElementById('detail-content')!;
 const $statusBar = document.getElementById('status-bar')!;
+const $statusBarMain = document.getElementById('status-bar-main')!;
+const $connectionStatus = document.getElementById('connection-status')!;
 const $toastContainer = document.getElementById('toast-container')!;
 
 // Static ARIA wiring (per-render attributes are set in the renderers)
@@ -116,6 +118,10 @@ $detailTabBar.setAttribute('role', 'tablist');
 $detailTabBar.setAttribute('aria-label', 'Detail tabs');
 $sideList.setAttribute('role', 'listbox');
 $sideList.setAttribute('tabindex', '0');
+$detailContent.setAttribute('role', 'tabpanel');
+$detailContent.setAttribute('aria-label', 'Details');
+// Scrollable region: keyboard-operable without knowing the app's j/k scheme.
+$detailContent.setAttribute('tabindex', '0');
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 function post(msg: WebviewMessage): void { vscode.postMessage(msg); }
@@ -276,6 +282,11 @@ function renderAll(): void {
 
   // Apply focus indicator
   $sideList.classList.toggle('focused', state.focusTarget === 'side');
+  // aria-activedescendant is only announced while the owning listbox has DOM
+  // focus. Without this the per-row ARIA below is built and never used.
+  if (state.focusTarget === 'side' && document.activeElement !== $sideList && !isTypingTarget(document.activeElement)) {
+    $sideList.focus({ preventScroll: true });
+  }
   const $detailPane = document.getElementById('detail-pane')!;
   $detailPane.classList.toggle('focused', state.focusTarget === 'detail');
 
@@ -353,9 +364,9 @@ function renderSideList(items: PanelItem[]): void {
       : '';
     const badgeHtml = item.badge ? `<span class="side-badge">${escapeHtml(item.badge)}</span>` : '';
     const pinBtnHtml = (panelId === 'containers' || panelId === 'services')
-      ? `<span class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}">\u{1F4CC}</span>`
+      ? `<button type="button" class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeAttr(item.label)} for comparison" aria-pressed="${isPinned}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}" tabindex="-1">\u{1F4CC}</button>`
       : '';
-    const actionsBtnHtml = `<span class="row-actions-btn" data-menu-id="${escapeAttr(item.id)}" title="Actions">\u22EF</span>`;
+    const actionsBtnHtml = `<button type="button" class="row-actions-btn" data-menu-id="${escapeAttr(item.id)}" aria-label="Actions for ${escapeAttr(item.label)}" title="Actions" tabindex="-1">\u22EF</button>`;
     html += `<div class="side-item${isSelected ? ' selected' : ''}${pinClass}" role="option" id="${rowId}" aria-selected="${isSelected}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${healthHtml}${pinBtnHtml}${actionsBtnHtml}${badgeHtml}</div>`;
   }
   $sideList.innerHTML = html;
@@ -495,21 +506,21 @@ function renderStatusBar(items: PanelItem[]): void {
   const hints = hintParts.join('  ');
 
   // Trailing global hints are clickable chips (mouse path for overlays)
-  const chipsHtml = '<span class="hint-chip" data-hint-action="filter">/ filter</span>'
-    + '<span class="hint-chip" data-hint-action="actions">x actions</span>'
-    + '<span class="hint-chip" data-hint-action="help">? help</span>'
-    + '<span class="hint-chip" data-hint-action="refresh" title="Refresh now">\u21BB refresh</span>';
+  const chipsHtml = '<button type="button" class="hint-chip" data-hint-action="filter">/ filter</button>'
+    + '<button type="button" class="hint-chip" data-hint-action="actions">x actions</button>'
+    + '<button type="button" class="hint-chip" data-hint-action="help">? help</button>'
+    + '<button type="button" class="hint-chip" data-hint-action="refresh" title="Refresh now"><span aria-hidden="true">\u21BB</span> refresh</button>';
 
   let connDot: string;
   let connText: string;
   if (state.connState === 'connecting') {
-    connDot = '<span class="dot connecting"></span>';
+    connDot = '<span class="dot connecting" aria-hidden="true"></span>';
     connText = 'connecting\u2026';
   } else if (state.connState === 'connected') {
-    connDot = '<span class="dot connected"></span>';
+    connDot = '<span class="dot connected" aria-hidden="true"></span>';
     connText = `${runningCount}/${totalCount}`;
   } else {
-    connDot = '<span class="dot disconnected"></span>';
+    connDot = '<span class="dot disconnected" aria-hidden="true"></span>';
     connText = 'disconnected';
   }
 
@@ -523,14 +534,16 @@ function renderStatusBar(items: PanelItem[]): void {
   const focusIndicator = `<span class="status-indicator">${state.focusTarget === 'detail' ? 'Detail' : 'List'}</span>`;
   const layoutIndicator = state.layoutMode !== 'normal' ? `<span class="status-indicator">${state.layoutMode}</span>` : '';
 
-  $statusBar.innerHTML = `
+  // Everything except the connection indicator is rebuilt each render. That
+  // indicator is a live region and must persist across renders to announce.
+  $statusBarMain.innerHTML = `
     <span class="brand">\u26A1 SIDEKICK Docker v${__VERSION__}</span>
     <span class="hints">${escapeHtml(hints)}  ${chipsHtml}</span>
     ${filterHtml}
     ${layoutIndicator}
     ${focusIndicator}
-    <span class="connection" aria-live="polite">${connDot}<span class="conn-text">${connText}</span></span>
   `;
+  $connectionStatus.innerHTML = `${connDot}<span class="conn-text">${connText}</span>`;
 }
 
 function renderToasts(): void {
@@ -538,8 +551,9 @@ function renderToasts(): void {
     const actions = t.sticky
       ? `<span class="toast-actions"><button class="toast-copy" data-toast-copy="${t.id}" title="Copy message">Copy</button><button class="toast-dismiss" data-toast-dismiss="${t.id}" title="Dismiss">\u00D7</button></span>`
       : '';
-    const alertRole = t.severity === 'error' ? ' role="alert"' : '';
-    return `<div class="toast ${t.severity}${t.sticky ? ' sticky' : ''}"${alertRole} data-toast-id="${t.id}">${escapeHtml(t.message)}${actions}</div>`;
+    // No role="alert" here: the container is already a polite live region,
+    // and nesting the two makes assistive tech announce the toast twice.
+    return `<div class="toast ${t.severity}${t.sticky ? ' sticky' : ''}" data-toast-id="${t.id}">${escapeHtml(t.message)}${actions}</div>`;
   }).join('');
 }
 

@@ -33,8 +33,8 @@ function renderSingleLogPane(containerId: string, state: WebviewState, logRoot: 
   if (logRoot === 'container') {
     html += `<div class="log-filter-bar">
       <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeAttr(state.logFilterString)}" data-container-id="${escapeAttr(containerId)}" />
-      <span class="filter-mode" id="log-filter-mode" title="Click to toggle">${state.logFilterMode}</span>
-      <span class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</span>
+      <button type="button" class="filter-mode" id="log-filter-mode" aria-label="Filter mode: ${state.logFilterMode}. Activate to toggle." title="Click to toggle">${state.logFilterMode}</button>
+      <button type="button" class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</button>
       <span class="match-count" data-log-match-count>`;
   }
 

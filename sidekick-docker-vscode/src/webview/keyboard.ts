@@ -38,16 +38,23 @@ export interface KeyboardContext {
   rotatePhrase(): void;
 }
 
+/**
+ * True when the element takes text input, so global shortcuts must not fire
+ * and focus must not be stolen back to the list.
+ */
+export function isTypingTarget(el: Element | null): boolean {
+  return el instanceof HTMLInputElement
+    || el instanceof HTMLTextAreaElement
+    || (el instanceof HTMLElement && el.isContentEditable);
+}
+
 export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): void {
   const { state } = ctx;
 
   // Typing guard — while an input/textarea/contentEditable is focused, no
   // global shortcut may fire (fixes actions triggering from the log filter).
   const active = document.activeElement;
-  const typing = active instanceof HTMLInputElement
-    || active instanceof HTMLTextAreaElement
-    || (active instanceof HTMLElement && active.isContentEditable);
-  if (typing) {
+  if (isTypingTarget(active)) {
     if (e.key === 'Escape') {
       e.preventDefault();
       (active as HTMLElement).blur();

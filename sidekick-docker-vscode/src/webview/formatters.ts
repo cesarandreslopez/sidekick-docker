@@ -190,7 +190,9 @@ export function renderSparkline(values: number[], width = 40, labels?: { min?: s
   const maxLabel = labels?.max ?? formatSparkValue(max);
   const timeLabel = labels?.timeWindow ?? `\u2190${recent.length}s`;
 
-  return `<span class="sparkline-label">${escapeHtml(minLabel)}</span><span class="sparkline">${sparkline}</span><span class="sparkline-label">${escapeHtml(maxLabel)}</span> <span class="sparkline-label">${escapeHtml(timeLabel)}</span>`;
+  // aria-hidden on the glyphs; the min/max/window labels beside them carry the
+  // same information in text, so nothing is lost to assistive tech.
+  return `<span class="sparkline-label">${escapeHtml(minLabel)}</span><span class="sparkline" aria-hidden="true">${sparkline}</span><span class="sparkline-label">${escapeHtml(maxLabel)}</span> <span class="sparkline-label">${escapeHtml(timeLabel)}</span>`;
 }
 
 const SEVERITY_CSS_COLORS: Record<string, string> = {
@@ -211,5 +213,5 @@ export function renderSeveritySparkline(series: { severity: string; total: numbe
     const color = SEVERITY_CSS_COLORS[s.severity] ?? SEVERITY_CSS_COLORS.other;
     return `<span style="color:${color}">${bars[idx]}</span>`;
   }).join('');
-  return `<span class="sparkline">${html}</span>`;
+  return `<span class="sparkline" aria-hidden="true">${html}</span>`;
 }

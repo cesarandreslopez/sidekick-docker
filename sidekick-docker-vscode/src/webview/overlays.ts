@@ -102,6 +102,35 @@ export function initOverlays(d: OverlayDeps): void {
 }
 
 // ─── Confirm overlay ─────────────────────────────────────────────────
+
+/**
+ * Focus an aria-modal overlay and remember where focus came from.
+ *
+ * These three declare aria-modal but managed no focus at all, so a keyboard
+ * or screen-reader user stayed parked behind the "modal" and could Tab
+ * straight into the content it was supposedly blocking. The confirm dialog
+ * already did this correctly; this generalizes it.
+ */
+function focusOverlay(el: HTMLElement): void {
+  // These are render functions, called on every render while the overlay is
+  // open — so this must be idempotent, or it re-captures previouslyFocused as
+  // the overlay itself and restore becomes a no-op.
+  if (el.contains(document.activeElement)) return;
+  previouslyFocused = document.activeElement;
+  el.setAttribute('tabindex', '-1');
+  el.focus({ preventScroll: true });
+}
+
+/** Restore focus to wherever it was before the overlay opened. */
+function restoreFocus(): void {
+  // Also called from render functions on every hidden render, so it must
+  // no-op once focus has already been handed back.
+  if (previouslyFocused instanceof HTMLElement && document.contains(previouslyFocused)) {
+    previouslyFocused.focus();
+  }
+  previouslyFocused = null;
+}
+
 export function showConfirm(message: string, callback: () => void, severity: ConfirmSeverity = 'high'): void {
   deps.state.confirmVisible = true;
   deps.state.confirmMessage = message;
@@ -206,6 +235,7 @@ export function renderSortOverlay(): void {
   const state = deps.state;
   if (!state.sortOverlayVisible) {
     $sortOverlay.classList.remove('visible');
+    restoreFocus();
     return;
   }
   let html = '<div class="overlay-title">\u2195 Sort by</div>';
@@ -220,6 +250,7 @@ export function renderSortOverlay(): void {
   html += '<div class="overlay-hint">j/k select  Enter apply  R reverse  Esc close</div>';
   $sortOverlay.innerHTML = html;
   $sortOverlay.classList.add('visible');
+  focusOverlay($sortOverlay);
 }
 
 // ─── Help overlay ────────────────────────────────────────────────────
@@ -227,6 +258,7 @@ export function renderHelpOverlay(): void {
   const state = deps.state;
   if (!state.helpOverlayVisible) {
     $helpOverlay.classList.remove('visible');
+    restoreFocus();
     return;
   }
 
@@ -253,6 +285,7 @@ export function renderHelpOverlay(): void {
   html += '<div class="overlay-hint">Press ? or Esc to close</div>';
   $helpOverlay.innerHTML = html;
   $helpOverlay.classList.add('visible');
+  focusOverlay($helpOverlay);
 }
 
 // ─── Version overlay ─────────────────────────────────────────────────
@@ -260,6 +293,7 @@ export function renderVersionOverlay(): void {
   const state = deps.state;
   if (!state.versionOverlayVisible) {
     $versionOverlay.classList.remove('visible');
+    restoreFocus();
     return;
   }
   $versionOverlay.innerHTML = `
@@ -271,4 +305,5 @@ export function renderVersionOverlay(): void {
     <div class="overlay-hint">Press V or Esc to close</div>
   `;
   $versionOverlay.classList.add('visible');
+  focusOverlay($versionOverlay);
 }
