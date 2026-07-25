@@ -9,7 +9,7 @@ export { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv } from './doc
 // Compose
 export { ComposeDetector } from './compose/ComposeDetector';
 export type { ComposeProjectSource } from './compose/ComposeDetector';
-export { ComposeClient } from './compose/ComposeClient';
+export { ComposeClient, ComposeError, composeFailureReason, throwIfComposeFailed } from './compose/ComposeClient';
 export type { ComposeExecResult } from './compose/ComposeClient';
 export { ComposeFileReader } from './compose/ComposeFileReader';
 export type { ComposeFileConfig, ComposeFileServiceConfig } from './compose/ComposeFileReader';

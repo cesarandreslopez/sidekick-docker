@@ -11,7 +11,9 @@ export function isPromise(value: unknown): value is Promise<unknown> {
  * - async handlers get a progress toast (spinner, no auto-expiry) that resolves
  *   into a success toast (the handler's returned string, or the action label)
  *   or an error toast carrying the real Docker error text;
- * - sync handlers get an immediate success toast (returned string or label).
+ * - sync handlers get an immediate success toast (returned string or label),
+ *   and a synchronous throw becomes an error toast rather than escaping into
+ *   Ink's input handler, where it would tear down the app.
  */
 export function executeAction(
   action: PanelAction,
@@ -21,7 +23,13 @@ export function executeAction(
   removeToast: (id: number) => void,
 ): void {
   const run = () => {
-    const result = action.handler(item);
+    let result: ReturnType<PanelAction['handler']>;
+    try {
+      result = action.handler(item);
+    } catch (err: unknown) {
+      addToast(`${action.label} failed: ${errorMessage(err)}`, 'error');
+      return;
+    }
     if (isPromise(result)) {
       const progressId = addToast(`${action.label}…`, 'info', undefined, { progress: true });
       result

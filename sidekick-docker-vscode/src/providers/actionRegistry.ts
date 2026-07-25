@@ -66,13 +66,16 @@ export const ACTION_META: Record<string, ActionMeta> = {
  * Execute a Docker action. Slow operations run inside a progress
  * notification (visible even if the user switches editor tabs); fast ones
  * run bare. Errors are rethrown so callers surface them on their own UI.
+ *
+ * The action's resolved value is passed through so callers can report a more
+ * specific outcome than the generic success message — prune, for instance,
+ * knows how much space it reclaimed.
  */
-export async function runDockerAction(meta: ActionMeta, itemName: string, fn: () => Promise<void>): Promise<void> {
+export async function runDockerAction<T>(meta: ActionMeta, itemName: string, fn: () => Promise<T>): Promise<T> {
   if (!meta.slow) {
-    await fn();
-    return;
+    return await fn();
   }
-  await vscode.window.withProgress(
+  return await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
       title: meta.progressTitle(itemName),

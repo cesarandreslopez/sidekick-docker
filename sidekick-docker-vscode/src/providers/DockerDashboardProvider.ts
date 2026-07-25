@@ -354,7 +354,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
     // Prune acts on the whole resource type, not the selected item.
     const itemName = actionType === 'prune' ? panelId : service.getItemDisplayName(panelId, itemId);
 
-    const run = async (): Promise<void> => {
+    // Resolves to an outcome string when the action has something more
+    // specific to report than its generic success message (e.g. prune).
+    const run = async (): Promise<string | undefined> => {
       switch (panelId) {
         case 'containers':
           switch (actionType) {
@@ -394,31 +396,35 @@ export class DockerDashboardProvider implements vscode.Disposable {
         case 'images':
           switch (actionType) {
             case 'remove': await service.removeImage(itemId); break;
-            case 'prune': await service.pruneImages(); break;
+            case 'prune': return await service.pruneImages();
           }
           break;
 
         case 'volumes':
           switch (actionType) {
             case 'remove': await service.removeVolume(itemId); break;
-            case 'prune': await service.pruneVolumes(); break;
+            case 'prune': return await service.pruneVolumes();
           }
           break;
 
         case 'networks':
           switch (actionType) {
             case 'remove': await service.removeNetwork(itemId); break;
-            case 'prune': await service.pruneNetworks(); break;
+            case 'prune': return await service.pruneNetworks();
           }
           break;
       }
+      // Most actions have nothing to add beyond the generic success message.
+      return undefined;
     };
 
     try {
       if (meta) {
         // Slow ops get a native progress notification (survives panel hide).
-        await runDockerAction(meta, itemName, run);
-        this._postMessage({ type: 'toast', message: meta.successMessage(itemName), severity: 'success' });
+        // Prefer the action's own outcome text when it has one (prune reports
+        // reclaimed space) over the generic success message.
+        const detail = await runDockerAction(meta, itemName, run);
+        this._postMessage({ type: 'toast', message: detail ?? meta.successMessage(itemName), severity: 'success' });
       } else {
         await run();
         this._postMessage({ type: 'toast', message: actionType, severity: 'success' });

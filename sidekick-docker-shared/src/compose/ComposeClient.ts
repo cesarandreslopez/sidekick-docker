@@ -7,6 +7,48 @@ export interface ComposeExecResult {
   stderr: string;
 }
 
+/** Raised when a `docker compose` invocation exits non-zero. */
+export class ComposeError extends Error {
+  readonly exitCode: number;
+  readonly stderr: string;
+
+  constructor(action: string, result: ComposeExecResult) {
+    super(`${action} failed: ${composeFailureReason(result)}`);
+    this.name = 'ComposeError';
+    this.exitCode = result.exitCode;
+    this.stderr = result.stderr;
+  }
+}
+
+/**
+ * Best one-line explanation of a failed compose run.
+ *
+ * `docker compose` writes progress to stderr even on success (" Container x
+ * Started"), so the last line is usually noise. Prefer a line that actually
+ * announces an error, and fall back to the exit code rather than echoing a
+ * progress line as though it were the cause.
+ */
+export function composeFailureReason(result: ComposeExecResult): string {
+  const lines = result.stderr
+    .split('\n')
+    .map(l => l.trim())
+    .filter(Boolean);
+
+  const errorLine = lines.find(l => /\berror\b|\bfailed\b|\bcannot\b|\bno such\b/i.test(l));
+  if (errorLine) return errorLine;
+
+  const last = lines[lines.length - 1];
+  if (last) return last;
+
+  return `exit code ${result.exitCode}`;
+}
+
+/** Throw when a compose run failed; pass through unchanged when it succeeded. */
+export function throwIfComposeFailed(result: ComposeExecResult, action: string): ComposeExecResult {
+  if (result.exitCode !== 0) throw new ComposeError(action, result);
+  return result;
+}
+
 /**
  * Wraps `docker compose` CLI commands.
  * Docker API has no native compose concept, so we shell out.

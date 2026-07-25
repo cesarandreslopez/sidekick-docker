@@ -10,6 +10,8 @@ import {
   StatsSampler,
   MAX_LOG_LINES,
   shortId,
+  throwIfComposeFailed,
+  formatBytes,
 } from 'sidekick-docker-shared';
 import { LogAnalytics, LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/log';
 import type {
@@ -24,6 +26,7 @@ import type {
   LogEntry,
   ContainerStats,
   ComposeFileConfig,
+  ComposeExecResult,
   SeverityCounts,
 } from 'sidekick-docker-shared';
 
@@ -769,10 +772,12 @@ export class DockerService {
     this.scheduleStateUpdate();
   }
 
-  async pruneImages(): Promise<void> {
-    await this.client.pruneImages();
+  /** Returns the outcome detail so the toast can report reclaimed space. */
+  async pruneImages(): Promise<string> {
+    const { spaceReclaimed } = await this.client.pruneImages();
     await this.refresh();
     this.scheduleStateUpdate();
+    return `Pruned images — ${formatBytes(spaceReclaimed)} reclaimed`;
   }
 
   async removeVolume(name: string): Promise<void> {
@@ -781,10 +786,11 @@ export class DockerService {
     this.scheduleStateUpdate();
   }
 
-  async pruneVolumes(): Promise<void> {
-    await this.client.pruneVolumes();
+  async pruneVolumes(): Promise<string> {
+    const { spaceReclaimed } = await this.client.pruneVolumes();
     await this.refresh();
     this.scheduleStateUpdate();
+    return `Pruned volumes — ${formatBytes(spaceReclaimed)} reclaimed`;
   }
 
   async removeNetwork(id: string): Promise<void> {
@@ -793,10 +799,12 @@ export class DockerService {
     this.scheduleStateUpdate();
   }
 
-  async pruneNetworks(): Promise<void> {
-    await this.client.pruneNetworks();
+  async pruneNetworks(): Promise<string> {
+    const { networksDeleted } = await this.client.pruneNetworks();
     await this.refresh();
     this.scheduleStateUpdate();
+    const n = networksDeleted.length;
+    return `Pruned ${n} network${n === 1 ? '' : 's'}`;
   }
 
   /**
@@ -829,28 +837,31 @@ export class DockerService {
     return this.cwd;
   }
 
-  async composeUp(projectName: string): Promise<void> {
-    await this.composeClient.up(projectName, await this.composeCwd(projectName));
+  /**
+   * Await a compose run and raise on a non-zero exit. The result carries
+   * exitCode and stderr, but these call sites used to drop it — so a failed
+   * `docker compose up` still surfaced as a success notification.
+   */
+  private async runCompose(action: string, exec: Promise<ComposeExecResult>): Promise<void> {
+    throwIfComposeFailed(await exec, action);
     await this.refresh();
     this.scheduleStateUpdate();
+  }
+
+  async composeUp(projectName: string): Promise<void> {
+    await this.runCompose('Up', this.composeClient.up(projectName, await this.composeCwd(projectName)));
   }
 
   async composeDown(projectName: string): Promise<void> {
-    await this.composeClient.down(projectName, await this.composeCwd(projectName));
-    await this.refresh();
-    this.scheduleStateUpdate();
+    await this.runCompose('Down', this.composeClient.down(projectName, await this.composeCwd(projectName)));
   }
 
   async composeRestart(projectName: string, serviceName?: string): Promise<void> {
-    await this.composeClient.restart(projectName, serviceName, await this.composeCwd(projectName));
-    await this.refresh();
-    this.scheduleStateUpdate();
+    await this.runCompose('Restart', this.composeClient.restart(projectName, serviceName, await this.composeCwd(projectName)));
   }
 
   async composeStop(projectName: string, serviceName?: string): Promise<void> {
-    await this.composeClient.stop(projectName, serviceName, await this.composeCwd(projectName));
-    await this.refresh();
-    this.scheduleStateUpdate();
+    await this.runCompose('Stop', this.composeClient.stop(projectName, serviceName, await this.composeCwd(projectName)));
   }
 
   getContainerName(containerId: string): string | undefined {

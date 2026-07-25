@@ -364,13 +364,9 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   });
 
   // Wire copy logs handler
-  containersPanel.setOnCopyLogs((text: string) => {
-    copyToClipboard(text);
-  });
+  containersPanel.setOnCopyLogs((text: string) => copyToClipboard(text));
   const servicesPanel = panels[1] as ServicesPanel;
-  servicesPanel.setOnCopyLogs((text: string) => {
-    copyToClipboard(text);
-  });
+  servicesPanel.setOnCopyLogs((text: string) => copyToClipboard(text));
 
   function getEnrichedMetrics() {
     const m = state.getMetrics();

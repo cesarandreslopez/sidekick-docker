@@ -13,7 +13,7 @@ export class ContainersPanel implements SidePanel {
   private client: DockerClient;
   private onAction: () => void;
   private onExec?: (containerId: string) => void;
-  private onCopyLogs?: (text: string) => void;
+  private onCopyLogs?: (text: string) => boolean;
   private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(client: DockerClient, onAction: () => void) {
@@ -25,7 +25,7 @@ export class ContainersPanel implements SidePanel {
     this.onExec = handler;
   }
 
-  setOnCopyLogs(handler: (text: string) => void): void {
+  setOnCopyLogs(handler: (text: string) => boolean): void {
     this.onCopyLogs = handler;
   }
 
@@ -271,7 +271,9 @@ export class ContainersPanel implements SidePanel {
           } else {
             lines = logs.map(l => l.message);
           }
-          this.onCopyLogs(lines.join('\n'));
+          if (!this.onCopyLogs(lines.join('\n'))) {
+            throw new Error('no clipboard tool found (install xclip, xsel, or wl-copy)');
+          }
           return `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`;
         },
       },

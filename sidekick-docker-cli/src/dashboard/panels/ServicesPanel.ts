@@ -1,5 +1,5 @@
-import type { ComposeService, ComposeProject } from 'sidekick-docker-shared';
-import { ComposeClient, filterLine } from 'sidekick-docker-shared';
+import type { ComposeService, ComposeProject, ComposeExecResult } from 'sidekick-docker-shared';
+import { ComposeClient, filterLine, throwIfComposeFailed } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -21,7 +21,7 @@ export class ServicesPanel implements SidePanel {
   private composeClient: ComposeClient;
   private onAction: () => void;
   private cwd: string | undefined;
-  private onCopyLogs?: (text: string) => void;
+  private onCopyLogs?: (text: string) => boolean;
   private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(composeClient: ComposeClient, onAction: () => void, cwd?: string) {
@@ -30,7 +30,7 @@ export class ServicesPanel implements SidePanel {
     this.cwd = cwd;
   }
 
-  setOnCopyLogs(handler: (text: string) => void): void {
+  setOnCopyLogs(handler: (text: string) => boolean): void {
     this.onCopyLogs = handler;
   }
 
@@ -118,6 +118,19 @@ export class ServicesPanel implements SidePanel {
     return items;
   }
 
+  /**
+   * Await a compose run and raise on a non-zero exit.
+   *
+   * ComposeExecResult carries exitCode and stderr, but every call site used to
+   * drop it — so a `docker compose up` that failed still rendered the success
+   * toast. executeAction turns a rejection into an error toast, so throwing is
+   * all that is needed here.
+   */
+  private async runCompose(action: string, exec: Promise<ComposeExecResult>): Promise<void> {
+    throwIfComposeFailed(await exec, action);
+    this.onAction();
+  }
+
   getActions(): PanelAction[] {
     return [
       {
@@ -125,7 +138,7 @@ export class ServicesPanel implements SidePanel {
         label: 'Up',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          return this.composeClient.up(getProjectName(d), this.cwd).then(() => { this.onAction(); });
+          return this.runCompose('Up', this.composeClient.up(getProjectName(d), this.cwd));
         },
         condition: (item) => item.data !== null,
       },
@@ -137,7 +150,7 @@ export class ServicesPanel implements SidePanel {
         confirmSeverity: 'high',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          return this.composeClient.down(getProjectName(d), this.cwd).then(() => { this.onAction(); });
+          return this.runCompose('Down', this.composeClient.down(getProjectName(d), this.cwd));
         },
         condition: (item) => item.data !== null,
       },
@@ -146,10 +159,9 @@ export class ServicesPanel implements SidePanel {
         label: 'Restart',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          if (d.type === 'service') {
-            return this.composeClient.restart(d.service.projectName, d.service.name, this.cwd).then(() => { this.onAction(); });
-          }
-          return this.composeClient.restart(d.project.name, undefined, this.cwd).then(() => { this.onAction(); });
+          return this.runCompose('Restart', d.type === 'service'
+            ? this.composeClient.restart(d.service.projectName, d.service.name, this.cwd)
+            : this.composeClient.restart(d.project.name, undefined, this.cwd));
         },
         condition: (item) => item.data !== null,
       },
@@ -158,10 +170,9 @@ export class ServicesPanel implements SidePanel {
         label: 'Stop',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          if (d.type === 'service') {
-            return this.composeClient.stop(d.service.projectName, d.service.name, this.cwd).then(() => { this.onAction(); });
-          }
-          return this.composeClient.stop(d.project.name, undefined, this.cwd).then(() => { this.onAction(); });
+          return this.runCompose('Stop', d.type === 'service'
+            ? this.composeClient.stop(d.service.projectName, d.service.name, this.cwd)
+            : this.composeClient.stop(d.project.name, undefined, this.cwd));
         },
         condition: (item) => item.data !== null,
       },
@@ -181,7 +192,9 @@ export class ServicesPanel implements SidePanel {
           } else {
             lines = logs.map(l => l.message);
           }
-          this.onCopyLogs(lines.join('\n'));
+          if (!this.onCopyLogs(lines.join('\n'))) {
+            throw new Error('no clipboard tool found (install xclip, xsel, or wl-copy)');
+          }
           return `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`;
         },
       },
