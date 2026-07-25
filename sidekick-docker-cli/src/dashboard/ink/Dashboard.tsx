@@ -30,7 +30,7 @@ import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes, renderLogLines } from '../../formatters';
 import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
 import { buildHelpBindings, buildContextHint } from './keyRegistry';
-import type { KeyContext } from './keyRegistry';
+import type { KeyContext, KeyQueryContext } from './keyRegistry';
 import { maxScrollOffset } from './windowLines';
 
 const SORT_FIELDS: SortField[] = ['state', 'name', 'cpu', 'mem', 'net', 'io', 'pids'];
@@ -44,6 +44,7 @@ const MIN_SCREEN_HEIGHT = 15;
 const RESERVED_UI_ROWS = 5;
 const TOAST_DURATIONS = { error: 6000, warning: 3000, info: 2500, success: 2000 } as const;
 const MAX_QUEUED_TOASTS = 5;
+const PHRASE_ROTATE_MS = 7000;
 
 export function reducer(state: DashboardUIState, action: Action): DashboardUIState {
   switch (action.type) {
@@ -222,18 +223,17 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const toastIdRef = useRef(0);
   const execManagerRef = useRef<ExecManager | null>(null);
 
-  // Rotating phrase in tab bar (7-second interval + on any interaction)
+  // Rotating phrase in the tab bar. The timer chain lives entirely inside the
+  // effect: re-assigning a ref during render is not safe under React 19.
   const [phrase, setPhrase] = React.useState(() => getRandomPhrase());
-  const phraseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rotatePhraseRef = useRef<() => void>(undefined);
-  rotatePhraseRef.current = () => {
-    setPhrase(getRandomPhrase());
-    if (phraseTimerRef.current) clearTimeout(phraseTimerRef.current);
-    phraseTimerRef.current = setTimeout(() => rotatePhraseRef.current?.(), 7000);
-  };
   useEffect(() => {
-    phraseTimerRef.current = setTimeout(() => rotatePhraseRef.current?.(), 7000);
-    return () => { if (phraseTimerRef.current) clearTimeout(phraseTimerRef.current); };
+    let timer: ReturnType<typeof setTimeout>;
+    const tick = (): void => {
+      setPhrase(getRandomPhrase());
+      timer = setTimeout(tick, PHRASE_ROTATE_MS);
+    };
+    timer = setTimeout(tick, PHRASE_ROTATE_MS);
+    return () => { clearTimeout(timer); };
   }, []);
 
   // Populate exec trigger ref so external code can start exec sessions
@@ -522,12 +522,18 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     detailViewportHeight: scrollViewportHeight, detailTabs, tabIdx, rows, addToast, removeToast,
   });
 
-  // Shared context for global keybindings, help rendering, and status-bar hints
-  const keyCtx: KeyContext = {
-    state, dispatch, panels, panel, selectedItem, applicableActions,
-    clampedSelection, currentItems, detailLines, detailViewportHeight: scrollViewportHeight,
-    detailTabs, tabIdx, sideScroll, addToast, exit,
+  // Read-only slice: safe to consume during render (help overlay, status hints).
+  const keyQueryCtx: KeyQueryContext = {
+    state, panel, selectedItem, applicableActions, detailTabs, tabIdx,
     secondaryDetailLineCount: secondaryDetailLines.length,
+  };
+
+  // Full context for key handlers — adds dispatch/addToast/exit, which close
+  // over refs and must therefore never reach a render-time call.
+  const keyCtx: KeyContext = {
+    ...keyQueryCtx,
+    dispatch, panels, clampedSelection, currentItems, detailLines,
+    detailViewportHeight: scrollViewportHeight, sideScroll, addToast, exit,
   };
 
   // Keyboard input (extracted hook)
@@ -554,7 +560,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     : [];
 
   // Contextual hints derived from the key registry (single source of truth)
-  const contextHint = buildContextHint(keyCtx);
+  const contextHint = buildContextHint(keyQueryCtx);
 
   return (
     <MouseProvider onMouse={handleMouse}>
@@ -609,7 +615,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         )}
 
         {state.overlay === 'help' && (
-          <HelpOverlay panels={panels} activePanelIndex={state.activePanelIndex} version={__CLI_VERSION__} bindings={buildHelpBindings(keyCtx)} />
+          <HelpOverlay panels={panels} activePanelIndex={state.activePanelIndex} version={__CLI_VERSION__} bindings={buildHelpBindings(keyQueryCtx)} />
         )}
 
         {state.overlay === 'version' && (

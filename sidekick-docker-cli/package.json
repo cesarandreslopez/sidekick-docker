@@ -53,8 +53,8 @@
     "node-pty": "^1.1.0",
     "react": "^19.2.8",
     "sidekick-docker-shared": "file:../sidekick-docker-shared",
-    "typescript": "^5.9.3",
-    "vitest": "^3.0.0"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   },
   "license": "MIT"
 }

@@ -3,21 +3,35 @@ import type { SidePanel, PanelItem, PanelAction, DetailTab } from '../panels/typ
 import type { Action, DashboardUIState, ToastSeverity } from './dashboardTypes';
 import { maxScrollOffset } from './windowLines';
 
-/** Narrowed view of dashboard state that global keybindings operate on. */
-export interface KeyContext {
+/**
+ * The read-only slice of dashboard state that availability predicates, hints,
+ * and help rendering inspect.
+ *
+ * Kept separate from `KeyContext` on purpose: `buildHelpBindings` and
+ * `buildContextHint` are called *during render*, and `KeyContext` carries
+ * effectful handles (`dispatch`, `addToast`, `exit`) that close over refs.
+ * Passing those into a render-time call is a React correctness violation
+ * (react-hooks/refs), so the render path only ever sees this subset.
+ */
+export interface KeyQueryContext {
   state: DashboardUIState;
-  dispatch: (action: Action) => void;
-  panels: SidePanel[];
   panel: SidePanel;
   selectedItem: PanelItem | undefined;
   /** Condition-filtered actions for the selected item. */
   applicableActions: PanelAction[];
+  detailTabs: DetailTab[];
+  tabIdx: number;
+  secondaryDetailLineCount: number;
+}
+
+/** Full context for `run` handlers: the query slice plus effectful handles. */
+export interface KeyContext extends KeyQueryContext {
+  dispatch: (action: Action) => void;
+  panels: SidePanel[];
   clampedSelection: number;
   currentItems: PanelItem[];
   detailLines: string[];
   detailViewportHeight: number;
-  detailTabs: DetailTab[];
-  tabIdx: number;
   sideScroll: {
     selectNext(): void;
     selectPrev(): void;
@@ -27,7 +41,6 @@ export interface KeyContext {
   };
   addToast: (message: string, severity: ToastSeverity, duration?: number) => number;
   exit: () => void;
-  secondaryDetailLineCount: number;
 }
 
 export type KeyCategory = 'Navigation' | 'View' | 'Filters & Sort' | 'System';
@@ -40,14 +53,14 @@ export interface KeyBindingSpec {
   label: string;
   category: KeyCategory;
   /** When false, the key press shows a "Not available here" toast and the help entry is dimmed. */
-  isAvailable?: (ctx: KeyContext) => boolean;
+  isAvailable?: (ctx: KeyQueryContext) => boolean;
   /** Contextual status-bar hint (e.g. 'f:Filter'); only shown when available. */
-  hint?: (ctx: KeyContext) => string | null;
+  hint?: (ctx: KeyQueryContext) => string | null;
   run: (ctx: KeyContext, input: string, key: Key) => void;
 }
 
 /** True when the active detail tab tails content (logs) — drives log-filter availability and follow-pause. */
-function isAutoScrollTab(ctx: KeyContext): boolean {
+function isAutoScrollTab(ctx: KeyQueryContext): boolean {
   return ctx.detailTabs[ctx.tabIdx]?.autoScrollBottom === true;
 }
 
@@ -393,7 +406,7 @@ export interface HelpBinding {
   available: boolean;
 }
 
-export function buildHelpBindings(ctx: KeyContext): HelpBinding[] {
+export function buildHelpBindings(ctx: KeyQueryContext): HelpBinding[] {
   return GLOBAL_BINDINGS.map(b => ({
     keys: b.keys,
     label: b.label,
@@ -403,7 +416,7 @@ export function buildHelpBindings(ctx: KeyContext): HelpBinding[] {
 }
 
 /** Status-bar contextual hints derived from available bindings. */
-export function buildContextHint(ctx: KeyContext): string {
+export function buildContextHint(ctx: KeyQueryContext): string {
   return GLOBAL_BINDINGS
     .filter(b => b.hint && (b.isAvailable ? b.isAvailable(ctx) : true))
     .map(b => b.hint!(ctx))
