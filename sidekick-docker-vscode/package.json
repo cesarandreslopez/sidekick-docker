@@ -132,6 +132,18 @@
         "command": "sidekick-docker.quickRestart",
         "title": "Restart Container...",
         "category": "Sidekick Docker"
+      },
+      {
+        "command": "sidekick-docker.execContainer",
+        "title": "Exec into Container...",
+        "category": "Sidekick Docker",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "sidekick-docker.showContainerLogs",
+        "title": "Show Container Logs...",
+        "category": "Sidekick Docker",
+        "icon": "$(output)"
       }
     ],
     "viewsWelcome": [
@@ -226,6 +238,11 @@
           "command": "sidekick-docker.openDashboard",
           "when": "view == sidekick-docker.containers",
           "group": "navigation@2"
+        },
+        {
+          "command": "sidekick-docker.openDashboardBeside",
+          "when": "view == sidekick-docker.containers",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -278,6 +295,16 @@
           "command": "sidekick-docker.removeContainer",
           "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created|dead)$/",
           "group": "3_danger@1"
+        },
+        {
+          "command": "sidekick-docker.execContainer",
+          "when": "view == sidekick-docker.containers && viewItem == container-running",
+          "group": "2_open@2"
+        },
+        {
+          "command": "sidekick-docker.showContainerLogs",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-/",
+          "group": "2_open@3"
         }
       ]
     }
@@ -287,7 +314,9 @@
     "watch": "node esbuild.cjs --watch",
     "clean": "rm -rf out",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "vscode:prepublish": "npm run build:production",
+    "build:production": "node esbuild.cjs --production"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
@@ -298,5 +327,14 @@
     "vitest": "^4.1.10",
     "zod": "^4.4.3"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": true,
+      "description": "Reads Docker state and runs Docker commands; it does not execute workspace code."
+    }
+  }
 }

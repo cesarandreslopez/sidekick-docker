@@ -277,6 +277,27 @@ export class ContainersPanel implements SidePanel {
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
       {
+        // Images, volumes and networks all had a prune; containers did not,
+        // even though clearing stopped containers is the most routine cleanup.
+        key: 'P',
+        label: 'Prune',
+        confirm: true,
+        confirmMessage: () => {
+          const n = this.lastMetrics?.containers.filter(c => c.state === 'exited' || c.state === 'created' || c.state === 'dead').length ?? 0;
+          return n > 0
+            ? `Remove ${n} stopped container${n === 1 ? '' : 's'}?`
+            : 'Remove all stopped containers?';
+        },
+        confirmSeverity: 'batch',
+        handler: () => {
+          return this.client.pruneContainers().then((r) => {
+            this.onAction();
+            const n = r.containersDeleted.length;
+            return `Pruned ${n} container${n === 1 ? '' : 's'} — ${formatBytes(r.spaceReclaimed)} reclaimed`;
+          });
+        },
+      },
+      {
         key: 'c',
         label: 'Copy Logs',
         handler: () => {

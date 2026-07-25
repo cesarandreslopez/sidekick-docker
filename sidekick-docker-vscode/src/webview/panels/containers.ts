@@ -293,6 +293,14 @@ export const containersPanel: PanelDefinition = {
       actions.push({ key: 'u', label: 'Unpause', actionType: 'unpause' });
     }
     actions.push({ key: 'c', label: 'Copy Logs', actionType: 'copyLogs' });
+    actions.push({
+      key: 'P',
+      label: 'Prune',
+      actionType: 'prune',
+      confirm: true,
+      confirmMessage: 'Remove all stopped containers?',
+      confirmSeverity: 'batch',
+    });
     actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove container "${c.name}"?`, confirmSeverity: 'high' });
     if (c.state === 'running') {
       actions.push({ key: 'e', label: 'Exec', actionType: 'exec' });

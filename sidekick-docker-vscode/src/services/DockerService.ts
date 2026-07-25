@@ -855,6 +855,18 @@ export class DockerService {
   }
 
   /** Returns the outcome detail so the toast can report reclaimed space. */
+  /**
+   * Remove all stopped containers — the cleanup the other three panels always
+   * offered and this one did not.
+   */
+  async pruneContainers(): Promise<string> {
+    const { containersDeleted, spaceReclaimed } = await this.client.pruneContainers();
+    await this.refresh();
+    this.scheduleStateUpdate();
+    const n = containersDeleted.length;
+    return `Pruned ${n} container${n === 1 ? '' : 's'} \u2014 ${formatBytes(spaceReclaimed)} reclaimed`;
+  }
+
   async pruneImages(): Promise<string> {
     const { spaceReclaimed } = await this.client.pruneImages();
     await this.refresh();

@@ -42,10 +42,29 @@ export class ContainerTreeItem extends vscode.TreeItem {
     this.contextValue = `container-${container.state}`;
     this.tooltip = `${container.name}\n${container.image}\n${container.state} - ${container.status}`;
 
+    // A TreeItem with no command does nothing on click, which is not how any
+    // other VS Code tree behaves — you had to right-click or hit the inline
+    // icon just to look at a container.
+    this.command = {
+      command: 'sidekick-docker.openContainerInDashboard',
+      title: 'Open in Dashboard',
+      arguments: [this],
+    };
+
     // State-specific icon
     switch (container.state) {
       case 'running':
-        this.iconPath = new vscode.ThemeIcon('debug-start', new vscode.ThemeColor('testing.iconPassed'));
+        // A running-but-unhealthy container looked identical to a healthy one,
+        // even though healthStatus is populated and the TUI badges it.
+        if (container.healthStatus === 'unhealthy') {
+          this.iconPath = new vscode.ThemeIcon('debug-start', new vscode.ThemeColor('testing.iconFailed'));
+          this.description = `${container.image} — unhealthy`;
+        } else if (container.healthStatus === 'starting') {
+          this.iconPath = new vscode.ThemeIcon('debug-start', new vscode.ThemeColor('editorWarning.foreground'));
+          this.description = `${container.image} — starting`;
+        } else {
+          this.iconPath = new vscode.ThemeIcon('debug-start', new vscode.ThemeColor('testing.iconPassed'));
+        }
         break;
       case 'paused':
         this.iconPath = new vscode.ThemeIcon('debug-pause', new vscode.ThemeColor('editorWarning.foreground'));

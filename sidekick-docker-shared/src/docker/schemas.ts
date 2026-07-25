@@ -135,6 +135,36 @@ export const PruneNetworksResponseSchema = z.object({
   NetworksDeleted: z.array(z.string()).nullable().default([]),
 });
 
+/** Validates a prune containers response from the Docker API. */
+export const PruneContainersResponseSchema = z.object({
+  ContainersDeleted: z.array(z.string()).nullable().default([]),
+  SpaceReclaimed: z.number().default(0),
+});
+
+/**
+ * Validates the /system/df response. Only the aggregate sizes are read; the
+ * per-item detail is large and the UI reports totals.
+ *
+ * Field names verified against a live daemon: containers report SizeRw (the
+ * writable layer) rather than Size, and build-cache records carry both InUse
+ * and Shared — `docker system df` counts a record as reclaimable only when
+ * neither is set.
+ */
+export const DiskUsageResponseSchema = z.object({
+  LayersSize: z.number().default(0),
+  Containers: z.array(z.object({
+    SizeRw: z.number().default(0),
+  })).nullable().default([]),
+  Volumes: z.array(z.object({
+    UsageData: z.object({ Size: z.number().default(0) }).nullable().optional(),
+  })).nullable().default([]),
+  BuildCache: z.array(z.object({
+    Size: z.number().default(0),
+    InUse: z.boolean().default(false),
+    Shared: z.boolean().default(false),
+  })).nullable().default([]),
+});
+
 /** Validates the Config.Env field from a Docker inspect response. */
 export const ContainerInspectEnvSchema = z.object({
   Config: z.object({

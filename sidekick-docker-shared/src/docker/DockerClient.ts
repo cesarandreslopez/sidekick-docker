@@ -10,6 +10,7 @@ import type {
   VolumeInfo,
   NetworkInfo,
   NetworkContainerRef,
+  DiskUsage,
   DockerEvent,
   DockerResourceType,
 } from '../types';
@@ -25,6 +26,8 @@ import {
   PruneImagesResponseSchema,
   PruneVolumesResponseSchema,
   PruneNetworksResponseSchema,
+  PruneContainersResponseSchema,
+  DiskUsageResponseSchema,
   ContainerInspectEnvSchema,
   ContainerChangesResponseSchema,
   ImageHistoryResponseSchema,
@@ -485,6 +488,53 @@ export class DockerClient {
     const result = await this.docker.pruneNetworks();
     const validated = PruneNetworksResponseSchema.parse(result);
     return { networksDeleted: validated.NetworksDeleted ?? [] };
+  }
+
+  /**
+   * Remove all stopped containers.
+   *
+   * Images, volumes and networks all had a prune; containers did not, even
+   * though clearing out stopped containers is the most routine cleanup there
+   * is.
+   */
+  async pruneContainers(): Promise<{ containersDeleted: string[]; spaceReclaimed: number }> {
+    const result = await this.docker.pruneContainers();
+    const validated = PruneContainersResponseSchema.parse(result);
+    return {
+      containersDeleted: validated.ContainersDeleted ?? [],
+      spaceReclaimed: validated.SpaceReclaimed,
+    };
+  }
+
+  /**
+   * Aggregate disk usage (`docker system df`).
+   *
+   * Answers "what is eating my disk" in one call. Build cache in particular is
+   * represented nowhere else in the app, and is often the largest consumer.
+   */
+  async diskUsage(): Promise<DiskUsage> {
+    const raw = await this.docker.df();
+    const v = DiskUsageResponseSchema.parse(raw);
+
+    // LayersSize is the authoritative image total; the per-image Size figures
+    // double-count shared layers.
+    const imagesSize = v.LayersSize;
+    const containersSize = (v.Containers ?? []).reduce((sum, c) => sum + c.SizeRw, 0);
+    const volumesSize = (v.Volumes ?? []).reduce((sum, vol) => sum + (vol.UsageData?.Size ?? 0), 0);
+    const cache = v.BuildCache ?? [];
+    const buildCacheSize = cache.reduce((sum, b) => sum + b.Size, 0);
+    // Matches `docker system df`: a shared record is not reclaimable even
+    // when nothing currently uses it.
+    const buildCacheReclaimable = cache.filter(b => !b.InUse && !b.Shared).reduce((sum, b) => sum + b.Size, 0);
+
+    return {
+      imagesSize,
+      containersSize,
+      volumesSize,
+      buildCacheSize,
+      buildCacheReclaimable,
+      totalSize: imagesSize + containersSize + volumesSize + buildCacheSize,
+    };
   }
 
   async getContainerChanges(id: string): Promise<FilesystemChange[]> {

@@ -68,6 +68,27 @@ function createWatcherService(settings: SidekickSettings): ContainerWatcherServi
   });
 }
 
+
+/**
+ * Prompt for a container when a command was invoked from the palette rather
+ * than a tree node.
+ */
+async function pickContainer(
+  filter: (c: ContainerInfo) => boolean,
+  placeHolder: string,
+): Promise<ContainerInfo | undefined> {
+  const candidates = (watcherService?.getContainers() ?? []).filter(filter);
+  if (candidates.length === 0) {
+    vscode.window.showInformationMessage('No matching containers.');
+    return undefined;
+  }
+  const picked = await vscode.window.showQuickPick(
+    candidates.map(c => ({ label: c.name, description: c.image, detail: c.status, container: c })),
+    { placeHolder },
+  );
+  return picked?.container;
+}
+
 export function activate(context: vscode.ExtensionContext): void {
   const settings = getSettings();
 
@@ -178,6 +199,42 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       if (choice !== 'Remove') return;
       await runContainerCommand('remove', name, client => client.removeContainer(item.container.id, true));
+    }),
+
+    /*
+     * Exec and logs were reachable only from inside the webview dashboard.
+     * sidekick-docker.exec.defaultShell was therefore a documented setting for
+     * a feature with no command, no palette entry and no tree affordance.
+     */
+    vscode.commands.registerCommand('sidekick-docker.execContainer', async (item?: ContainerTreeItem) => {
+      const container = item instanceof ContainerTreeItem
+        ? item.container
+        : await pickContainer(c => c.state === 'running', 'Select a running container to exec into');
+      if (!container) return;
+      const settings = getSettings();
+      const terminal = vscode.window.createTerminal({
+        name: `Exec: ${container.name}`,
+        shellPath: 'docker',
+        shellArgs: ['exec', '-it', container.id, settings.execShell],
+        // Without this the spawned docker ignores the socketPath setting.
+        env: settings.cliEnv,
+      });
+      terminal.show();
+    }),
+
+    vscode.commands.registerCommand('sidekick-docker.showContainerLogs', async (item?: ContainerTreeItem) => {
+      const container = item instanceof ContainerTreeItem
+        ? item.container
+        : await pickContainer(() => true, 'Select a container to view logs');
+      if (!container) return;
+      const settings = getSettings();
+      const terminal = vscode.window.createTerminal({
+        name: `Logs: ${container.name}`,
+        shellPath: 'docker',
+        shellArgs: ['logs', '-f', '--tail', '200', container.id],
+        env: settings.cliEnv,
+      });
+      terminal.show();
     }),
 
     // ── Quick pick commands ─────────────────────────────────────
