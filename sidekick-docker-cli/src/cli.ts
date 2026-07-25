@@ -3,6 +3,7 @@ import { errorMessage } from 'sidekick-docker-shared';
 import { dashboardAction } from './commands/dashboard';
 import { psAction } from './commands/ps';
 import { logsAction } from './commands/logs';
+import { imagesAction, volumesAction, networksAction, statsAction, dfAction, inspectAction } from './commands/resources';
 import { setColorEnabled } from './formatters';
 import { parseTail } from './utils/parseTail';
 
@@ -54,6 +55,48 @@ program
     await logsAction(container, { follow, tail: opts.tail }, cmd.optsWithGlobals());
   });
 
+// ── Read-only listing commands ──────────────────────────────────────
+// All follow the `ps` contract: --format table|json, -q for bare ids.
+const listFormat = (cmd: Command): Command => cmd
+  .addOption(new Option('--format <format>', 'Output format').choices(['table', 'json']).default('table'))
+  .option('-q, --quiet', 'Only print IDs/names', false);
+
+listFormat(program.command('images').description('List images'))
+  .option('-a, --all', 'Include intermediate layers', false)
+  .action(async (opts, cmd) => {
+    await imagesAction(opts, cmd.optsWithGlobals());
+  });
+
+listFormat(program.command('volumes').description('List volumes'))
+  .action(async (opts, cmd) => {
+    await volumesAction(opts, cmd.optsWithGlobals());
+  });
+
+listFormat(program.command('networks').description('List networks'))
+  .action(async (opts, cmd) => {
+    await networksAction(opts, cmd.optsWithGlobals());
+  });
+
+listFormat(program.command('stats').description('One-shot resource usage for running containers'))
+  .action(async (opts, cmd) => {
+    await statsAction(opts, cmd.optsWithGlobals());
+  });
+
+program
+  .command('df')
+  .description('Show Docker disk usage')
+  .addOption(new Option('--format <format>', 'Output format').choices(['table', 'json']).default('table'))
+  .action(async (opts, cmd) => {
+    await dfAction(opts, cmd.optsWithGlobals());
+  });
+
+program
+  .command('inspect <container>')
+  .description('Print raw inspect output for a container as JSON')
+  .action(async (container, opts, cmd) => {
+    await inspectAction(container, opts, cmd.optsWithGlobals());
+  });
+
 program.addHelpText('after', `
 Examples:
   $ sidekick-docker                          launch the interactive dashboard
@@ -61,6 +104,10 @@ Examples:
   $ sidekick-docker ps --format json | jq    machine-readable output
   $ sidekick-docker ps -q                    container IDs only
   $ sidekick-docker logs web --no-follow -n 50
+  $ sidekick-docker images -q | xargs docker rmi
+  $ sidekick-docker stats --format json         one-shot CPU/memory for all
+  $ sidekick-docker df                          what is using the disk
+  $ sidekick-docker inspect web | jq .State
   $ sidekick-docker --socket /run/user/1000/docker.sock ps
 
 Environment:
