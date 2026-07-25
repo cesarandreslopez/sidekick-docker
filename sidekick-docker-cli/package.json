@@ -35,7 +35,7 @@
     "dist/sidekick-docker.mjs"
   ],
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.12.0"
   },
   "scripts": {
     "build": "node esbuild.cjs",
@@ -47,9 +47,9 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.2.17",
     "asciichart": "^1.5.25",
-    "commander": "^13.0.0",
+    "commander": "^15.0.0",
     "esbuild": "^0.28.1",
-    "ink": "^6.0.0",
+    "ink": "^7.1.1",
     "node-pty": "^1.1.0",
     "react": "^19.2.8",
     "sidekick-docker-shared": "file:../sidekick-docker-shared",

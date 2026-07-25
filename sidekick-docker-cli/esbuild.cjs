@@ -19,7 +19,7 @@ build({
   entryPoints: ['src/cli.ts'],
   bundle: true,
   platform: 'node',
-  target: 'node20',
+  target: 'node22',
   format: 'esm',
   outfile: 'dist/sidekick-docker.mjs',
   banner: {
