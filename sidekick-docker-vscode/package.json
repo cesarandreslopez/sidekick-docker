@@ -5,7 +5,7 @@
   "version": "0.3.0",
   "publisher": "CesarAndresLopez",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.109.0"
   },
   "categories": [
     "Other",
@@ -290,8 +290,8 @@
     "test:watch": "vitest"
   },
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/vscode": "^1.85.0",
+    "@types/node": "^24.0.0",
+    "@types/vscode": "~1.109.0",
     "esbuild": "^0.28.1",
     "sidekick-docker-shared": "file:../sidekick-docker-shared",
     "typescript": "^5.9.3",

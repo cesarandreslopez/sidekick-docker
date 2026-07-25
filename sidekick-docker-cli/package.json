@@ -45,13 +45,13 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
-    "@types/react": "^19.2.0",
+    "@types/react": "^19.2.17",
     "asciichart": "^1.5.25",
     "commander": "^13.0.0",
     "esbuild": "^0.28.1",
     "ink": "^6.0.0",
     "node-pty": "^1.1.0",
-    "react": "^19.2.0",
+    "react": "^19.2.8",
     "sidekick-docker-shared": "file:../sidekick-docker-shared",
     "typescript": "^5.9.3",
     "vitest": "^3.0.0"
