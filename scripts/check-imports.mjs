@@ -5,7 +5,7 @@
  *
  * Usage: node scripts/check-imports.mjs
  *
- * See specs/refactor/architecture.md for the dependency DAG.
+ * See specs/_archive/refactor/architecture.md for the dependency DAG.
  * Each module may only import from its listed dependencies.
  * External (npm) packages are always allowed.
  */

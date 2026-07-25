@@ -31,6 +31,8 @@ const client = new DockerClient(parseDockerEndpoint('tcp://192.168.1.100:2376'))
 | `removeContainer` | `(id: string, force?: boolean) => Promise<void>` | Remove a container |
 | `inspectContainer` | `(id: string) => Promise<ContainerInspectInfo>` | Get full container details |
 | `getContainerEnv` | `(id: string) => Promise<string[]>` | Get container environment variables |
+| `pruneContainers` | `() => Promise<{ containersDeleted: string[]; spaceReclaimed: number }>` | Remove all stopped containers |
+| `sampleStats` | `(id: string) => Promise<ContainerStats>` | One-shot stats reading; the non-streaming counterpart to `streamStats`, used to fill list-wide sorting |
 | `getContainerChanges` | `(id: string) => Promise<FilesystemChange[]>` | Get filesystem changes vs base image |
 | `streamLogs` | `(id: string, opts?: LogStreamOptions, signal?: AbortSignal) => AsyncIterable<LogEntry>` | Stream container logs |
 | `streamStats` | `(id: string, signal?: AbortSignal) => AsyncIterable<ContainerStats>` | Stream live container stats |
@@ -59,6 +61,12 @@ const client = new DockerClient(parseDockerEndpoint('tcp://192.168.1.100:2376'))
 | `listNetworks` | `() => Promise<NetworkInfo[]>` | List networks with connected containers |
 | `removeNetwork` | `(id: string) => Promise<void>` | Remove a network |
 | `pruneNetworks` | `() => Promise<{ networksDeleted: string[] }>` | Remove unused networks |
+
+## System Methods
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `diskUsage` | `() => Promise<DiskUsage>` | Aggregate disk usage (`docker system df`) across images, containers, volumes and build cache |
 
 ## Events
 

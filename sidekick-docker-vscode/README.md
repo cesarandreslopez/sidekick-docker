@@ -88,7 +88,7 @@ the context menu and a status-bar item showing running/total counts.
 
 ## Requirements
 
-- **VSCode** >= 1.85
+- **VSCode** >= 1.109
 - **Docker** running and accessible
 - **Node.js** >= 20 (for building from source)
 

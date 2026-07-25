@@ -17,13 +17,15 @@ The interface is defined in `sidekick-docker-cli/src/dashboard/panels/types.ts`.
 
 ## Panel Implementations
 
-| Panel | File | Resources |
-|-------|------|-----------|
-| Containers | `ContainerPanel` | Docker containers |
-| Services | `ComposePanel` | Compose projects and services |
-| Images | `ImagePanel` | Local images |
-| Volumes | `VolumePanel` | Named volumes |
-| Networks | `NetworkPanel` | Docker networks |
+All five live in `sidekick-docker-cli/src/dashboard/panels/`.
+
+| Panel | Class | Resources |
+|-------|-------|-----------|
+| Containers | `ContainersPanel` | Docker containers |
+| Services | `ServicesPanel` | Compose projects and services |
+| Images | `ImagesPanel` | Local images |
+| Volumes | `VolumesPanel` | Named volumes |
+| Networks | `NetworksPanel` | Docker networks |
 
 ## State Management
 

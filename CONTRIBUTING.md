@@ -6,9 +6,9 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22.12+
 - Docker running
-- VS Code 1.85+ (for extension development)
+- VS Code 1.109+ (for extension development)
 
 ### Development Setup
 
@@ -32,7 +32,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 
 ### Running Locally
 
-- **TUI dashboard**: After building, run `./sidekick-docker-cli/dist/sidekick-docker.mjs`
+- **TUI dashboard**: After building, run `node ./sidekick-docker-cli/dist/sidekick-docker.mjs` (esbuild writes the file mode 0644, so the `#!` line is inert and invoking the path directly exits 126)
 - **VS Code extension**: Open `sidekick-docker-vscode/` in VS Code and press `F5` to launch the Extension Development Host
 
 ### Available Commands
@@ -53,7 +53,7 @@ cd sidekick-docker-shared && npx vitest run   # shared only
 cd sidekick-docker-cli && npx vitest run      # cli only
 cd sidekick-docker-vscode && npx vitest run   # vscode only (vscode API mocked via src/test/vscode.ts)
 
-# Linting (ESLint 9, flat config)
+# Linting (ESLint 10, flat config)
 npm run lint                     # lint all packages
 npm run lint:fix                 # lint + auto-fix
 bash scripts/lint-all.sh         # alternative: also accepts extra args (e.g. --fix)
@@ -66,7 +66,7 @@ bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 
 
 - TypeScript strict mode everywhere
 - Tests use Vitest, co-located as `.test.ts` files alongside source
-- ESLint 9 (flat config) enforces code quality — run `npm run lint` before submitting PRs
+- ESLint 10 (flat config) enforces code quality — run `npm run lint` before submitting PRs
 
 ### Running Tests
 

@@ -174,7 +174,7 @@ jobs:
 
             **VS Code extension**: Download the `.vsix` below or install from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode).
 
-            **CLI via npm** (requires Node.js 20+):
+            **CLI via npm** (requires Node.js 22.12+):
             ```
             npm i -g sidekick-docker
             ```

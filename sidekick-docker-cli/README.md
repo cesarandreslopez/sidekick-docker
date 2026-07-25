@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cesarandreslopez/sidekick-docker/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cesarandreslopez/sidekick-docker)
 
-A terminal dashboard for Docker. Manage containers, Compose projects, images, volumes, and networks — all from a single, keyboard-driven TUI. Includes scriptable `ps` and `logs` commands for non-interactive use.
+A terminal dashboard for Docker. Manage containers, Compose projects, images, volumes, and networks — all from a single, keyboard-driven TUI. Includes scriptable `ps`, `logs`, `images`, `volumes`, `networks`, `stats`, `df` and `inspect` commands for non-interactive use.
 
 <p align="center">
   <img src="../assets/sidekick_docker_cli.gif" alt="Sidekick Docker CLI Demo" width="800">
@@ -17,7 +17,7 @@ A terminal dashboard for Docker. Manage containers, Compose projects, images, vo
 npm install -g sidekick-docker
 ```
 
-**Prerequisites:** Node.js >= 20, Docker running.
+**Prerequisites:** Node.js >= 22.12, Docker running.
 
 ## Usage
 
@@ -34,6 +34,20 @@ sidekick-docker ps -q                   # container IDs only
 # Stream container logs
 sidekick-docker logs <container>
 sidekick-docker logs <container> --no-follow --tail 50
+
+# Inventory (all support --format json; images also supports -q)
+sidekick-docker images
+sidekick-docker volumes
+sidekick-docker networks
+
+# One-shot resource usage, like `docker stats --no-stream`
+sidekick-docker stats
+
+# Disk usage, including build cache — like `docker system df`
+sidekick-docker df
+
+# Raw inspect payload for a container (name, full ID, or ID prefix)
+sidekick-docker inspect <container> | jq .State.Health
 ```
 
 ### Options
@@ -52,7 +66,7 @@ The dashboard has 5 panels, each mapped to a number key:
 
 | # | Panel | Shows | Detail Tabs |
 |---|-------|-------|-------------|
-| 1 | **Containers** | All containers with state, image, ports, uptime | Logs, Stats, Env, Config, Files, Patterns |
+| 1 | **Containers** | All containers with state, image, ports, uptime | Logs, Stats, Env, Config, Labels, Files, Patterns |
 | 2 | **Services** | Compose projects and their services | Info, Logs |
 | 3 | **Images** | Local images with tags, size, age | Info, Layers |
 | 4 | **Volumes** | Named volumes with driver, mount path, usage status | Info |
@@ -109,6 +123,7 @@ The dashboard has 5 panels, each mapped to a number key:
 | `p` / `u` | Pause / Unpause |
 | `d` | Remove (with confirmation) |
 | `e` | Exec into container |
+| `P` | Prune — remove all stopped containers (with confirmation), reporting space reclaimed |
 | `c` | Copy logs to clipboard |
 
 ### Compose Actions (via context menu)

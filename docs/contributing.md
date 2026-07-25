@@ -6,9 +6,9 @@ Thank you for your interest in contributing to Sidekick Docker! This page mirror
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22.12+
 - Docker running
-- VS Code 1.85+ (for extension development)
+- VS Code 1.109+ (for extension development)
 
 ### Development Setup
 
@@ -21,7 +21,7 @@ npm test
 
 ### Running Locally
 
-- **TUI dashboard**: `./sidekick-docker-cli/dist/sidekick-docker.mjs`
+- **TUI dashboard**: `node ./sidekick-docker-cli/dist/sidekick-docker.mjs` (esbuild writes the file mode 0644, so the `#!` line is inert and invoking the path directly exits 126)
 - **VS Code extension**: Open `sidekick-docker-vscode/` in VS Code and press `F5`
 
 ## Available Commands
@@ -32,7 +32,7 @@ npm run build:shared       # Shared library only
 npm run build:cli          # CLI only
 npm run build:vscode       # VS Code extension only
 npm test                   # Run all tests
-npm run lint               # Lint all packages (ESLint 9)
+npm run lint               # Lint all packages (ESLint 10)
 npm run lint:fix           # Lint + auto-fix
 ```
 
@@ -40,7 +40,7 @@ npm run lint:fix           # Lint + auto-fix
 
 - TypeScript strict mode everywhere
 - Vitest for testing, co-located `.test.ts` files
-- ESLint 9 (flat config) for code quality — run `npm run lint` before submitting PRs
+- ESLint 10 (flat config) for code quality — run `npm run lint` before submitting PRs
 - [Conventional Commits](https://www.conventionalcommits.org/) for commit messages
 
 ## Making Changes

@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- **Node.js** >= 20
+- **Node.js** >= 22.12.0
 - **Docker** running and accessible
 
 ## Terminal (TUI / CLI)
@@ -51,7 +51,7 @@ This builds all three packages in order (shared, CLI, VS Code extension).
 ### Run the TUI after building
 
 ```bash
-./sidekick-docker-cli/dist/sidekick-docker.mjs
+node ./sidekick-docker-cli/dist/sidekick-docker.mjs
 ```
 
 ### Run the VS Code extension after building

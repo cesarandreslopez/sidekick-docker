@@ -11,7 +11,7 @@ Docker management TUI/CLI + VSCode extension.
 Monorepo with 3 packages (NOT npm workspaces — each package manages its own deps):
 
 - `sidekick-docker-shared/` — Docker API layer, types, compose detection. Built with `tsc` to `dist/` (CommonJS + declarations).
-- `sidekick-docker-cli/` — TUI dashboard (Ink 6 + React 19). Bundled with esbuild to single ESM binary `dist/sidekick-docker.mjs`.
+- `sidekick-docker-cli/` — TUI dashboard (Ink 7 + React 19). Bundled with esbuild to single ESM binary `dist/sidekick-docker.mjs`.
 - `sidekick-docker-vscode/` — VSCode extension. esbuild produces dual output: `out/extension.js` (CJS, Node) + `out/webview/dashboard.js` (IIFE, browser).
 
 Shared must be built first — CLI and VSCode depend on it via local file path (`file:../sidekick-docker-shared`).
@@ -37,7 +37,7 @@ cd sidekick-docker-shared && npx vitest run src/docker   # single directory
 cd sidekick-docker-shared && npx vitest run DockerClient  # single file by name
 cd <package> && npm run test:watch                       # watch mode (all 3 packages)
 
-# Lint (ESLint 9 flat config — root eslint.config.mjs)
+# Lint (ESLint 10 flat config — root eslint.config.mjs)
 npm run lint
 npm run lint:fix
 bash scripts/lint-all.sh --fix   # alternative: accepts pass-through args
@@ -68,7 +68,7 @@ Two things that bite:
 Run these before every commit. All four are currently green — if one fails, you broke it.
 
 ```bash
-npm run lint                                     # ESLint 9 (typescript-eslint strict + react-hooks on cli)
+npm run lint                                     # ESLint 10 (typescript-eslint strict + react-hooks on cli)
 npm test                                         # vitest: shared + cli + vscode
 node scripts/check-imports.mjs                   # import DAG enforcement
 cd sidekick-docker-shared && npx tsc --noEmit     # no root tsconfig — run per package
@@ -84,7 +84,7 @@ There is no root `tsconfig.json`, so running `tsc` from the repo root checks not
 
 ## CI & Release
 
-- **`ci.yml`** — push/PR to `main`, **path-filtered to `sidekick-docker-*/**`**. Node 20. Runs tests and
+- **`ci.yml`** — push/PR to `main`, **path-filtered to `sidekick-docker-*/**`**. Node 22. Runs tests and
   builds only: **no lint, no `check-imports.mjs`, no `tsc --noEmit`**, and the `build-extension` job
   packages the `.vsix` but never runs the vscode tests. Edits confined to root `package.json`,
   `eslint.config.mjs`, `scripts/`, or the workflows themselves trigger **no CI at all** — verify those locally.
@@ -95,13 +95,18 @@ There is no root `tsconfig.json`, so running `tsc` from the repo root checks not
   No npm script and no pinned Python requirements file; to build docs locally, install zensical yourself.
 - **Release flow**: `bash scripts/bump-version.sh X.Y.Z` (rewrites 4 package.json files; **does not commit
   or tag**) → update CHANGELOG.md → commit → `git tag vX.Y.Z` → push tags.
-- **Node**: CI pins 20 (the npm-publish job uses 22). Only the CLI declares `engines.node >=20`. There is
-  no `.nvmrc` or `.npmrc`.
+- **`bump-version.sh` does not touch the lockfiles.** `npm ci` tolerates the resulting root-version skew,
+  so nothing fails — but the three `package-lock.json` files keep the *previous* version in `.version` and
+  `.packages[""].version` (plus `.packages["../sidekick-docker-shared"].version` in cli and vscode) unless
+  you update them by hand. Do not `sed` the lockfiles: `@alcalzone/ansi-tokenize` is genuinely `0.3.0`, so
+  a blind version replace corrupts a real dependency pin.
+- **Node**: CI and release both pin 22. Only the CLI declares `engines.node` (`>=22.12.0`, raised from
+  `>=20` in 0.4.0 for Ink 7 / Commander 15). There is no `.nvmrc` or `.npmrc`.
 
 ## Stack
 
 - **TypeScript** (strict mode everywhere)
-- **Ink 6 + React 19** for TUI
+- **Ink 7 + React 19** for TUI
 - **esbuild** for CLI/VSCode bundling, **tsc** for shared
 - **dockerode** for Docker API, **zod** for validating daemon responses and webview messages
 - **Commander.js** for CLI argument parsing
@@ -190,7 +195,7 @@ There is no root `tsconfig.json`, so running `tsc` from the repo root checks not
 - **Render throttling**: `scheduleRender()` batches at 200ms and **drops the frame** when `process.stdout.writableLength > writableHighWaterMark` (backpressure guard); stream callbacks add a further 100ms flush debounce. `SIDEKICK_DEBUG_STREAMS=1` dumps heap/stdout diagnostics every 60s.
 - **Compose detection**: Primary from container labels (`com.docker.compose.*`), secondary from `docker compose config`. Merged to show running + planned services.
 - **esbuild plugins** (CLI): Stubs `ssh2`, `cpu-features`, `react-devtools-core`. Externalizes `node-pty`. Injects `__CLI_VERSION__`.
-- **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts` (11 extension→webview, 13 webview→extension variants).
+- **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts` (11 extension→webview, 12 webview→extension variants).
 
 ## Module Architecture
 
@@ -252,8 +257,8 @@ Checker semantics worth knowing before trusting a green result:
 
 ## Testing Reality
 
-Don't go looking for test infrastructure that doesn't exist. 35 co-located test files (shared 14, cli 14,
-vscode 7), **zero `.test.tsx`**, **no `ink-testing-library`**, no `__mocks__`, no `setupFiles`, and **no
+Don't go looking for test infrastructure that doesn't exist. 40 co-located test files (shared 17, cli 15,
+vscode 8), **zero `.test.tsx`**, **no `ink-testing-library`**, no `__mocks__`, no `setupFiles`, and **no
 coverage tooling at all**. No React component is rendered in any test. The one genuinely shared test double
 is `sidekick-docker-vscode/src/test/vscode.ts` (62 LOC), aliased over the `vscode` module for that
 package's tests and seeded/inspected via its exported `__mock`; shared and cli have no shared helpers.
@@ -276,23 +281,19 @@ mock for the vscode package.
 
 ## Known Technical Debt
 
-- `webview/dashboard.ts` is still large (1080 LOC, ~390 of it renderers; keyboard/overlays/HTML
-  extracted to their own modules). `providers/dashboardHtml.ts` is 1118 LOC, nearly all one inline
-  `<style>` block. `services/DockerService.ts` is 944 LOC. `Dashboard.tsx` ~686 LOC
-- `noUncheckedIndexedAccess` not yet enabled — 184 errors under each package's own tsconfig (shared 11,
-  cli 68, vscode 105; 47 of vscode's are in `.test.ts`, which only its tsconfig type-checks). Also absent
+- `webview/dashboard.ts` is still large (1097 LOC, ~390 of it renderers; keyboard/overlays/HTML
+  extracted to their own modules). `providers/dashboardHtml.ts` is 1132 LOC, nearly all one inline
+  `<style>` block. `services/DockerService.ts` is 1069 LOC. `Dashboard.tsx` ~698 LOC
+- `noUncheckedIndexedAccess` not yet enabled — 186 errors under each package's own tsconfig (shared 11,
+  cli 73, vscode 102; some of vscode's are in `.test.ts`, which only its tsconfig type-checks). Also absent
   are `noUnusedLocals`, `noUnusedParameters`, and `exactOptionalPropertyTypes`
 - CI runs none of the quality gates (no lint, no import check, no typecheck) and skips vscode tests —
   local verification is the real gate
-- `scripts/check-imports.mjs` header comment references the stale path `specs/refactor/architecture.md`;
-  the file is at `specs/_archive/refactor/architecture.md`
 - The vscode webview bundle is esbuild `format: 'iife'` but loaded via `<script type="module">` — works,
   but the two disagree
-- `esbuild.cjs --production` (minify + drop sourcemaps) exists **only** in `sidekick-docker-vscode`, and no
-  npm script or CI job passes it — with no `vscode:prepublish` hook, `vsce package` ships an unminified
-  bundle with sourcemaps. The CLI's `esbuild.cjs` has no argv parsing at all (`minify: false` is
-  hardcoded), so `--production` is a silent no-op there. Both scripts end in
+- `esbuild.cjs --production` (minify + drop sourcemaps) exists **only** in `sidekick-docker-vscode`. As of
+  0.4.0 it is actually wired up — `vscode:prepublish` → `build:production` → `esbuild.cjs --production` —
+  so `vsce package` now ships a minified bundle. The CLI's `esbuild.cjs` still has no argv parsing at all
+  (`minify: false` is hardcoded), so `--production` remains a silent no-op there. Both scripts end in
   `.catch(() => process.exit(1))`, swallowing the build error message
-- `StatusBar.tsx`, `HelpOverlay.tsx`, `VersionOverlay.tsx`, and `TooSmallOverlay.tsx` each prepend `⚡` to
-  `BRAND_INLINE`, which already starts with `⚡` — doubled bolt in all four
 - See `specs/_archive/` for refactoring history and `specs/*/design.md` for module design docs

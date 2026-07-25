@@ -1,7 +1,7 @@
 # cli — Design Spec
 
 ## Purpose
-Terminal UI dashboard for Docker management using Ink 6 + React 19. Provides an interactive TUI with panel-based navigation, real-time stats, log streaming, and Docker operations.
+Terminal UI dashboard for Docker management using Ink 7 + React 19. Provides an interactive TUI with panel-based navigation, real-time stats, log streaming, and Docker operations.
 
 ## Public Interface
 

@@ -1,7 +1,5 @@
 # Sidekick Docker Shared
 
-[![npm](https://img.shields.io/npm/v/sidekick-docker-shared?label=npm)](https://www.npmjs.com/package/sidekick-docker-shared)
-[![npm Downloads](https://img.shields.io/npm/dt/sidekick-docker-shared?label=Downloads)](https://www.npmjs.com/package/sidekick-docker-shared)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cesarandreslopez/sidekick-docker/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cesarandreslopez/sidekick-docker)
 
@@ -9,8 +7,20 @@ The Docker API abstraction layer that powers Sidekick Docker. Wraps dockerode in
 
 ## Install
 
+This package is **not published to npm**. It is an internal package of the
+[sidekick-docker](https://github.com/cesarandreslopez/sidekick-docker) monorepo, consumed by
+the CLI and the VS Code extension through a local `file:` dependency:
+
+```json
+"sidekick-docker-shared": "file:../sidekick-docker-shared"
+```
+
+To work with it, clone the monorepo and build it first — the two consumers import from `dist/`:
+
 ```bash
-npm install sidekick-docker-shared
+git clone https://github.com/cesarandreslopez/sidekick-docker.git
+cd sidekick-docker/sidekick-docker-shared
+npm install && npm run build
 ```
 
 ## API Reference

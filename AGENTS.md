@@ -12,7 +12,7 @@ workspace. Each package owns its dependencies and lockfile:
 - `sidekick-docker-shared/` — Docker API layer, shared types, compose
   detection, streaming utilities, and formatters. TypeScript emits CommonJS
   and declarations to `dist/`.
-- `sidekick-docker-cli/` — Ink 6/React 19 terminal dashboard and CLI commands.
+- `sidekick-docker-cli/` — Ink 7/React 19 terminal dashboard and CLI commands.
   esbuild emits the ESM executable `dist/sidekick-docker.mjs`.
 - `sidekick-docker-vscode/` — VS Code extension and browser webview. esbuild
   emits `out/extension.js` (CommonJS) and `out/webview/dashboard.js` (IIFE).
@@ -73,7 +73,7 @@ gate above before handoff. Tests are colocated as `.test.ts`/`.test.tsx`.
 ## Stack
 
 - TypeScript in strict mode
-- Ink 6 and React 19 for the TUI
+- Ink 7 and React 19 for the TUI
 - esbuild for CLI and VS Code bundles; `tsc` for the shared package
 - dockerode for the Docker Engine API
 - Commander.js for CLI parsing
@@ -81,8 +81,8 @@ gate above before handoff. Tests are colocated as `.test.ts`/`.test.tsx`.
 - node-pty for interactive exec; it is a native module excluded from the CLI
   bundle
 
-The supported runtime baseline is Node.js 20 or newer. Extension development
-targets VS Code 1.85 or newer.
+The supported runtime baseline is Node.js 22.12 or newer. Extension development
+targets VS Code 1.109 or newer.
 
 ## Conventions
 

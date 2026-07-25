@@ -28,6 +28,8 @@ or press `Ctrl+Alt+D` — `Ctrl`, not `Cmd`, on macOS too (macOS reserves `Cmd+O
 | `Sidekick Docker: Open Dashboard to the Side` | Open in a split editor column |
 | `Sidekick Docker: Refresh Containers` | Refresh the tree view (`Ctrl+Alt+R` / `Cmd+Alt+R` when the Containers view is focused) |
 | `Sidekick Docker: Start/Stop/Restart Container...` | Quick-pick a container to act on |
+| `Sidekick Docker: Exec into Container...` | Quick-pick a running container and open a terminal inside it, using `sidekick-docker.exec.defaultShell` |
+| `Sidekick Docker: Show Container Logs...` | Quick-pick a container and open the dashboard on its logs |
 
 ## Containers Tree View
 
@@ -60,7 +62,7 @@ Settings apply immediately — the extension reconnects without a window reload.
 
 ## Requirements
 
-- **VS Code** >= 1.85
+- **VS Code** >= 1.109
 - **Docker** running and accessible
 
 ## Architecture
