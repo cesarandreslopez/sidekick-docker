@@ -1,5 +1,7 @@
 import type {
   DashboardStateSnapshot,
+  DetailLoadUpdate,
+  StreamStateUpdate,
   SerializedLogEntry,
   SerializedContainerStats,
   SerializedFilesystemChange,
@@ -70,6 +72,9 @@ export interface WebviewState {
   imageLayers: Map<string, SerializedImageLayer[]>;
   composeLogs: Map<string, SerializedLogEntry[]>;
 
+  detailLoads: Map<string, DetailLoadUpdate>;
+  streamStates: Map<string, StreamStateUpdate>;
+
   // Log analysis state
   logSeverityCounts: Map<string, SeverityCounts>;
   logFilterString: string;
@@ -114,6 +119,8 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
     snapshot: null,
     connState: 'connecting',
     logs: new Map(),
+    detailLoads: new Map(),
+    streamStates: new Map(),
     stats: new Map(),
     envVars: new Map(),
     containerChanges: new Map(),
@@ -141,4 +148,9 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
     versionOverlayVisible: false,
     compareItemIds: {},
   };
+}
+
+/** Keep the visible selection and action target identical after filtering or refresh. */
+export function reconcileSelection(items: { id: string }[], selectedId: string | null): string | null {
+  return items.some(item => item.id === selectedId) ? selectedId : items[0]?.id ?? null;
 }

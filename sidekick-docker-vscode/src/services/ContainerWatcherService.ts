@@ -24,6 +24,9 @@ export class ContainerWatcherService {
   private connected = false;
   private connectionNotified = false;
   private disposed = false;
+  private connectPromise: Promise<boolean> | null = null;
+  private refreshPromise: Promise<void> | null = null;
+  private refreshQueued = false;
 
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
   private reconnectInterval: ReturnType<typeof setInterval> | null = null;
@@ -44,9 +47,17 @@ export class ContainerWatcherService {
     }
   }
 
-  private async tryConnect(): Promise<boolean> {
+  private tryConnect(): Promise<boolean> {
+    if (this.disposed) return Promise.resolve(false);
+    if (this.connectPromise) return this.connectPromise;
+    this.connectPromise = this.connect().finally(() => { this.connectPromise = null; });
+    return this.connectPromise;
+  }
+
+  private async connect(): Promise<boolean> {
     try {
       const ok = await this.client.ping();
+      if (this.disposed) return false;
       if (!ok) {
         this.setConnected(false);
         return false;
@@ -54,6 +65,8 @@ export class ContainerWatcherService {
 
       this.setConnected(true);
       await this.refresh();
+      if (this.disposed || !this.connected) return false;
+      this.stopWatcher();
 
       // Start event watcher
       this.watcher = new EventWatcher(this.client, {
@@ -79,18 +92,38 @@ export class ContainerWatcherService {
       this.stopReconnectPolling();
       return true;
     } catch {
+      if (this.disposed) return false;
       this.setConnected(false);
       return false;
     }
   }
 
-  private async refresh(): Promise<void> {
-    if (this.disposed) return;
+  private refresh(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    if (this.refreshPromise) {
+      this.refreshQueued = true;
+      return this.refreshPromise;
+    }
+    this.refreshPromise = this.refreshLoop().finally(() => { this.refreshPromise = null; });
+    return this.refreshPromise;
+  }
+
+  private async refreshLoop(): Promise<void> {
+    do {
+      this.refreshQueued = false;
+      await this.refreshOnce();
+    } while (this.refreshQueued && !this.disposed);
+  }
+
+  private async refreshOnce(): Promise<void> {
     try {
-      this.containers = await this.client.listContainers(true);
+      const containers = await this.client.listContainers(true);
+      if (this.disposed || this.refreshQueued) return;
+      this.containers = containers;
       this.setConnected(true);
       this.callbacks.onContainersChanged(this.containers, true);
     } catch {
+      if (this.disposed || this.refreshQueued) return;
       this.setConnected(false);
       this.containers = [];
       this.callbacks.onContainersChanged(this.containers, false);
@@ -100,6 +133,8 @@ export class ContainerWatcherService {
   }
 
   private handleContainerEvent(event: { type: string; resourceId: string }): void {
+    if (this.disposed) return;
+    if (this.refreshPromise) this.refreshQueued = true;
     switch (event.type) {
       case 'start':
       case 'unpause': {
@@ -132,7 +167,9 @@ export class ContainerWatcherService {
   }
 
   private scheduleRefresh(): void {
-    if (this.debounceTimer || this.disposed) return;
+    if (this.disposed) return;
+    if (this.refreshPromise) { this.refreshQueued = true; return; }
+    if (this.debounceTimer) return;
     this.debounceTimer = setTimeout(() => {
       this.debounceTimer = null;
       this.refresh().catch(e => console.debug('debounced refresh failed:', e));
@@ -140,6 +177,7 @@ export class ContainerWatcherService {
   }
 
   private setConnected(value: boolean): void {
+    if (this.disposed) return;
     // Notify on every change, plus once for the initial state: `connected`
     // starts out false, so a failed first connect would otherwise never
     // reach the callbacks and the daemon-down UI would stay unreachable.

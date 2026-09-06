@@ -1,5 +1,5 @@
 import React from 'react';
-import { spawnSync } from 'child_process';
+import { execFallback } from '../dashboard/execFallback.js';
 import type { Command } from 'commander';
 import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId, errorMessage } from 'sidekick-docker-shared';
 import { debugLog } from '../utils/debug';
@@ -17,7 +17,6 @@ import { ComposeLogStreamManager } from '../dashboard/ComposeLogStreamManager';
 import type { SidePanel } from '../dashboard/panels/types';
 import { Dashboard } from '../dashboard/ink/Dashboard';
 import type { DashboardViewState } from '../dashboard/ink/Dashboard';
-import { enableMouse, disableMouse } from '../dashboard/ink/mouse';
 
 export async function dashboardAction(_opts: Record<string, unknown>, cmd: Command): Promise<void> {
   const globalOpts = cmd.optsWithGlobals();
@@ -28,7 +27,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Create state and do initial refresh
   const cwd = process.cwd();
-  const state = new DockerState(client, cwd);
+  let stateChanged = () => {};
+  const state = new DockerState(client, cwd, () => stateChanged());
   await state.refresh();
 
   // Subprocesses cannot see the endpoint dockerode was configured with, so
@@ -330,35 +330,21 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   // Exec trigger ref: Dashboard populates this with a function to start exec overlay
   const execTriggerRef: React.RefObject<((containerId: string, containerName: string) => void) | null> = { current: null };
 
-  // Fallback: tear down Ink and use spawnSync when node-pty is unavailable
-  const onExecFallback = (containerId: string) => {
-    instance.clear();
-    instance.unmount();
-    disableMouse();
-
-    spawnSync('docker', ['exec', '-it', containerId, '/bin/sh'], {
-      stdio: 'inherit',
-      env: { ...process.env, ...cliEnv },
-    });
-
-    // Re-create the Ink instance after the shell exits
-    instance = render(
-      React.createElement(Dashboard, {
-        panels,
-        metrics: getEnrichedMetrics(),
-        onViewStateChange,
-        execTriggerRef,
-        onExecFallback,
-        dockerEnv: cliEnv,
-      }),
-    );
-    enableMouse();
+  let externalExec = false;
+  const execAbort = new AbortController();
+  const onExecFallback = async (containerId: string): Promise<void> => {
+    externalExec = true;
+    try {
+      await execFallback(containerId, cliEnv, execAbort.signal);
+    } finally {
+      externalExec = false;
+    }
   };
 
   // Render with Ink
   const { render } = await import('ink');
 
-  let instance = render(
+  const instance = render(
     React.createElement(Dashboard, {
       panels,
       metrics: getEnrichedMetrics(),
@@ -368,6 +354,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       dockerEnv: cliEnv,
     }),
   );
+
+  stateChanged = scheduleRender;
 
   // Wire exec handler: ContainersPanel calls through the trigger ref
   const containersPanel = panels[0] as ContainersPanel;
@@ -379,8 +367,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     if (execTriggerRef.current) {
       execTriggerRef.current(containerId, name);
     } else {
-      // Ref not populated yet — direct fallback
-      onExecFallback(containerId);
+      throw new Error('The terminal is still starting. Try Exec again.');
     }
   });
 
@@ -404,6 +391,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   function cleanup() {
     if (stopped) return;
     stopped = true;
+    execAbort.abort();
     try { logManager.dispose(); } catch { /* ignore */ }
     try { secondaryLogManager.dispose(); } catch { /* ignore */ }
     try { statsManager.dispose(); } catch { /* ignore */ }
@@ -424,11 +412,14 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     }
   }
 
-  process.on('SIGINT', cleanup);
+  const onSigint = () => { if (!externalExec) cleanup(); };
+  process.on('SIGINT', onSigint);
   process.on('SIGTERM', cleanup);
 
   // Wait for exit
   await instance.waitUntilExit();
+  process.removeListener('SIGINT', onSigint);
+  process.removeListener('SIGTERM', cleanup);
   cleanup();
   process.exit(0);
 }

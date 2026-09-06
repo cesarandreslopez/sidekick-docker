@@ -1,4 +1,5 @@
 import Dockerode from 'dockerode';
+import { abortableChunks, LineDecoder, streamLines, streamRequest } from './streams';
 import type {
   ContainerInfo,
   ContainerStats,
@@ -144,6 +145,7 @@ export class DockerClient {
   }
 
   async *streamLogs(id: string, opts: LogStreamOptions = {}, signal?: AbortSignal): AsyncIterable<LogEntry> {
+    if (signal?.aborted) return;
     const container = this.docker.getContainer(id);
     const logOpts = {
       follow: true as const,
@@ -152,72 +154,62 @@ export class DockerClient {
       tail: opts.tail ?? 100,
       since: opts.since ?? 0,
       timestamps: true,
+      abortSignal: signal,
     };
 
+    const info = opts.follow === false ? undefined
+      : await streamRequest(container.inspect({ abortSignal: signal }), signal);
+    const isTty = info?.Config.Tty;
+    if (signal?.aborted) return;
     const stream = opts.follow === false
-      ? await container.logs({ ...logOpts, follow: false as const })
-      : await container.logs(logOpts);
+      ? await streamRequest(container.logs({ ...logOpts, follow: false as const }), signal)
+      : await streamRequest(container.logs(logOpts), signal);
+    if (stream === undefined) return;
 
-    // Docker multiplexed stream: 8 byte header + payload
-    // Header: [stream_type(1), 0, 0, 0, size(4)]
-    // stream_type: 1=stdout, 2=stderr
-    if (typeof stream === 'string' || Buffer.isBuffer(stream)) {
-      // Non-follow requests resolve to a single Buffer; non-TTY containers still
-      // use the multiplexed frame format, TTY containers return plain text.
-      const buf = Buffer.isBuffer(stream) ? stream : Buffer.from(stream, 'utf8');
-      if (looksMultiplexed(buf)) {
-        for (const frame of demuxFrames(buf).frames) {
-          for (const line of frame.payload.split(/\r?\n/)) {
-            if (line.trim()) {
-              yield parseLogLine(line, frame.stream);
-            }
-          }
-        }
-      } else {
-        // TTY containers emit CRLF; a trailing \r breaks parseLogLine's
-        // timestamp match and leaks raw CRs into piped output.
-        for (const line of buf.toString('utf8').split(/\r?\n/)) {
-          if (line) {
-            yield parseLogLine(line, 'stdout');
-          }
-        }
-      }
+    if (signal?.aborted) {
+      if (typeof stream !== 'string' && !Buffer.isBuffer(stream)) (stream as unknown as { destroy?: () => void }).destroy?.();
       return;
     }
-
-    const readable = stream as unknown as NodeJS.ReadableStream;
-    const destroy = () => (readable as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
-
-    if (signal) {
-      signal.addEventListener('abort', destroy, { once: true });
-    }
-
-    const buffer: Buffer[] = [];
-
+    const buffered = typeof stream === 'string' || Buffer.isBuffer(stream);
+    const bytes = buffered ? Buffer.from(stream as string | Buffer) : undefined;
+    // Inspect the TTY flag instead of interpreting raw terminal bytes as a frame header.
+    const chunks = buffered
+      ? (async function* () { yield bytes!; })()
+      : abortableChunks(stream as unknown as AsyncIterable<Buffer> & { destroy(): void }, signal);
     try {
-      for await (const chunk of readable) {
-        if (signal?.aborted) break;
-        const data = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string);
-        buffer.push(data);
-        const combined = Buffer.concat(buffer);
-        buffer.length = 0;
-
-        const { frames, rest } = demuxFrames(combined);
-        for (const frame of frames) {
-          for (const line of frame.payload.split(/\r?\n/)) {
-            if (line.trim()) {
-              yield parseLogLine(line, frame.stream);
-            }
+      const tty = buffered ? !looksMultiplexed(bytes!) : isTty === true;
+      const decoders = { stdout: new LineDecoder(), stderr: new LineDecoder() };
+      let pending: Buffer = Buffer.alloc(0);
+      for await (const chunk of chunks) {
+        if (signal?.aborted) return;
+        if (tty) {
+          for (const line of decoders.stdout.push(chunk)) {
+            if (line) yield parseLogLine(line, 'stdout');
           }
+          continue;
         }
-
-        if (rest.length > 0) {
-          // Incomplete frame, save remainder (copy to release combined buffer)
-          buffer.push(Buffer.from(rest));
+        pending = Buffer.concat([pending, chunk]);
+        let offset = 0;
+        while (offset + 8 <= pending.length) {
+          const size = pending.readUInt32BE(offset + 4);
+          if (offset + 8 + size > pending.length) break;
+          const channel = pending[offset] === 2 ? 'stderr' : 'stdout';
+          for (const line of decoders[channel].push(pending.subarray(offset + 8, offset + 8 + size))) {
+            if (line) yield parseLogLine(line, channel);
+          }
+          offset += 8 + size;
+        }
+        pending = Buffer.from(pending.subarray(offset));
+      }
+      if (!signal?.aborted) {
+        for (const channel of ['stdout', 'stderr'] as const) {
+          for (const line of decoders[channel].end()) {
+            if (line) yield parseLogLine(line, channel);
+          }
         }
       }
     } finally {
-      destroy();
+      if (!buffered) (stream as unknown as { destroy?: () => void }).destroy?.();
     }
   }
 
@@ -310,13 +302,17 @@ export class DockerClient {
   }
 
   async *streamStats(id: string, signal?: AbortSignal): AsyncIterable<ContainerStats> {
+    if (signal?.aborted) return;
+    // dockerode supports abortSignal here; its stats overload declarations lag behind.
+    const requestOptions = { abortSignal: signal };
     const container = this.docker.getContainer(id);
 
     // One-shot fetch for instant first sample (stream:false returns immediately)
     let prevCpu = 0;
     let prevSystem = 0;
     try {
-      const snapshot = await container.stats({ stream: false });
+      const snapshot = await container.stats({ ...requestOptions, stream: false });
+      if (signal?.aborted) return;
       const validated = DockerStatsRawSchema.parse(snapshot);
       const { stats: first, cpuTotal, systemTotal } = this.parseStats(validated, 0, 0);
       prevCpu = cpuTotal;
@@ -328,32 +324,21 @@ export class DockerClient {
 
     if (signal?.aborted) return;
 
-    const stream = await container.stats({ stream: true });
-    const destroy = () => (stream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
-
-    if (signal) {
-      signal.addEventListener('abort', destroy, { once: true });
-    }
-
-    try {
-      for await (const chunk of stream as AsyncIterable<Buffer>) {
-        if (signal?.aborted) break;
-        const lines = chunk.toString('utf8').split('\n').filter(Boolean);
-        for (const line of lines) {
-          try {
-            const raw: unknown = JSON.parse(line);
-            const validated = DockerStatsRawSchema.parse(raw);
-            const { stats, cpuTotal, systemTotal } = this.parseStats(validated, prevCpu, prevSystem);
-            prevCpu = cpuTotal;
-            prevSystem = systemTotal;
-            yield stats;
-          } catch {
-            continue;
-          }
-        }
+    const stream = await streamRequest(container.stats({ ...requestOptions, stream: true }), signal);
+    if (!stream) return;
+    for await (const line of streamLines(abortableChunks(stream as unknown as AsyncIterable<Buffer>, signal))) {
+      if (signal?.aborted) return;
+      if (!line.trim()) continue;
+      try {
+        const raw: unknown = JSON.parse(line);
+        const validated = DockerStatsRawSchema.parse(raw);
+        const { stats, cpuTotal, systemTotal } = this.parseStats(validated, prevCpu, prevSystem);
+        prevCpu = cpuTotal;
+        prevSystem = systemTotal;
+        yield stats;
+      } catch {
+        // Ignore a malformed complete record; never discard a partial transport chunk.
       }
-    } finally {
-      destroy();
     }
   }
 
@@ -563,33 +548,24 @@ export class DockerClient {
   }
 
   async *streamEvents(filters?: Record<string, string[]>, signal?: AbortSignal): AsyncIterable<DockerEvent> {
-    const stream = await this.docker.getEvents({ filters });
+    if (signal?.aborted) return;
+    const stream = await streamRequest(this.docker.getEvents({ filters, abortSignal: signal }), signal);
+    if (!stream) return;
 
-    // Wire up AbortSignal to destroy the underlying stream
-    if (signal) {
-      const onAbort = () => (stream as NodeJS.ReadableStream & { destroy?: () => void }).destroy?.();
-      signal.addEventListener('abort', onAbort, { once: true });
-    }
-
-    for await (const chunk of stream as AsyncIterable<Buffer>) {
-      if (signal?.aborted) break;
-      const lines = chunk.toString('utf8').split('\n').filter(Boolean);
-      for (const line of lines) {
-        try {
-          const raw: unknown = JSON.parse(line);
-          const event = DockerEventRawSchema.parse(raw);
-          const resourceType = mapResourceType(event.Type);
-
-          yield {
-            type: event.Action || event.status || 'unknown',
-            resourceType,
-            resourceId: event.Actor?.ID || '',
-            timestamp: new Date(event.time * 1000),
-            attributes: event.Actor?.Attributes || {},
-          };
-        } catch {
-          continue;
-        }
+    for await (const line of streamLines(abortableChunks(stream as unknown as AsyncIterable<Buffer>, signal))) {
+      if (signal?.aborted) return;
+      if (!line.trim()) continue;
+      try {
+        const event = DockerEventRawSchema.parse(JSON.parse(line));
+        yield {
+          type: event.Action || event.status || 'unknown',
+          resourceType: mapResourceType(event.Type),
+          resourceId: event.Actor?.ID || '',
+          timestamp: new Date(event.time * 1000),
+          attributes: event.Actor?.Attributes || {},
+        };
+      } catch {
+        // A malformed complete event must not prevent subsequent events.
       }
     }
   }

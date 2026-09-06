@@ -1,0 +1,43 @@
+import React from 'react';
+import { PassThrough } from 'node:stream';
+import { beforeEach, afterEach, expect, it, vi } from 'vitest';
+import { render } from 'ink';
+import { Dashboard } from './Dashboard';
+import { DockerState } from '../DockerState';
+import type { SidePanel } from '../panels/types';
+import type { DockerClient } from 'sidekick-docker-shared';
+
+vi.mock('../ExecManager', () => ({ ExecManager: class { start = async () => false; dispose() {} resize() {} write() {} } }));
+vi.mock('./mouse', () => ({ enableMouse() {}, disableMouse() {}, MouseProvider: ({ children }: { children: React.ReactNode }) => children, useMouse: () => ({}) }));
+vi.mock('./useMouseHandler', () => ({ useMouseHandler() {} }));
+vi.mock('./useTerminalSize', () => ({ useTerminalSize: () => ({ columns: 100, rows: 30 }) }));
+let app: ReturnType<typeof render> | undefined;
+beforeEach(() => { vi.stubGlobal('__CLI_VERSION__', 'test'); });
+afterEach(() => { app?.unmount(); app?.cleanup(); vi.unstubAllGlobals(); });
+
+it('keeps the same Ink instance alive and selection intact after fallback exec', async () => {
+  const stdout = Object.assign(new PassThrough(), { columns: 100, rows: 30, isTTY: true });
+  let output = '';
+  stdout.on('data', chunk => { output += chunk.toString(); });
+  stdout.resume();
+  const stdin = Object.assign(new PassThrough(), { isTTY: true, setRawMode: vi.fn(), ref: vi.fn(), unref: vi.fn() });
+  const state = new DockerState({} as DockerClient);
+  const panel: SidePanel = { id: 'images', title: 'Images', shortcutKey: 1, detailTabs: [{ label: 'Info', render: () => 'details' }], getItems: () => [{ id: 'image-a', label: 'image-a', sortKey: 0, data: {} }], getActions: () => [] };
+  const trigger = { current: null as ((id: string, name: string) => void) | null };
+  let finish!: () => void;
+  const fallback = vi.fn(() => new Promise<void>(resolve => { finish = resolve; }));
+  const view = vi.fn();
+  app = render(<Dashboard panels={[panel]} metrics={{ ...state.getMetrics(), daemonConnected: true, lastRefresh: new Date() }} execTriggerRef={trigger} onExecFallback={fallback} onViewStateChange={view} />, { stdout, stdin, stderr: stdout, patchConsole: false, interactive: true });
+  await vi.waitFor(() => expect(trigger.current, output).toBeTypeOf('function'), { timeout: 3000 });
+  const exited = vi.fn();
+  void app.waitUntilExit().then(exited);
+  trigger.current!('container-a', 'Container A');
+  await vi.waitFor(() => expect(fallback).toHaveBeenCalledWith('container-a'));
+  expect(exited).not.toHaveBeenCalled();
+  expect(stdin.setRawMode).toHaveBeenLastCalledWith(false);
+  finish();
+  await vi.waitFor(() => expect(stdin.setRawMode).toHaveBeenLastCalledWith(true));
+  await vi.waitFor(() => expect(view).toHaveBeenLastCalledWith(expect.objectContaining({ itemId: 'image-a' })));
+  expect(exited).not.toHaveBeenCalled();
+  state.dispose();
+});

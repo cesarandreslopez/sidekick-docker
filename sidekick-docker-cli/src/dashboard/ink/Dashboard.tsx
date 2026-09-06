@@ -208,7 +208,7 @@ interface DashboardProps {
   metrics: DockerDashboardMetrics;
   onViewStateChange?: (viewState: DashboardViewState) => void;
   execTriggerRef?: React.RefObject<((containerId: string, containerName: string) => void) | null>;
-  onExecFallback?: (containerId: string) => void;
+  onExecFallback?: (containerId: string) => Promise<void>;
   /** Endpoint overrides for the spawned `docker exec` process (see `dockerCliEnv`). */
   dockerEnv?: Record<string, string>;
 }
@@ -224,9 +224,11 @@ export interface DashboardViewState {
 export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { columns, rows } = useTerminalSize();
-  const { exit } = useApp();
+  const { exit, suspendTerminal } = useApp();
   const toastIdRef = useRef(0);
   const execManagerRef = useRef<ExecManager | null>(null);
+  const execInFallbackRef = useRef(false);
+  const execInputHandlerRef = useRef<((data: Buffer) => void) | null>(null);
 
   // Rotating phrase in the tab bar. The timer chain lives entirely inside the
   // effect: re-assigning a ref during render is not safe under React 19.
@@ -241,47 +243,9 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     return () => { clearTimeout(timer); };
   }, []);
 
-  // Populate exec trigger ref so external code can start exec sessions
-  useEffect(() => {
-    if (!execTriggerRef) return;
-    execTriggerRef.current = (containerId: string, containerName: string) => {
-      const manager = new ExecManager();
-      execManagerRef.current = manager;
-
-      disableMouse();
-      dispatch({ type: 'EXEC_START', containerId, containerName });
-
-      manager.start({
-        containerId,
-        containerName,
-        cols: columns,
-        rows,
-        env: dockerEnv,
-        onData: (data) => {
-          const cleaned = stripCursorEscapes(data);
-          dispatch({ type: 'EXEC_APPEND_OUTPUT', data: cleaned });
-        },
-        onExit: () => {
-          execManagerRef.current?.dispose();
-          execManagerRef.current = null;
-          enableMouse();
-          dispatch({ type: 'EXEC_END' });
-        },
-      }).then((started) => {
-        if (!started) {
-          execManagerRef.current = null;
-          enableMouse();
-          dispatch({ type: 'EXEC_END' });
-          onExecFallback?.(containerId);
-        }
-      });
-    };
-    return () => { execTriggerRef.current = null; };
-  }, [execTriggerRef, onExecFallback, columns, rows, dockerEnv]);
-
   // Forward raw stdin to PTY when exec overlay is active
   useEffect(() => {
-    if (state.overlay !== 'exec') return;
+    if (state.overlay !== 'exec' || execInFallbackRef.current) return;
     const handler = (data: Buffer) => {
       if (data.length === 1 && data[0] === 0x1d) {
         execManagerRef.current?.dispose();
@@ -292,9 +256,11 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       }
       execManagerRef.current?.write(data.toString());
     };
+    execInputHandlerRef.current = handler;
     process.stdin.on('data', handler);
     return () => {
       process.stdin.removeListener('data', handler);
+      execInputHandlerRef.current = null;
     };
   }, [state.overlay]);
 
@@ -319,6 +285,65 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
 
   const removeToast = useCallback((id: number) => {
     dispatch({ type: 'REMOVE_TOAST', id });
+  }, []);
+
+  // Populate exec trigger ref so external code can start exec sessions
+  useEffect(() => {
+    if (!execTriggerRef) return;
+    execTriggerRef.current = (containerId: string, containerName: string) => {
+      if (execManagerRef.current) return;
+      const manager = new ExecManager();
+      execManagerRef.current = manager;
+
+      disableMouse();
+      dispatch({ type: 'EXEC_START', containerId, containerName });
+
+      manager.start({
+        containerId,
+        containerName,
+        cols: columns,
+        rows,
+        env: dockerEnv,
+        onData: (data) => {
+          const cleaned = stripCursorEscapes(data);
+          dispatch({ type: 'EXEC_APPEND_OUTPUT', data: cleaned });
+        },
+        onExit: () => {
+          execManagerRef.current?.dispose();
+          execManagerRef.current = null;
+          enableMouse();
+          dispatch({ type: 'EXEC_END' });
+        },
+      }).then(async (started) => {
+        if (!started && execManagerRef.current === manager) {
+          try {
+            if (!onExecFallback) throw new Error('Interactive exec is unavailable.');
+            execInFallbackRef.current = true;
+            // The embedded PTY input listener must release stdin to the child too.
+            if (execInputHandlerRef.current) process.stdin.removeListener('data', execInputHandlerRef.current);
+            await suspendTerminal(() => onExecFallback(containerId));
+          } finally {
+            execInFallbackRef.current = false;
+            manager.dispose();
+            execManagerRef.current = null;
+            enableMouse();
+            dispatch({ type: 'EXEC_END' });
+          }
+        }
+      }).catch((error: unknown) => {
+        manager.dispose();
+        execManagerRef.current = null;
+        enableMouse();
+        dispatch({ type: 'EXEC_END' });
+        addToast(error instanceof Error ? error.message : String(error), 'error');
+      });
+    };
+    return () => { execTriggerRef.current = null; };
+  }, [execTriggerRef, onExecFallback, columns, rows, dockerEnv, suspendTerminal, addToast]);
+
+  useEffect(() => () => {
+    execManagerRef.current?.dispose();
+    execManagerRef.current = null;
   }, []);
 
   // Derived values
@@ -638,6 +663,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         {state.overlay !== 'exec' && (
           <StatusBar
             daemonConnected={metrics.daemonConnected}
+            resourceErrors={metrics.resourceErrors}
             focusTarget={state.focusTarget}
             panelActionHints={panelActionHints}
             filterString={state.filterString}

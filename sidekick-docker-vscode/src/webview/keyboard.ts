@@ -50,6 +50,12 @@ export function isTypingTarget(el: Element | null): boolean {
 
 export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): void {
   const { state } = ctx;
+  if (e.defaultPrevented || e.isComposing || e.metaKey || e.altKey) return;
+  if (e.ctrlKey && !['d', 'u'].includes(e.key)) return;
+  if (e.key === 'Tab') return; // Native traversal; modal boundaries are handled by overlays.
+  const navigationKeys = ['j', 'k', 'J', 'K', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'];
+  if (e.repeat && !navigationKeys.includes(e.key) && !(e.ctrlKey && ['d', 'u'].includes(e.key))) return;
+
 
   // Typing guard — while an input/textarea/contentEditable is focused, no
   // global shortcut may fire (fixes actions triggering from the log filter).
@@ -80,6 +86,9 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     return;
   }
 
+  // Ctrl+D/U are scroll commands only in the dashboard, never menu actions.
+  if (e.ctrlKey && (state.confirmVisible || state.filterVisible || state.contextMenuVisible
+    || state.sortOverlayVisible || state.helpOverlayVisible || state.versionOverlayVisible)) return;
   ctx.rotatePhrase();
 
   // Confirm overlay — Enter is NOT intercepted here: it activates the
@@ -234,6 +243,9 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     return;
   }
 
+  if ((e.key === 'Enter' || e.key === ' ') && active instanceof HTMLElement
+    && active.closest('button, a[href], [role="button"], [role="tab"]')) return;
+
   // ── Global keys ────────────────────────────────────────────────
   // Help overlay
   if (e.key === '?') {
@@ -256,18 +268,6 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
   if (num >= 1 && num <= ctx.panelCount) {
     e.preventDefault();
     ctx.switchPanel(num - 1);
-    return;
-  }
-
-  // Focus toggle (Tab). When an ARIA tab element has focus, let native Tab
-  // traverse so keyboard/AT users can reach the tab controls.
-  if (e.key === 'Tab') {
-    if (active instanceof HTMLElement && active.getAttribute('role') === 'tab') {
-      return;
-    }
-    e.preventDefault();
-    state.focusTarget = state.focusTarget === 'side' ? 'detail' : 'side';
-    ctx.renderAll();
     return;
   }
 
@@ -416,6 +416,7 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     if (e.key === 'Enter') {
       e.preventDefault();
       state.focusTarget = 'detail';
+      document.getElementById('detail-content')?.focus({ preventScroll: true });
       ctx.renderAll();
       return;
     }
@@ -435,6 +436,7 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     if (e.key === 'h' || e.key === 'ArrowLeft') {
       e.preventDefault();
       state.focusTarget = 'side';
+      document.getElementById('side-list')?.focus({ preventScroll: true });
       ctx.renderAll();
       return;
     }
@@ -460,6 +462,7 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     }
     if (state.focusTarget === 'detail') {
       state.focusTarget = 'side';
+      document.getElementById('side-list')?.focus({ preventScroll: true });
       ctx.renderAll();
       return;
     }

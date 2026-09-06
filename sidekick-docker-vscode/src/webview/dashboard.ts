@@ -8,7 +8,7 @@ declare const __VERSION__: string;
 import type { ExtensionMessage, WebviewMessage, SerializedLogEntry } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
 import type { WebviewState, SortField, ToastSeverity, PersistedViewState } from './state';
-import { createInitialState, SORT_OPTIONS } from './state';
+import { createInitialState, reconcileSelection, SORT_OPTIONS } from './state';
 import { containersPanel } from './panels/containers';
 import { servicesPanel } from './panels/services';
 import { imagesPanel } from './panels/images';
@@ -28,7 +28,7 @@ import {
   renderHelpOverlay,
   renderVersionOverlay,
 } from './overlays';
-import { handleGlobalKeydown, isTypingTarget } from './keyboard';
+import { handleGlobalKeydown } from './keyboard';
 import { parseComposeItemId } from '../types/composeItemId';
 import type { KeyboardContext } from './keyboard';
 import { filterLine } from 'sidekick-docker-shared/log';
@@ -192,7 +192,33 @@ function containerSortCompare(a: PanelItem, b: PanelItem, field: SortField): num
 }
 
 function getSelectedItem(items: PanelItem[]): PanelItem | undefined {
-  return items.find(it => it.id === state.selectedItemId) ?? items[0];
+  return items.find(it => it.id === state.selectedItemId);
+}
+
+function reconcileVisibleSelection(items: PanelItem[]): boolean {
+  if (!state.snapshot) return false;
+  const id = reconcileSelection(items, state.selectedItemId);
+  if (id === state.selectedItemId) return false;
+  state.selectedItemId = id;
+  post({ type: 'selectItem', panelId: getPanel().id, itemId: id });
+  return true;
+}
+
+/** Preserve the focused control when background updates replace its markup. */
+function replaceContent(root: HTMLElement, html: string): boolean {
+  if (root.innerHTML === html) return false;
+  const active = document.activeElement instanceof HTMLElement && root.contains(document.activeElement)
+    ? document.activeElement : null;
+  const attrs = ['id', 'data-panel', 'data-tab', 'data-pin-id', 'data-menu-id', 'data-hint-action', 'data-retry-detail', 'data-retry-streams'];
+  const attr = active && attrs.find(key => active.hasAttribute(key));
+  const value = attr && active?.getAttribute(attr);
+  root.innerHTML = html;
+  if (active === root) return true;
+  if (attr && value !== null) {
+    const replacement = [...root.querySelectorAll<HTMLElement>(`[${attr}]`)].find(el => el.getAttribute(attr) === value);
+    replacement?.focus({ preventScroll: true });
+  }
+  return true;
 }
 
 function getSelectedIndex(items: PanelItem[]): number {
@@ -273,36 +299,15 @@ function renderAll(): void {
 
   // Apply focus indicator
   $sideList.classList.toggle('focused', state.focusTarget === 'side');
-  // aria-activedescendant is only announced while the owning listbox has DOM
-  // focus. Without this the per-row ARIA below is built and never used.
-  //
-  // But renderAll() also runs on every background update (a stats tick, a log
-  // flush), and an open overlay is aria-modal with its own focus management.
-  // Pulling focus back to the list from under it strands the dialog: the
-  // buttons stop being reachable and Enter no longer hits the safe default.
-  const overlayOwnsFocus =
-    state.confirmVisible ||
-    state.filterVisible ||
-    state.sortOverlayVisible ||
-    state.helpOverlayVisible ||
-    state.versionOverlayVisible ||
-    state.contextMenuVisible;
-  if (
-    state.focusTarget === 'side' &&
-    !overlayOwnsFocus &&
-    document.activeElement !== $sideList &&
-    !isTypingTarget(document.activeElement)
-  ) {
-    $sideList.focus({ preventScroll: true });
-  }
   const $detailPane = document.getElementById('detail-pane')!;
   $detailPane.classList.toggle('focused', state.focusTarget === 'detail');
 
   renderTabBar();
   const items = getFilteredItems();
+  const selectionChanged = reconcileVisibleSelection(items);
   renderSideList(items);
   renderDetailTabBar();
-  renderDetailContent(items);
+  renderDetailContent(items, { animate: false, preserveScroll: !selectionChanged, restoreLogFocus: true });
   renderStatusBar(items);
   renderConnectionBanner();
   persistViewState();
@@ -311,6 +316,19 @@ function renderAll(): void {
 function renderConnectionBanner(): void {
   const $banner = document.getElementById('disconnected-banner')!;
   $banner.classList.toggle('visible', state.connState === 'disconnected');
+  let warning = document.getElementById('resource-warning');
+  if (!warning) {
+    warning = document.createElement('div');
+    warning.id = 'resource-warning';
+    warning.setAttribute('role', 'status');
+    $banner.after(warning);
+    warning.addEventListener('click', (event) => {
+      if (event.target instanceof HTMLButtonElement) post({ type: 'requestRefresh' });
+    });
+  }
+  const errors = Object.entries(state.snapshot?.resourceErrors ?? {});
+  warning.hidden = !errors.length || state.connState === 'disconnected';
+  warning.innerHTML = errors.length ? `${errors.map(([kind, message]) => escapeHtml(`${kind}: ${message}`)).join(' · ')} <button>Retry refresh</button>` : '';
 }
 
 function renderTabBar(): void {
@@ -321,7 +339,7 @@ function renderTabBar(): void {
     html += `<div class="tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="0" data-panel="${i}"><span class="shortcut">${p.shortcutKey}</span>${p.title}</div>`;
   }
   html += `<div class="phrase">${escapeHtml(state.phrase)}</div>`;
-  $tabBar.innerHTML = html;
+  if (!replaceContent($tabBar, html)) return;
 
   // Tab click handlers
   $tabBar.querySelectorAll('.tab').forEach(el => {
@@ -347,7 +365,9 @@ function renderSideList(items: PanelItem[]): void {
 
   if (items.length === 0) {
     $sideList.removeAttribute('aria-activedescendant');
-    $sideList.innerHTML = renderEmptyStateSide(getPanel().id);
+    $sideList.innerHTML = state.filterString || (getPanel().id === 'containers' && !state.showAllContainers)
+      ? renderEmptyState('⌕', 'No matching items', 'Clear the filter or show all containers to see more')
+      : renderEmptyStateSide(getPanel().id);
     return;
   }
 
@@ -372,12 +392,12 @@ function renderSideList(items: PanelItem[]): void {
       : '';
     const badgeHtml = item.badge ? `<span class="side-badge">${escapeHtml(item.badge)}</span>` : '';
     const pinBtnHtml = (panelId === 'containers' || panelId === 'services')
-      ? `<button type="button" class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeAttr(item.label)} for comparison" aria-pressed="${isPinned}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}" tabindex="-1">\u{1F4CC}</button>`
+      ? `<button type="button" class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeAttr(item.label)} for comparison" aria-pressed="${isPinned}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}" tabindex="${isSelected ? 0 : -1}">\u{1F4CC}</button>`
       : '';
-    const actionsBtnHtml = `<button type="button" class="row-actions-btn" data-menu-id="${escapeAttr(item.id)}" aria-label="Actions for ${escapeAttr(item.label)}" title="Actions" tabindex="-1">\u22EF</button>`;
+    const actionsBtnHtml = `<button type="button" class="row-actions-btn" data-menu-id="${escapeAttr(item.id)}" aria-label="Actions for ${escapeAttr(item.label)}" title="Actions" tabindex="${isSelected ? 0 : -1}">\u22EF</button>`;
     html += `<div class="side-item${isSelected ? ' selected' : ''}${pinClass}" role="option" id="${rowId}" aria-selected="${isSelected}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${healthHtml}${pinBtnHtml}${actionsBtnHtml}${badgeHtml}</div>`;
   }
-  $sideList.innerHTML = html;
+  if (!replaceContent($sideList, html)) return;
   if (selectedRowId) {
     $sideList.setAttribute('aria-activedescendant', selectedRowId);
   } else {
@@ -425,7 +445,7 @@ function renderDetailTabBar(): void {
     const active = i === state.detailTabIndex;
     html += `<div class="detail-tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="0" data-tab="${i}">${t.label}</div>`;
   }
-  $detailTabBar.innerHTML = html;
+  if (!replaceContent($detailTabBar, html)) return;
 
   $detailTabBar.querySelectorAll('.detail-tab').forEach(el => {
     el.addEventListener('click', () => {
@@ -444,6 +464,9 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
   const restoreLogFocus = options.restoreLogFocus ?? false;
   const shouldStickToBottom = tab?.autoScrollBottom ? isNearBottom($detailContent) : false;
   const previousScrollTop = $detailContent.scrollTop;
+  const compareScroll = [...$detailContent.querySelectorAll<HTMLElement>('[data-compare] .log-shell')].map(el => ({
+    pane: el.closest<HTMLElement>('[data-compare]')?.dataset.compare, top: el.scrollTop, bottom: isNearBottom(el),
+  }));
   const activeLogInput = restoreLogFocus && document.activeElement instanceof HTMLInputElement && document.activeElement.id === 'log-filter-input'
     ? {
         selectionStart: document.activeElement.selectionStart,
@@ -456,8 +479,29 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
     return;
   }
 
-  const html = tab.render(item, state);
-  $detailContent.innerHTML = html;
+  let html = tab.render(item, state);
+  const kind = panel.id === 'containers' ? ({ Env: 'env', Files: 'changes' } as const)[tab.label as 'Env' | 'Files']
+    : panel.id === 'images' && tab.label === 'Layers' ? 'layers' : undefined;
+  const load = kind ? state.detailLoads.get(`${kind}:${item.id}`) : undefined;
+  if (load?.state === 'error') {
+    html = `<div role="alert" class="load-error">${escapeHtml(load.message ?? 'Could not load this detail.')} <button data-retry-detail="${kind}" data-item-id="${escapeAttr(item.id)}">Retry</button></div>`;
+  }
+  const streamKind = tab.label === 'Stats' ? 'stats' : ['Logs', 'Patterns'].includes(tab.label)
+    ? panel.id === 'services' ? 'composeLogs' : 'logs' : undefined;
+  const streamId = panel.id === 'services' ? getSelectedComposeLogKey(item) : item.id;
+  const stream = streamKind ? state.streamStates.get(`${streamKind}:${streamId}`) : undefined;
+  if (stream && stream.state !== 'live') {
+    const labels = { loading: 'Connecting…', empty: 'No output received.', ended: 'Stream ended.', reconnecting: 'Reconnecting…', error: 'Stream unavailable.' };
+    const message = stream.message ? ` ${stream.message}` : '';
+    html = `<div role="status" class="stream-status">${escapeHtml(labels[stream.state] + message)}${stream.state !== 'loading' ? ' <button data-retry-streams>Retry</button>' : ''}</div>` + html;
+  }
+  replaceContent($detailContent, html);
+  if (preserveScroll) {
+    for (const previous of compareScroll) {
+      const el = $detailContent.querySelector<HTMLElement>(`[data-compare="${previous.pane}"] .log-shell`);
+      if (el) el.scrollTop = previous.bottom ? el.scrollHeight : previous.top;
+    }
+  }
 
   if (animate) {
     $detailContent.classList.remove('fade-in');
@@ -581,7 +625,13 @@ function renderScrollIndicators(): void {
 }
 
 function patchActiveContainerLogs(containerId: string): void {
-  if (state.selectedItemId !== containerId || getPanel().id !== 'containers' || state.detailTabIndex !== 0) return;
+  if (getPanel().id !== 'containers' || state.detailTabIndex !== 0) return;
+  const compareId = state.compareItemIds.containers;
+  if (state.selectedItemId !== containerId && compareId !== containerId) return;
+  if (compareId) {
+    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
+    return;
+  }
 
   const entries = state.logs.get(containerId);
   if (!entries || entries.length === 0) {
@@ -633,7 +683,13 @@ function patchActiveComposeLogs(projectName: string, serviceName: string | null)
   const key = serviceName ? `${projectName}:${serviceName}` : projectName;
   const items = getFilteredItems();
   const selected = getSelectedItem(items);
-  if (getSelectedComposeLogKey(selected) !== key) return;
+  const compareId = state.compareItemIds.services;
+  const compareKey = compareId ? getSelectedComposeLogKey({ id: compareId } as PanelItem) : null;
+  if (getSelectedComposeLogKey(selected) !== key && compareKey !== key) return;
+  if (compareId) {
+    renderDetailContent(items, { animate: false, preserveScroll: true });
+    return;
+  }
 
   const entries = state.composeLogs.get(key);
   if (!entries || entries.length === 0) {
@@ -694,14 +750,13 @@ function switchPanel(idx: number): void {
   post({ type: 'switchPanel', panelIndex: idx });
   post({ type: 'switchDetailTab', tabIndex: 0 });
   post({ type: 'selectItem', panelId: panels[idx].id, itemId: null });
+  post({ type: 'toggleCompareItem', panelId: panels[idx].id, itemId: state.compareItemIds[panels[idx].id] ?? null });
   renderAll();
 }
 
 function selectItem(id: string, items: PanelItem[]): void {
   if (id === state.selectedItemId) return;
   state.selectedItemId = id;
-  state.detailTabIndex = 0;
-  post({ type: 'switchDetailTab', tabIndex: 0 });
   post({ type: 'selectItem', panelId: getPanel().id, itemId: id });
 
   // Notify extension about compose service selection for log streaming
@@ -825,9 +880,15 @@ initOverlays({
   executeContextAction,
   onFilterInput: (value) => {
     state.filterString = value;
-    const items = getFilteredItems();
-    renderSideList(items);
-    renderStatusBar(items);
+    renderAll();
+  },
+  onSortSelect: (index) => {
+    state.sortField = SORT_OPTIONS[index].field;
+    state.sortMenuIndex = index;
+    state.sortOverlayVisible = false;
+    post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
+    renderSortOverlay();
+    renderAll();
   },
 });
 
@@ -870,6 +931,13 @@ const keyboardContext: KeyboardContext = {
 };
 
 document.addEventListener('keydown', (e: KeyboardEvent) => handleGlobalKeydown(e, keyboardContext));
+document.addEventListener('focusin', (e) => {
+  if (!(e.target instanceof Node)) return;
+  if ($sideList.contains(e.target)) state.focusTarget = 'side';
+  else if (document.getElementById('detail-pane')!.contains(e.target)) state.focusTarget = 'detail';
+  $sideList.classList.toggle('focused', state.focusTarget === 'side');
+  document.getElementById('detail-pane')!.classList.toggle('focused', state.focusTarget === 'detail');
+});
 
 // ARIA tab activation: Enter/Space on a focused role=tab element
 function activateTabOnKey(e: KeyboardEvent, datasetKey: 'panel' | 'tab', activate: (idx: number) => void): void {
@@ -935,12 +1003,24 @@ $detailContent.addEventListener('input', (e: Event) => {
 });
 
 $detailContent.addEventListener('click', (e: Event) => {
-  const target = e.target as HTMLElement;
-  if (target.id === 'log-filter-mode') {
+  const target = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('button') : null;
+  if (target?.hasAttribute('data-retry-detail')) {
+    const kind = target.dataset.retryDetail;
+    if ((kind === 'env' || kind === 'changes' || kind === 'layers') && target.dataset.itemId) {
+      post({ type: 'retryDetail', kind, itemId: target.dataset.itemId });
+    }
+    return;
+  }
+  if (target?.hasAttribute('data-retry-streams')) {
+    post({ type: 'retryStreams' });
+    return;
+  }
+  const clicked = e.target as HTMLElement;
+  if (clicked.id === 'log-filter-mode') {
     state.logFilterMode = state.logFilterMode === 'exact' ? 'fuzzy' : 'exact';
     renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
   }
-  if (target.id === 'copy-logs-btn') {
+  if (clicked.id === 'copy-logs-btn') {
     copyCurrentLogs();
   }
 });
@@ -972,12 +1052,6 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'updateState': {
       state.snapshot = msg.snapshot;
       state.connState = msg.snapshot.daemonConnected ? 'connected' : 'disconnected';
-      // Auto-select first item if nothing selected
-      const items = getFilteredItems();
-      if (!state.selectedItemId && items.length > 0) {
-        state.selectedItemId = items[0].id;
-        post({ type: 'selectItem', panelId: getPanel().id, itemId: items[0].id });
-      }
       renderAll();
       break;
     }
@@ -993,7 +1067,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       if (msg.severityCounts) {
         state.logSeverityCounts.set(msg.containerId, msg.severityCounts);
       }
-      if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Logs')) {
+      if (isViewingTab('containers', 'Logs')) {
         patchActiveContainerLogs(msg.containerId);
       }
       break;
@@ -1023,6 +1097,16 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       break;
     }
 
+    case 'detailLoad': {
+      state.detailLoads.set(`${msg.update.kind}:${msg.update.itemId}`, msg.update);
+      if (state.selectedItemId === msg.update.itemId) renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
+      break;
+    }
+    case 'streamState': {
+      state.streamStates.set(`${msg.update.kind}:${msg.update.itemId}`, msg.update);
+      renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
+      break;
+    }
     case 'updateEnv': {
       state.envVars.set(msg.containerId, msg.env);
       if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Env')) {
@@ -1044,6 +1128,9 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     }
 
     case 'focusContainer': {
+      state.filterString = '';
+      state.showAllContainers = true;
+      hideFilter();
       // Switch to containers panel and select the specified container
       if (state.activePanelIndex !== 0) {
         state.activePanelIndex = 0;
@@ -1051,6 +1138,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
         hideFilter();
         hideContextMenu();
         post({ type: 'switchPanel', panelIndex: 0 });
+        post({ type: 'toggleCompareItem', panelId: 'containers', itemId: state.compareItemIds.containers ?? null });
       }
       state.selectedItemId = msg.containerId;
       state.detailTabIndex = 0;
@@ -1093,7 +1181,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 /**
  * Replay view state restored from getState() to the host so its viewState
  * (and stream demand) match what the webview is showing. Ordering matters:
- * the host resets tab/selection on switchPanel and tab on selectItem.
+ * the host resets tab/selection on switchPanel.
  */
 function replayRestoredViewState(): void {
   if (!restoredViewState || Object.keys(restoredViewState).length === 0) return;

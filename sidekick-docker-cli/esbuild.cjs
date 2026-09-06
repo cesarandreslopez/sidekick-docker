@@ -28,27 +28,14 @@ build({
       // Polyfill CommonJS globals for bundled CJS deps in ESM output
       'import { createRequire as __createRequire } from "module";',
       'const require = __createRequire(import.meta.url);',
+      'const __dirname = import.meta.dirname;',
+      'const __filename = import.meta.filename;',
     ].join('\n'),
   },
   define: {
     '__CLI_VERSION__': JSON.stringify(pkg.version),
   },
-  plugins: [stubDevtools, {
-    name: 'stub-native-optionals',
-    setup(b) {
-      // ssh2 and cpu-features are optional deps of docker-modem, not needed for local socket
-      for (const mod of ['ssh2', 'cpu-features']) {
-        b.onResolve({ filter: new RegExp(`^${mod}$`) }, () => ({
-          path: mod, namespace: 'stub-native',
-        }));
-      }
-      b.onLoad({ filter: /.*/, namespace: 'stub-native' }, (args) => ({
-        contents: args.path === 'ssh2'
-          ? 'module.exports = { Client: class Client { connect() {} on() { return this; } end() {} } };'
-          : 'module.exports = {};',
-      }));
-    },
-  }],
+  plugins: [stubDevtools, require('../scripts/native-fallbacks.cjs')],
   external: ['node-pty'],
   jsx: 'automatic',
   jsxImportSource: 'react',

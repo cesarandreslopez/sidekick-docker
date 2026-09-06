@@ -9,7 +9,7 @@ export const GLOBAL_KEYBINDINGS = [
   { key: '1-5', label: 'Switch panel' },
   { key: 'j/k', label: 'Navigate / scroll' },
   { key: 'g/G', label: 'Jump to first / last' },
-  { key: 'Tab', label: 'Toggle focus' },
+  { key: 'Tab / Shift+Tab', label: 'Next / previous control' },
   { key: '[/]', label: 'Cycle detail tabs' },
   { key: 'z', label: 'Cycle layout (Normal/Wide/Expanded)' },
   { key: '/', label: 'Filter items' },
@@ -39,6 +39,7 @@ export interface OverlayDeps {
   getSelectedRowRect(): DOMRect | null;
   executeContextAction(idx: number, actions: ActionDefinition[]): void;
   onFilterInput(value: string): void;
+  onSortSelect(index: number): void;
 }
 
 let deps: OverlayDeps;
@@ -60,6 +61,29 @@ export function initOverlays(d: OverlayDeps): void {
   deps = d;
 
   $contextMenu.setAttribute('role', 'menu');
+  document.addEventListener('keydown', (event) => {
+    const modal = activeModal();
+    if (!modal || event.key !== 'Tab' || event.ctrlKey || event.metaKey || event.altKey) return;
+    const focusable = [...modal.querySelectorAll<HTMLElement>('button:not([disabled]), input, [tabindex="0"], a[href]')];
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (!first) {
+      event.preventDefault();
+      modal.focus();
+    } else if (!modal.contains(document.activeElement) || document.activeElement === modal
+      || (event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    }
+  }, true);
+  $sortOverlay.addEventListener('click', (event) => {
+    const button = event.target instanceof HTMLElement ? event.target.closest<HTMLElement>('[data-idx]') : null;
+    if (button) deps.onSortSelect(Number(button.dataset.idx));
+  });
+  $sortOverlay.addEventListener('focusin', (event) => {
+    const target = event.target as HTMLElement;
+    if (target.dataset.idx !== undefined) deps.state.sortMenuIndex = Number(target.dataset.idx);
+  });
 
   // Confirm overlay buttons
   $confirmYes.addEventListener('click', () => {
@@ -111,12 +135,17 @@ export function initOverlays(d: OverlayDeps): void {
  * straight into the content it was supposedly blocking. The confirm dialog
  * already did this correctly; this generalizes it.
  */
+function activeModal(): HTMLElement | null {
+  return [$confirmOverlay, $filterOverlay, $sortOverlay, $helpOverlay, $versionOverlay]
+    .find(el => el.classList.contains('visible')) ?? null;
+}
+
 function focusOverlay(el: HTMLElement): void {
   // These are render functions, called on every render while the overlay is
   // open — so this must be idempotent, or it re-captures previouslyFocused as
   // the overlay itself and restore becomes a no-op.
   if (el.contains(document.activeElement)) return;
-  previouslyFocused = document.activeElement;
+  if (!previouslyFocused) previouslyFocused = document.activeElement;
   el.setAttribute('tabindex', '-1');
   el.focus({ preventScroll: true });
 }
@@ -158,6 +187,7 @@ export function hideConfirm(): void {
 
 // ─── Filter overlay ──────────────────────────────────────────────────
 export function showFilter(): void {
+  previouslyFocused = document.activeElement;
   deps.state.filterVisible = true;
   $filterOverlay.classList.add('visible');
   $filterInput.value = deps.state.filterString;
@@ -165,9 +195,10 @@ export function showFilter(): void {
 }
 
 export function hideFilter(): void {
+  const wasVisible = deps.state.filterVisible;
   deps.state.filterVisible = false;
   $filterOverlay.classList.remove('visible');
-  $filterInput.blur();
+  if (wasVisible) restoreFocus();
 }
 
 // ─── Context menu ────────────────────────────────────────────────────
@@ -234,8 +265,10 @@ export function renderContextMenu(actions: ActionDefinition[]): void {
 export function renderSortOverlay(): void {
   const state = deps.state;
   if (!state.sortOverlayVisible) {
-    $sortOverlay.classList.remove('visible');
-    restoreFocus();
+    if ($sortOverlay.classList.contains('visible')) {
+      $sortOverlay.classList.remove('visible');
+      restoreFocus();
+    }
     return;
   }
   let html = '<div class="overlay-title">\u2195 Sort by</div>';
@@ -245,20 +278,23 @@ export function renderSortOverlay(): void {
     const current = opt.field === state.sortField;
     const indicator = current ? (state.sortReversed ? ' \u25B2' : ' \u25BC') : '';
     const currentClass = current ? ' current' : '';
-    html += `<div class="sort-item${selected}${currentClass}" data-idx="${i}">${escapeHtml(opt.label)}${indicator}</div>`;
+    html += `<button type="button" class="sort-item${selected}${currentClass}" data-idx="${i}">${escapeHtml(opt.label)}${indicator}</button>`;
   }
   html += '<div class="overlay-hint">j/k select  Enter apply  R reverse  Esc close</div>';
+  focusOverlay($sortOverlay);
   $sortOverlay.innerHTML = html;
   $sortOverlay.classList.add('visible');
-  focusOverlay($sortOverlay);
+  $sortOverlay.querySelector<HTMLElement>('.sort-item.selected')?.focus();
 }
 
 // ─── Help overlay ────────────────────────────────────────────────────
 export function renderHelpOverlay(): void {
   const state = deps.state;
   if (!state.helpOverlayVisible) {
-    $helpOverlay.classList.remove('visible');
-    restoreFocus();
+    if ($helpOverlay.classList.contains('visible')) {
+      $helpOverlay.classList.remove('visible');
+      restoreFocus();
+    }
     return;
   }
 
@@ -292,8 +328,10 @@ export function renderHelpOverlay(): void {
 export function renderVersionOverlay(): void {
   const state = deps.state;
   if (!state.versionOverlayVisible) {
-    $versionOverlay.classList.remove('visible');
-    restoreFocus();
+    if ($versionOverlay.classList.contains('visible')) {
+      $versionOverlay.classList.remove('visible');
+      restoreFocus();
+    }
     return;
   }
   $versionOverlay.innerHTML = `

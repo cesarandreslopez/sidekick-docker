@@ -7,12 +7,18 @@ on:
       - 'sidekick-docker-shared/**'
       - 'sidekick-docker-cli/**'
       - 'sidekick-docker-vscode/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
     paths:
       - 'sidekick-docker-shared/**'
       - 'sidekick-docker-cli/**'
       - 'sidekick-docker-vscode/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/ci.yml'
 
 jobs:
   shared-tests:
@@ -100,8 +106,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Test extension and webview
+        run: npm test
+
       - name: Build extension
         run: npm run build
+
+      - name: Build CLI for packaged SSH checks
+        working-directory: sidekick-docker-cli
+        run: npm ci && npm run build
+
+      - name: Verify SSH in packaged CLI and VSIX
+        working-directory: .
+        run: node scripts/test-packages.mjs
 
       - name: Create dist directory
         run: mkdir -p dist

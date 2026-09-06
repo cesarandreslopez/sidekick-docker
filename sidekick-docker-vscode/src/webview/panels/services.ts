@@ -58,6 +58,7 @@ export const servicesPanel: PanelDefinition = {
             ['Project', escapeHtml(service.projectName)],
             ['Image', escapeHtml(service.image)],
             ['State', colorizeState(service.state)],
+            ['Replicas', `${service.runningReplicas ?? (service.state === 'running' ? 1 : 0)}/${service.totalReplicas ?? (service.containerId ? 1 : 0)} running`],
             ['Container', service.containerId ? colorizeId(service.containerId) : 'not created'],
             ['Ports', escapeHtml(service.ports.join(', ') || 'none')],
           ]);
@@ -117,6 +118,7 @@ export const servicesPanel: PanelDefinition = {
           iconColor: stateColor(service.state),
           sortKey: sortKey++,
           tooltip: `${project.name}/${service.name}`,
+          badge: `${service.runningReplicas ?? (service.state === 'running' ? 1 : 0)}/${service.totalReplicas ?? (service.containerId ? 1 : 0)}`,
         });
       }
     }

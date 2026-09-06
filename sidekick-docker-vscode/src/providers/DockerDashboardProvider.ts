@@ -133,6 +133,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
         this.viewState.activePanelId = PANEL_IDS[message.panelIndex] ?? 'containers';
         this.viewState.detailTabIndex = 0;
         this.viewState.selectedItemId = null;
+        this.viewState.compareItemId = null;
+        this.viewState.compareComposeProjectName = null;
+        this.viewState.compareComposeServiceName = null;
         if (this.viewState.activePanelId !== 'services') {
           this.viewState.composeProjectName = null;
           this.viewState.composeServiceName = null;
@@ -153,14 +156,13 @@ export class DockerDashboardProvider implements vscode.Disposable {
       case 'selectItem':
         this.viewState.activePanelId = message.panelId as PanelId;
         this.viewState.selectedItemId = message.itemId;
-        this.viewState.detailTabIndex = 0;
         this._updateComposeSelection(message.panelId, message.itemId);
-        if (message.panelId === 'containers') {
-          await this.service?.selectContainer(message.itemId);
-        } else if (message.panelId === 'images') {
-          await this.service?.selectImage(message.itemId);
-        }
         this._syncServiceViewState();
+        if (message.panelId === 'containers') {
+          void this.service?.selectContainer(message.itemId);
+        } else if (message.panelId === 'images') {
+          void this.service?.selectImage(message.itemId);
+        }
         break;
 
       case 'selectComposeService':
@@ -175,6 +177,14 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
       case 'execContainer':
         this._openExecTerminal(message.containerId);
+        break;
+
+      case 'retryDetail':
+        if (message.itemId === this.viewState.selectedItemId) await this.service?.loadDetail(message.kind, message.itemId, true);
+        break;
+
+      case 'retryStreams':
+        this.service?.retryStreams();
         break;
 
       case 'requestRefresh':
@@ -197,8 +207,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
         break;
 
       case 'toggleCompareItem': {
-        const currentCompare = this.viewState.compareItemId;
-        const newCompare = currentCompare === message.itemId ? null : message.itemId;
+        // The webview sends the desired pin, including when restoring a panel.
+        const newCompare = message.itemId;
         this.viewState.compareItemId = newCompare;
         // Parse compose fields if on services panel
         if (message.panelId === 'services' && newCompare) {
@@ -239,30 +249,35 @@ export class DockerDashboardProvider implements vscode.Disposable {
     const cwd = await resolveComposeCwd(new ComposeFileReader());
     if (generation !== this.initGeneration) return;
 
+    const post = (message: ExtensionMessage) => {
+      if (generation === this.initGeneration) this._postMessage(message);
+    };
     const service = new DockerService({
       onStateChange: (snapshot) => {
-        this._postMessage({ type: 'updateState', snapshot });
+        post({ type: 'updateState', snapshot });
       },
       onLogsChange: (containerId, entries, severityCounts) => {
-        this._postMessage({ type: 'updateLogs', containerId, entries, severityCounts });
+        post({ type: 'updateLogs', containerId, entries, severityCounts });
       },
       onStatsChange: (data) => {
-        this._postMessage({ type: 'updateStats', ...data });
+        post({ type: 'updateStats', ...data });
       },
       onComposeLogs: (projectName, serviceName, entries) => {
-        this._postMessage({ type: 'updateComposeLogs', projectName, serviceName, entries });
+        post({ type: 'updateComposeLogs', projectName, serviceName, entries });
       },
       onEnvLoaded: (containerId, env) => {
-        this._postMessage({ type: 'updateEnv', containerId, env });
+        post({ type: 'updateEnv', containerId, env });
       },
       onChangesLoaded: (containerId, changes) => {
-        this._postMessage({ type: 'updateChanges', containerId, changes });
+        post({ type: 'updateChanges', containerId, changes });
       },
       onLayersLoaded: (imageId, layers) => {
-        this._postMessage({ type: 'updateLayers', imageId, layers });
+        post({ type: 'updateLayers', imageId, layers });
       },
+      onDetailLoad: (update) => post({ type: 'detailLoad', update }),
+      onStreamState: (update) => post({ type: 'streamState', update }),
       onError: (message) => {
-        this._postMessage({ type: 'toast', message, severity: 'error' });
+        post({ type: 'toast', message, severity: 'error' });
       },
     }, {
       clientOptions: settings.clientOptions,

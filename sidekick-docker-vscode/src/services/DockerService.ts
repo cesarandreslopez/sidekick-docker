@@ -1,3 +1,4 @@
+import { StreamSession } from './StreamSession';
 import {
   DockerClient,
   ComposeClient,
@@ -10,7 +11,8 @@ import {
   MAX_LOG_LINES,
   shortId,
   throwIfComposeFailed,
-  resolveComposeCwd,
+  resolveComposeOptions,
+  errorMessage,
   formatBytes,
 } from 'sidekick-docker-shared';
 import { LogAnalytics, LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/log';
@@ -27,6 +29,7 @@ import type {
   ContainerStats,
   ComposeFileConfig,
   ComposeExecResult,
+  ComposeCommandOptions,
   SeverityCounts,
 } from 'sidekick-docker-shared';
 
@@ -41,6 +44,9 @@ import type {
   SerializedContainerStats,
   SerializedFilesystemChange,
   SerializedImageLayer,
+  StreamStateUpdate,
+  DetailKind,
+  DetailLoadUpdate,
 } from '../types/messages';
 
 export interface StatsChangeData {
@@ -65,6 +71,8 @@ export interface DockerServiceCallbacks {
   onChangesLoaded: (containerId: string, changes: SerializedFilesystemChange[]) => void;
   onLayersLoaded: (imageId: string, layers: SerializedImageLayer[]) => void;
   onError: (message: string) => void;
+  onStreamState?: (update: StreamStateUpdate) => void;
+  onDetailLoad?: (update: DetailLoadUpdate) => void;
 }
 
 export type DashboardPanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
@@ -122,7 +130,11 @@ export class DockerService {
   private composeProjects: ComposeProject[] = [];
   private cachedFileConfig: ComposeFileConfig | null = null;
   private daemonConnected = false;
+  private refreshPromise: Promise<void> | null = null;
+  private refreshQueued = false;
+  private resourceErrors: Record<string, string> = {};
   private lastRefresh: Date | null = null;
+  private detailPending = new Map<string, Promise<void>>();
   private inspectedEnv = new Map<string, string[]>();
   private inspectedChanges = new Map<string, FilesystemChange[]>();
   private inspectedLayers = new Map<string, ImageLayer[]>();
@@ -144,6 +156,11 @@ export class DockerService {
    * stream for good and the pane silently stopped updating until the user
    * reselected it.
    */
+  private logSession = new StreamSession();
+  private statsSession = new StreamSession();
+  private composeLogSession = new StreamSession();
+  private secondaryLogSession = new StreamSession();
+  private secondaryComposeLogSession = new StreamSession();
   private logReconnect = new ReconnectScheduler();
   private statsReconnect = new ReconnectScheduler();
   private composeLogReconnect = new ReconnectScheduler();
@@ -214,9 +231,10 @@ export class DockerService {
 
   async initialize(): Promise<boolean> {
     const ok = await this.client.ping();
-    if (!ok) return false;
+    if (!ok || this.disposed) return false;
 
     await this.refresh();
+    if (this.disposed) return false;
     this.initialized = true;
     if (this.viewState.visible) {
       this.startLiveInfrastructure();
@@ -248,6 +266,7 @@ export class DockerService {
     }
 
     await this.refresh();
+    if (this.disposed || !this.viewState.visible) return;
     this.callbacks.onStateChange(this.getStateSnapshot());
     this.startLiveInfrastructure();
     this.applyStreamDemand();
@@ -285,36 +304,54 @@ export class DockerService {
     }
   }
 
-  private async refresh(): Promise<void> {
-    try {
-      const [containers, images, volumes, networks, fileConfig] = await Promise.all([
-        this.client.listContainers(true),
-        this.client.listImages(),
-        this.client.listVolumes(),
-        this.client.listNetworks(),
-        this.cwd ? this.composeFileReader.readFromDirectory(this.cwd).catch(() => null) : Promise.resolve(null),
-      ]);
-
-      this.containers = containers;
-      this.images = images;
-      this.volumes = volumes;
-      this.networks = networks;
-      this.cachedFileConfig = fileConfig;
-      this.composeProjects = this.composeDetector.detect(containers, fileConfig);
-      this.lastRefresh = new Date();
-      this.daemonConnected = true;
-
-      // The sampler's id set is derived from this.containers, so it has to be
-      // re-derived whenever the list changes. Driving it only from
-      // setViewState left containers started after a stats sort was applied
-      // permanently unsampled, i.e. sorting as zero.
-      if (this.initialized) this.applyStreamDemand();
-    } catch {
-      this.daemonConnected = false;
+  private refresh(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    if (this.refreshPromise) {
+      this.refreshQueued = true;
+      return this.refreshPromise;
     }
+    this.refreshPromise = this.refreshLoop().finally(() => { this.refreshPromise = null; });
+    return this.refreshPromise;
+  }
+
+  private async refreshLoop(): Promise<void> {
+    do {
+      this.refreshQueued = false;
+      const [containers, images, volumes, networks, fileConfig] = await Promise.allSettled([
+        this.client.listContainers(true), this.client.listImages(),
+        this.client.listVolumes(), this.client.listNetworks(),
+        this.cwd ? this.composeFileReader.readFromDirectory(this.cwd) : Promise.resolve(null),
+      ]);
+      if (this.disposed) return;
+      // A newer request arrived while these results were being fetched.
+      if (this.refreshQueued) continue;
+      this.resourceErrors = {};
+      const results = { containers, images, volumes, networks, services: fileConfig };
+      for (const [kind, result] of Object.entries(results)) {
+        if (result.status === 'rejected') this.resourceErrors[kind] = errorMessage(result.reason);
+      }
+      if (containers.status === 'fulfilled') this.containers = containers.value;
+      if (images.status === 'fulfilled') this.images = images.value;
+      if (volumes.status === 'fulfilled') this.volumes = volumes.value;
+      if (networks.status === 'fulfilled') this.networks = networks.value;
+      if (fileConfig.status === 'fulfilled') this.cachedFileConfig = fileConfig.value;
+      this.composeProjects = this.composeDetector.detect(this.containers, this.cachedFileConfig);
+      this.daemonConnected = [containers, images, volumes, networks].some(r => r.status === 'fulfilled');
+      if (this.daemonConnected) this.lastRefresh = new Date();
+      if (this.initialized) this.applyStreamDemand();
+      const ids = new Set(this.containers.map(c => c.id));
+      for (const map of [this.inspectedEnv, this.inspectedChanges, this.logSeverityTimeSeries]) {
+        for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
+      }
+      const imageIds = new Set(this.images.map(i => i.id));
+      for (const id of this.inspectedLayers.keys()) if (!imageIds.has(id)) this.inspectedLayers.delete(id);
+      this.scheduleStateUpdate();
+    } while (this.refreshQueued && !this.disposed);
   }
 
   private processEvent(event: { type: string; resourceType: string; resourceId: string; attributes: Record<string, string> }): void {
+    if (this.disposed) return;
+    if (this.refreshPromise) this.refreshQueued = true;
     switch (event.resourceType) {
       case 'container':
         this.handleContainerEvent(event);
@@ -380,6 +417,7 @@ export class DockerService {
       networks: this.networks.map(serializeNetwork),
       composeProjects: this.composeProjects.map(serializeComposeProject),
       daemonConnected: this.daemonConnected,
+      resourceErrors: { ...this.resourceErrors },
       lastRefresh: this.lastRefresh?.toISOString() ?? null,
     };
   }
@@ -402,7 +440,7 @@ export class DockerService {
 
     const selectedItemId = this.viewState.selectedItemId;
     const wantsContainerLogs = this.viewState.activePanelId === 'containers'
-      && this.viewState.detailTabIndex === 0
+      && (this.viewState.detailTabIndex === 0 || this.viewState.detailTabIndex === 6)
       && selectedItemId !== null;
     const wantsContainerStats = this.viewState.activePanelId === 'containers'
       && selectedItemId !== null
@@ -412,8 +450,11 @@ export class DockerService {
       && this.viewState.composeProjectName !== null;
 
     // Secondary compare streams: only when on Logs tab and a compare item is pinned
-    const wantsSecondaryContainerLogs = wantsContainerLogs && this.viewState.compareItemId !== null;
-    const wantsSecondaryComposeLogs = wantsComposeLogs && this.viewState.compareComposeProjectName !== null;
+    const wantsSecondaryContainerLogs = wantsContainerLogs && this.viewState.detailTabIndex === 0
+      && this.viewState.compareItemId !== null && this.viewState.compareItemId !== selectedItemId;
+    const wantsSecondaryComposeLogs = wantsComposeLogs && this.viewState.compareComposeProjectName !== null
+      && (this.viewState.compareComposeProjectName !== this.viewState.composeProjectName
+        || this.viewState.compareComposeServiceName !== this.viewState.composeServiceName);
 
     // Sorting compares every row, so it needs a sample per container — not just
     // the selected one. Running containers only; stopped ones report zeros.
@@ -478,33 +519,51 @@ export class DockerService {
   }
 
   async selectContainer(containerId: string | null): Promise<void> {
-    if (!containerId) return;
+    if (!containerId || this.disposed) return;
+    await Promise.all([this.loadDetail('env', containerId), this.loadDetail('changes', containerId)]);
+  }
 
-    // Fetch env vars
-    if (!this.inspectedEnv.has(containerId)) {
+  async loadDetail(kind: DetailKind, itemId: string, retry = false): Promise<void> {
+    if (this.disposed) return;
+    const key = `${kind}:${itemId}`;
+    const pending = this.detailPending.get(key);
+    if (pending) return pending;
+    const run = async () => {
+      this.callbacks.onDetailLoad?.({ kind, itemId, state: 'loading' });
       try {
-        const env = await this.client.getContainerEnv(containerId);
-        this.inspectedEnv.set(containerId, env);
-        if (!this.disposed) {
-          this.callbacks.onEnvLoaded(containerId, env);
+        if (kind === 'env') {
+          const value = (!retry && this.inspectedEnv.get(itemId)) || await this.client.getContainerEnv(itemId);
+          if (this.disposed) return;
+          this.inspectedEnv.set(itemId, value);
+          this.callbacks.onEnvLoaded(itemId, value);
+        } else if (kind === 'changes') {
+          const value = (!retry && this.inspectedChanges.get(itemId)) || await this.client.getContainerChanges(itemId);
+          if (this.disposed) return;
+          this.inspectedChanges.set(itemId, value);
+          this.callbacks.onChangesLoaded(itemId, value.map(serializeFilesystemChange));
+        } else {
+          const value = (!retry && this.inspectedLayers.get(itemId)) || await this.client.getImageHistory(itemId);
+          if (this.disposed) return;
+          this.inspectedLayers.set(itemId, value);
+          this.callbacks.onLayersLoaded(itemId, value.map(serializeImageLayer));
         }
-      } catch { /* ignore */ }
-    } else {
-      this.callbacks.onEnvLoaded(containerId, this.inspectedEnv.get(containerId)!);
-    }
+        this.callbacks.onDetailLoad?.({ kind, itemId, state: 'ready' });
+      } catch (error) {
+        if (!this.disposed) this.callbacks.onDetailLoad?.({ kind, itemId, state: 'error', message: errorMessage(error) });
+      }
+    };
+    const task = run().finally(() => this.detailPending.delete(key));
+    this.detailPending.set(key, task);
+    return task;
+  }
 
-    // Fetch filesystem changes
-    if (!this.inspectedChanges.has(containerId)) {
-      try {
-        const changes = await this.client.getContainerChanges(containerId);
-        this.inspectedChanges.set(containerId, changes);
-        if (!this.disposed) {
-          this.callbacks.onChangesLoaded(containerId, changes.map(serializeFilesystemChange));
-        }
-      } catch { /* ignore */ }
-    } else {
-      this.callbacks.onChangesLoaded(containerId, this.inspectedChanges.get(containerId)!.map(serializeFilesystemChange));
-    }
+  retryStreams(): void {
+    this.stopLogStream();
+    this.stopStatsStream();
+    this.stopComposeLogStream();
+    this.stopSecondaryLogStream();
+    this.stopSecondaryComposeLogStream();
+    this.applyStreamDemand();
   }
 
   /**
@@ -520,18 +579,28 @@ export class DockerService {
     scheduler: ReconnectScheduler,
     stillWanted: () => boolean,
     restart: () => void,
+    exhausted: () => void,
   ): void {
     if (this.disposed || !stillWanted()) {
       scheduler.clear();
       return;
     }
-    scheduler.schedule(() => {
+    const scheduled = scheduler.schedule(() => {
       if (this.disposed || !stillWanted()) return;
       restart();
     });
+    if (!scheduled) exhausted();
   }
 
   private async streamLogs(containerId: string): Promise<void> {
+    const session = this.logSession.start();
+    const active = () => !this.disposed && this.logSession.isCurrent(session);
+    const itemId = containerId;
+    const status = (state: StreamStateUpdate['state'], message?: string) => {
+      if (active()) this.callbacks.onStreamState?.({ kind: 'logs', itemId, state, message });
+    };
+    status('loading');
+    let received = false;
     // Ensure severity tracking exists for this container
     if (!this.logSeverityTimeSeries.has(containerId)) {
       this.logSeverityTimeSeries.set(containerId, new LogSeverityTimeSeries());
@@ -539,8 +608,9 @@ export class DockerService {
     const timeSeries = this.logSeverityTimeSeries.get(containerId)!;
 
     try {
-      for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 })) {
-        if (this.logAborted || this.logContainerId !== containerId) break;
+      for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 }, session.signal)) {
+        if (!active()) return;
+        if (!received) { received = true; this.logReconnect.reset(); status('live'); }
         this.logs.push(entry);
         if (this.logs.length > MAX_LOG_LINES) this.logs.shift();
 
@@ -549,24 +619,37 @@ export class DockerService {
         timeSeries.push(severity);
         this.scheduleLogFlush(containerId);
       }
+      if (!active()) return;
       this.flushLogs(containerId);
-      // A stream that ran to completion clears the backoff. Without this the
-      // delay doubles on every container restart and, after MAX_RECONNECT_ATTEMPTS,
-      // schedule() refuses outright — so "streams recover after a restart"
-      // silently stops being true for the rest of the selection.
-      this.logReconnect.reset();
-    } catch { /* stream ended or errored */ }
+      // Only productive streams reset backoff; empty responses must not retry forever.
+      if (received) this.logReconnect.reset();
+      status(received ? 'ended' : 'empty');
+    } catch (error) {
+      if (!active()) return;
+      status('reconnecting', errorMessage(error));
+    }
+    if (!active()) return;
     this.reconnectStream(
       this.logReconnect,
-      () => !this.logAborted && this.logContainerId === containerId,
+      () => active() && !this.logAborted && this.logContainerId === containerId,
       () => { void this.streamLogs(containerId); },
+      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
     );
   }
 
   private async streamStats(containerId: string): Promise<void> {
+    const session = this.statsSession.start();
+    const active = () => !this.disposed && this.statsSession.isCurrent(session);
+    const itemId = containerId;
+    const status = (state: StreamStateUpdate['state'], message?: string) => {
+      if (active()) this.callbacks.onStreamState?.({ kind: 'stats', itemId, state, message });
+    };
+    status('loading');
+    let received = false;
     try {
-      for await (const stats of this.client.streamStats(containerId)) {
-        if (this.statsAborted || this.statsContainerId !== containerId) break;
+      for await (const stats of this.client.streamStats(containerId, session.signal)) {
+        if (!active()) return;
+        if (!received) { received = true; this.statsReconnect.reset(); status('live'); }
         this.statsCollector.push(containerId, stats);
         if (!this.disposed) {
           const cpuHistory = this.statsCollector.getCpuSeries(containerId);
@@ -590,16 +673,24 @@ export class DockerService {
           });
         }
       }
-      this.statsReconnect.reset();
-    } catch { /* stream ended or errored */ }
+      if (!active()) return;
+      if (received) this.statsReconnect.reset();
+      status(received ? 'ended' : 'empty');
+    } catch (error) {
+      if (!active()) return;
+      status('reconnecting', errorMessage(error));
+    }
+    if (!active()) return;
     this.reconnectStream(
       this.statsReconnect,
-      () => !this.statsAborted && this.statsContainerId === containerId,
+      () => active() && !this.statsAborted && this.statsContainerId === containerId,
       () => { void this.streamStats(containerId); },
+      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
     );
   }
 
   private stopLogStream(): void {
+    this.logSession.stop();
     this.logReconnect.clear();
     this.logReconnect.reset();
     if (this.logContainerId) {
@@ -615,6 +706,7 @@ export class DockerService {
   }
 
   private stopStatsStream(): void {
+    this.statsSession.stop();
     this.statsReconnect.clear();
     this.statsReconnect.reset();
     this.statsAborted = true;
@@ -622,19 +714,7 @@ export class DockerService {
   }
 
   async selectImage(imageId: string | null): Promise<void> {
-    if (!imageId) return;
-
-    if (!this.inspectedLayers.has(imageId)) {
-      try {
-        const layers = await this.client.getImageHistory(imageId);
-        this.inspectedLayers.set(imageId, layers);
-        if (!this.disposed) {
-          this.callbacks.onLayersLoaded(imageId, layers.map(serializeImageLayer));
-        }
-      } catch { /* ignore */ }
-    } else {
-      this.callbacks.onLayersLoaded(imageId, this.inspectedLayers.get(imageId)!.map(serializeImageLayer));
-    }
+    if (imageId) await this.loadDetail('layers', imageId);
   }
 
   // ─── Compose log streaming ────────────────────────────────────────
@@ -644,26 +724,44 @@ export class DockerService {
   }
 
   private async streamComposeLogs(projectName: string, serviceName: string | null): Promise<void> {
+    const session = this.composeLogSession.start();
+    const active = () => !this.disposed && this.composeLogSession.isCurrent(session);
+    const itemId = serviceName ? `${projectName}:${serviceName}` : projectName;
+    const status = (state: StreamStateUpdate['state'], message?: string) => {
+      if (active()) this.callbacks.onStreamState?.({ kind: 'composeLogs', itemId, state, message });
+    };
+    status('loading');
+    let received = false;
     try {
-      for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined)) {
-        if (this.composeLogAborted || this.composeLogProject !== projectName) break;
+      for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined, 100, session.signal)) {
+        if (!active()) return;
+        if (!received) { received = true; this.composeLogReconnect.reset(); status('live'); }
         this.composeLogs.push(entry);
         if (this.composeLogs.length > MAX_LOG_LINES) this.composeLogs.shift();
         this.scheduleComposeLogFlush(projectName, serviceName);
       }
+      if (!active()) return;
       this.flushComposeLogs(projectName, serviceName);
-      this.composeLogReconnect.reset();
-    } catch { /* stream ended or errored */ }
+      if (!active()) return;
+      if (received) this.composeLogReconnect.reset();
+      status(received ? 'ended' : 'empty');
+    } catch (error) {
+      if (!active()) return;
+      status('reconnecting', errorMessage(error));
+    }
+    if (!active()) return;
     this.reconnectStream(
       this.composeLogReconnect,
-      () => !this.composeLogAborted
+      () => active() && !this.composeLogAborted
         && this.composeLogProject === projectName
         && this.composeLogService === serviceName,
       () => { void this.streamComposeLogs(projectName, serviceName); },
+      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
     );
   }
 
   private stopComposeLogStream(): void {
+    this.composeLogSession.stop();
     this.composeLogReconnect.clear();
     this.composeLogReconnect.reset();
     if (this.composeLogProject) {
@@ -693,24 +791,42 @@ export class DockerService {
   }
 
   private async streamSecondaryLogs(containerId: string): Promise<void> {
+    const session = this.secondaryLogSession.start();
+    const active = () => !this.disposed && this.secondaryLogSession.isCurrent(session);
+    const itemId = containerId;
+    const status = (state: StreamStateUpdate['state'], message?: string) => {
+      if (active()) this.callbacks.onStreamState?.({ kind: 'logs', itemId, state, message });
+    };
+    status('loading');
+    let received = false;
     try {
-      for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 })) {
-        if (this.secondaryLogAborted || this.secondaryLogContainerId !== containerId) break;
+      for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 }, session.signal)) {
+        if (!active()) return;
+        if (!received) { received = true; this.secondaryLogReconnect.reset(); status('live'); }
         this.secondaryLogs.push(entry);
         if (this.secondaryLogs.length > MAX_LOG_LINES) this.secondaryLogs.shift();
         this.scheduleSecondaryLogFlush(containerId);
       }
+      if (!active()) return;
       this.flushSecondaryLogs(containerId);
-      this.secondaryLogReconnect.reset();
-    } catch { /* stream ended or errored */ }
+      if (!active()) return;
+      if (received) this.secondaryLogReconnect.reset();
+      status(received ? 'ended' : 'empty');
+    } catch (error) {
+      if (!active()) return;
+      status('reconnecting', errorMessage(error));
+    }
+    if (!active()) return;
     this.reconnectStream(
       this.secondaryLogReconnect,
-      () => !this.secondaryLogAborted && this.secondaryLogContainerId === containerId,
+      () => active() && !this.secondaryLogAborted && this.secondaryLogContainerId === containerId,
       () => { void this.streamSecondaryLogs(containerId); },
+      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
     );
   }
 
   private stopSecondaryLogStream(): void {
+    this.secondaryLogSession.stop();
     this.secondaryLogReconnect.clear();
     this.secondaryLogReconnect.reset();
     if (this.secondaryLogContainerId) {
@@ -761,26 +877,44 @@ export class DockerService {
   }
 
   private async streamSecondaryComposeLogs(projectName: string, serviceName: string | null): Promise<void> {
+    const session = this.secondaryComposeLogSession.start();
+    const active = () => !this.disposed && this.secondaryComposeLogSession.isCurrent(session);
+    const itemId = serviceName ? `${projectName}:${serviceName}` : projectName;
+    const status = (state: StreamStateUpdate['state'], message?: string) => {
+      if (active()) this.callbacks.onStreamState?.({ kind: 'composeLogs', itemId, state, message });
+    };
+    status('loading');
+    let received = false;
     try {
-      for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined)) {
-        if (this.secondaryComposeLogAborted || this.secondaryComposeLogProject !== projectName) break;
+      for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined, 100, session.signal)) {
+        if (!active()) return;
+        if (!received) { received = true; this.secondaryComposeLogReconnect.reset(); status('live'); }
         this.secondaryComposeLogs.push(entry);
         if (this.secondaryComposeLogs.length > MAX_LOG_LINES) this.secondaryComposeLogs.shift();
         this.scheduleSecondaryComposeLogFlush(projectName, serviceName);
       }
+      if (!active()) return;
       this.flushSecondaryComposeLogs(projectName, serviceName);
-      this.secondaryComposeLogReconnect.reset();
-    } catch { /* stream ended or errored */ }
+      if (!active()) return;
+      if (received) this.secondaryComposeLogReconnect.reset();
+      status(received ? 'ended' : 'empty');
+    } catch (error) {
+      if (!active()) return;
+      status('reconnecting', errorMessage(error));
+    }
+    if (!active()) return;
     this.reconnectStream(
       this.secondaryComposeLogReconnect,
-      () => !this.secondaryComposeLogAborted
+      () => active() && !this.secondaryComposeLogAborted
         && this.secondaryComposeLogProject === projectName
         && this.secondaryComposeLogService === serviceName,
       () => { void this.streamSecondaryComposeLogs(projectName, serviceName); },
+      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
     );
   }
 
   private stopSecondaryComposeLogStream(): void {
+    this.secondaryComposeLogSession.stop();
     this.secondaryComposeLogReconnect.clear();
     this.secondaryComposeLogReconnect.reset();
     if (this.secondaryComposeLogProject) {
@@ -950,24 +1084,25 @@ export class DockerService {
    * labels through, so when detection could not capture the location we
    * inspect one of the project's containers to recover it.
    */
-  private async composeCwd(projectName: string): Promise<string | undefined> {
+  private async composeCwd(projectName: string): Promise<ComposeCommandOptions> {
     const project = this.composeProjects.find(p => p.name === projectName);
     let workingDir = project?.workingDir;
     let configFile = project?.configFile;
+    let configFiles = project?.configFiles;
 
     if (!workingDir && !configFile) {
       const containerId = project?.services.find(s => s.containerId)?.containerId;
       if (containerId) {
         try {
           const info = await this.client.inspectContainer(containerId);
-          ({ workingDir, configFile } = ComposeDetector.projectSourceFromLabels(info.Config?.Labels));
+          ({ workingDir, configFile, configFiles } = ComposeDetector.projectSourceFromLabels(info.Config?.Labels));
         } catch {
           // Container vanished or inspect failed — fall back to the workspace cwd.
         }
       }
     }
 
-    return resolveComposeCwd({ workingDir, configFile }, this.cwd);
+    return resolveComposeOptions({ workingDir, configFile, configFiles }, this.cwd);
   }
 
   /**

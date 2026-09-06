@@ -1,10 +1,11 @@
 import { existsSync } from 'fs';
-import { dirname } from 'path';
+import { dirname, resolve } from 'path';
 
 /** The location Docker recorded for a compose project, from its labels. */
 export interface ComposeProjectSourceLocation {
   workingDir?: string;
   configFile?: string;
+  configFiles?: string[];
 }
 
 /**
@@ -31,4 +32,24 @@ export function resolveComposeCwd(
   if (configFile && existsSync(configFile)) return dirname(configFile);
 
   return fallback;
+}
+
+export interface ComposeCommandOptions {
+  cwd?: string;
+  configFiles?: string[];
+}
+
+/** Resolve recorded configuration without silently falling back to another project. */
+export function resolveComposeOptions(
+  source: ComposeProjectSourceLocation | undefined,
+  fallback?: string,
+): ComposeCommandOptions {
+  const recorded = source?.configFiles?.length ? source.configFiles : source?.configFile ? [source.configFile] : [];
+  const configFiles = recorded.map(file => resolve(source?.workingDir ?? fallback ?? process.cwd(), file));
+  const missing = configFiles.filter(file => !existsSync(file));
+  if (missing.length) throw new Error(`Compose configuration not found: ${missing.join(', ')}. Restore these files before running this action.`);
+  if (source?.workingDir && !existsSync(source.workingDir) && !configFiles.length) {
+    throw new Error(`Compose project directory not found: ${source.workingDir}`);
+  }
+  return { cwd: resolveComposeCwd({ ...source, configFile: configFiles[0] }, fallback), configFiles };
 }

@@ -11,8 +11,8 @@ export { ComposeDetector } from './compose/ComposeDetector';
 export type { ComposeProjectSource } from './compose/ComposeDetector';
 export { ComposeClient, ComposeError, composeFailureReason, throwIfComposeFailed } from './compose/ComposeClient';
 export type { ComposeExecResult } from './compose/ComposeClient';
-export { resolveComposeCwd } from './compose/composeCwd';
-export type { ComposeProjectSourceLocation } from './compose/composeCwd';
+export { resolveComposeCwd, resolveComposeOptions } from './compose/composeCwd';
+export type { ComposeProjectSourceLocation, ComposeCommandOptions } from './compose/composeCwd';
 export { ComposeFileReader } from './compose/ComposeFileReader';
 export type { ComposeFileConfig, ComposeFileServiceConfig } from './compose/ComposeFileReader';
 

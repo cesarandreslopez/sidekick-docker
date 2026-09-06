@@ -54,7 +54,8 @@ npm run build:vscode   # esbuild
 
 The CLI build uses custom esbuild plugins to handle Node.js-specific modules:
 
-- **Stubs**: `ssh2`, `cpu-features`, `react-devtools-core` (not needed at runtime)
+- **SSH**: bundles `ssh2`; optional `cpu-features` and `sshcrypto.node` accelerators use the library’s JavaScript fallback in both consumers.
+- **Stub**: `react-devtools-core` (optional development tooling)
 - **Externals**: `node-pty` (native module, must be installed separately)
 - **Defines**: `__CLI_VERSION__` injected from `package.json`
 

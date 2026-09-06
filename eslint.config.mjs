@@ -15,7 +15,7 @@ export default tseslint.config(
   },
   {
     files: ["sidekick-docker-*/src/**/*.{ts,tsx}"],
-    ignores: ["**/*.test.ts"],
+    ignores: ["**/*.test.ts", "**/*.test.tsx"],
     languageOptions: {
       parserOptions: {
         projectService: true,

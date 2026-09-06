@@ -1,4 +1,6 @@
 import { spawn } from 'child_process';
+import { StringDecoder } from 'node:string_decoder';
+import type { ComposeCommandOptions } from './composeCwd';
 import type { LogEntry } from '../types/container';
 
 export interface ComposeExecResult {
@@ -71,10 +73,12 @@ export class ComposeClient {
     return this.extraEnv ? { ...process.env, ...this.extraEnv } : undefined;
   }
 
-  private async exec(args: string[], cwd?: string): Promise<ComposeExecResult> {
+  private async exec(args: string[], cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {
     return new Promise((resolve, reject) => {
-      const proc = spawn('docker', ['compose', ...args], {
-        cwd,
+      const options = typeof cwd === 'string' ? { cwd } : cwd;
+      const files = options?.configFiles?.flatMap(file => ['-f', file]) ?? [];
+      const proc = spawn('docker', ['compose', ...files, ...args], {
+        cwd: options?.cwd,
         env: this.spawnEnv(),
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -96,27 +100,27 @@ export class ComposeClient {
     });
   }
 
-  async up(project: string, cwd?: string): Promise<ComposeExecResult> {
+  async up(project: string, cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {
     return this.exec(['-p', project, 'up', '-d'], cwd);
   }
 
-  async down(project: string, cwd?: string): Promise<ComposeExecResult> {
+  async down(project: string, cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {
     return this.exec(['-p', project, 'down'], cwd);
   }
 
-  async restart(project: string, service?: string, cwd?: string): Promise<ComposeExecResult> {
+  async restart(project: string, service?: string, cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {
     const args = ['-p', project, 'restart'];
     if (service) args.push(service);
     return this.exec(args, cwd);
   }
 
-  async stop(project: string, service?: string, cwd?: string): Promise<ComposeExecResult> {
+  async stop(project: string, service?: string, cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {
     const args = ['-p', project, 'stop'];
     if (service) args.push(service);
     return this.exec(args, cwd);
   }
 
-  async start(project: string, service?: string, cwd?: string): Promise<ComposeExecResult> {
+  async start(project: string, service?: string, cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {
     const args = ['-p', project, 'start'];
     if (service) args.push(service);
     return this.exec(args, cwd);
@@ -133,7 +137,8 @@ export class ComposeClient {
   }
 
   async *streamLogs(project: string, service?: string, tail = 100, signal?: AbortSignal): AsyncIterable<LogEntry> {
-    const args = ['-p', project, 'logs', '--follow', '--tail', String(tail), '--timestamps'];
+    if (signal?.aborted) return;
+    const args = ['-p', project, 'logs', '--no-color', '--follow', '--tail', String(tail), '--timestamps'];
     if (service) args.push(service);
 
     const proc = spawn('docker', ['compose', ...args], {
@@ -172,6 +177,10 @@ export class ComposeClient {
     let stdoutBuffer = '';
     let stderrBuffer = '';
     let done = false;
+    let failure: Error | undefined;
+    const stdoutDecoder = new StringDecoder('utf8');
+    const stderrDecoder = new StringDecoder('utf8');
+    let errorOutput = '';
 
     const MAX_QUEUE = 1000;
     const entries: LogEntry[] = [];
@@ -194,7 +203,7 @@ export class ComposeClient {
     }
 
     proc.stdout.on('data', (data: Buffer) => {
-      stdoutBuffer += data.toString();
+      stdoutBuffer += stdoutDecoder.write(data);
       const lines = stdoutBuffer.split('\n');
       stdoutBuffer = lines.pop()!;
       for (const line of lines) {
@@ -204,7 +213,9 @@ export class ComposeClient {
     });
 
     proc.stderr.on('data', (data: Buffer) => {
-      stderrBuffer += data.toString();
+      const text = stderrDecoder.write(data);
+      errorOutput = (errorOutput + text).slice(-8192);
+      stderrBuffer += text;
       const lines = stderrBuffer.split('\n');
       stderrBuffer = lines.pop()!;
       for (const line of lines) {
@@ -213,18 +224,25 @@ export class ComposeClient {
       }
     });
 
-    proc.on('close', () => {
+    proc.on('close', (code) => {
+      for (const [line, channel] of [[stdoutBuffer + stdoutDecoder.end(), 'stdout'], [stderrBuffer + stderrDecoder.end(), 'stderr']] as const) {
+        const entry = parseLine(line, channel);
+        if (entry) push(entry);
+      }
+      if (code !== 0 && !signal?.aborted) failure = new ComposeError('Logs', { exitCode: code ?? 1, stdout: '', stderr: errorOutput });
       done = true;
       resolve?.();
     });
 
-    proc.on('error', () => {
+    proc.on('error', (error) => {
+      failure = error;
       done = true;
       resolve?.();
     });
 
     try {
-      while (!done) {
+      while (!done || entries.length > 0) {
+        if (signal?.aborted) return;
         if (entries.length === 0) {
           await new Promise<void>(r => { resolve = r; });
           resolve = null;
@@ -233,7 +251,9 @@ export class ComposeClient {
           yield entries.shift()!;
         }
       }
+      if (failure && !signal?.aborted) throw failure;
     } finally {
+      signal?.removeEventListener('abort', kill);
       proc.stdout.removeAllListeners();
       proc.stderr.removeAllListeners();
       proc.removeAllListeners();

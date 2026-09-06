@@ -10,6 +10,7 @@ export interface ActionHint {
 
 interface StatusBarProps {
   daemonConnected: boolean;
+  resourceErrors?: Record<string, string>;
   focusTarget: 'side' | 'detail';
   panelActionHints: ActionHint[];
   filterString: string;
@@ -61,6 +62,8 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
       ? { group: 'daemon', text: `● ${runningCount ?? 0}/${containerCount ?? 0}`, color: 'green' }
       : { group: 'daemon', text: '○ disconnected', color: 'red' },
   );
+  const failed = Object.keys(props.resourceErrors ?? {});
+  if (failed.length) segments.push({ group: 'daemon', text: ` ⚠ ${failed.join(', ')} unavailable`, color: 'yellow' });
   if (ago) {
     segments.push({ group: 'ago', text: ` ↻ ${ago.text}`, color: ago.stale ? 'yellow' : 'gray', dimColor: !ago.stale });
   }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'fs';
 import { tmpdir } from 'os';
 import { join, dirname } from 'path';
-import { resolveComposeCwd } from './composeCwd';
+import { resolveComposeCwd, resolveComposeOptions } from './composeCwd';
 
 describe('resolveComposeCwd', () => {
   const realDir = mkdtempSync(join(tmpdir(), 'sd-compose-'));
@@ -40,6 +40,18 @@ describe('resolveComposeCwd', () => {
 
   it('prefers workingDir over configFile when both are live', () => {
     expect(resolveComposeCwd({ workingDir: realDir, configFile: realFile }, undefined)).toBe(realDir);
+  });
+
+  it('retains override ordering and resolves recorded relative paths', () => {
+    const override = join(realDir, 'override.yml');
+    writeFileSync(override, 'services: {}\n');
+    expect(resolveComposeOptions({ workingDir: realDir, configFiles: ['docker-compose.yml', 'override.yml'] }, '/unrelated'))
+      .toEqual({ cwd: realDir, configFiles: [realFile, override] });
+  });
+
+  it('refuses an action with missing recorded configuration instead of using another directory', () => {
+    expect(() => resolveComposeOptions({ configFiles: ['/missing/compose.yml'] }, realDir)).toThrow('Compose configuration not found');
+    expect(() => resolveComposeOptions({ workingDir: '/missing/checkout' }, realDir)).toThrow('Compose project directory not found');
   });
 
   process.on('exit', () => { rmSync(realDir, { recursive: true, force: true }); });

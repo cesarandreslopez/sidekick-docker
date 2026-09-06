@@ -18,6 +18,17 @@ function makeContainer(overrides: Partial<ContainerInfo> = {}): ContainerInfo {
 describe('ComposeDetector', () => {
   const detector = new ComposeDetector();
 
+  it('aggregates replicas deterministically regardless of container order', () => {
+    const running = makeContainer({ id: 'running', composeProject: 'app', composeService: 'web' });
+    const stopped = makeContainer({ id: 'stopped', composeProject: 'app', composeService: 'web', state: 'exited' });
+    const expected = detector.detect([running, stopped]);
+    expect(detector.detect([stopped, running])).toEqual(expected);
+    expect(expected[0].status).toBe('partial');
+    expect(expected[0].services).toHaveLength(1);
+    expect(expected[0].services[0]).toMatchObject({ containerId: 'running', runningReplicas: 1, totalReplicas: 2 });
+    expect(expected[0].services[0].replicas).toHaveLength(2);
+  });
+
   it('returns empty array when no containers have compose labels', () => {
     const containers = [makeContainer({ id: '1', name: 'standalone' })];
     expect(detector.detect(containers)).toEqual([]);
@@ -119,7 +130,7 @@ describe('ComposeDetector', () => {
         'com.docker.compose.project.working_dir': '/srv/myapp',
         'com.docker.compose.project.config_files': '/srv/myapp/compose.yml, /srv/myapp/compose.prod.yml',
       });
-      expect(source).toEqual({ workingDir: '/srv/myapp', configFile: '/srv/myapp/compose.yml' });
+      expect(source).toEqual({ workingDir: '/srv/myapp', configFile: '/srv/myapp/compose.yml', configFiles: ['/srv/myapp/compose.yml', '/srv/myapp/compose.prod.yml'] });
     });
 
     it('returns empty source for missing labels', () => {

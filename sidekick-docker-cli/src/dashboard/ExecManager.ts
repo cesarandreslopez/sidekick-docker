@@ -39,6 +39,7 @@ export interface ExecManagerOptions {
 
 export class ExecManager {
   private pty: IPty | null = null;
+  private disposed = false;
   private disposables: Array<{ dispose: () => void }> = [];
 
   /**
@@ -53,10 +54,11 @@ export class ExecManager {
       return false;
     }
 
+    if (this.disposed) return false;
     this.pty = nodePty.spawn('docker', ['exec', '-it', opts.containerId, '/bin/sh'], {
       name: 'xterm-256color',
       cols: opts.cols,
-      rows: opts.rows - 2, // Reserve space for header
+      rows: Math.max(1, opts.rows - 2), // Reserve space for header
       env: { ...process.env, ...opts.env } as Record<string, string>,
     });
 
@@ -82,6 +84,7 @@ export class ExecManager {
 
   /** Kill the PTY process and clean up. */
   dispose(): void {
+    this.disposed = true;
     for (const d of this.disposables) {
       d.dispose();
     }

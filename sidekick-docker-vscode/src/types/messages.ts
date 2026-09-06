@@ -62,6 +62,9 @@ export interface SerializedComposeService {
   name: string;
   projectName: string;
   containerId?: string;
+  replicas?: { containerId: string; state: SerializedComposeService['state']; image: string; ports: string[] }[];
+  runningReplicas?: number;
+  totalReplicas?: number;
   state: 'running' | 'paused' | 'exited' | 'restarting' | 'dead' | 'created' | 'not_created';
   image: string;
   ports: string[];
@@ -71,6 +74,7 @@ export interface SerializedComposeProject {
   name: string;
   workingDir?: string;
   configFile?: string;
+  configFiles?: string[];
   services: SerializedComposeService[];
   status: 'running' | 'partial' | 'stopped';
 }
@@ -123,12 +127,29 @@ export interface DashboardStateSnapshot {
   networks: SerializedNetworkInfo[];
   composeProjects: SerializedComposeProject[];
   daemonConnected: boolean;
+  resourceErrors?: Record<string, string>;
   lastRefresh: string | null;
 }
 
 // ─── Extension → Webview ────────────────────────────────────────────
 
+export type DetailKind = 'env' | 'changes' | 'layers';
+export interface DetailLoadUpdate {
+  kind: DetailKind;
+  itemId: string;
+  state: 'loading' | 'ready' | 'error';
+  message?: string;
+}
+export interface StreamStateUpdate {
+  kind: 'logs' | 'stats' | 'composeLogs';
+  itemId: string;
+  state: 'loading' | 'live' | 'empty' | 'ended' | 'reconnecting' | 'error';
+  message?: string;
+}
+
 export type ExtensionMessage =
+  | { type: 'detailLoad'; update: DetailLoadUpdate }
+  | { type: 'streamState'; update: StreamStateUpdate }
   | { type: 'updateState'; snapshot: DashboardStateSnapshot }
   | { type: 'updateLogs'; containerId: string; entries: SerializedLogEntry[]; severityCounts?: SerializedSeverityCounts }
   | { type: 'updateStats'; containerId: string; stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[]; networkRxRateHistory?: number[]; networkTxRateHistory?: number[]; blockReadRateHistory?: number[]; blockWriteRateHistory?: number[]; logSeveritySeries?: { severity: string; total: number }[] }
@@ -144,6 +165,8 @@ export type ExtensionMessage =
 // ─── Webview → Extension ────────────────────────────────────────────
 
 export type WebviewMessage =
+  | { type: 'retryDetail'; kind: DetailKind; itemId: string }
+  | { type: 'retryStreams' }
   | { type: 'webviewReady' }
   | { type: 'switchPanel'; panelIndex: number }
   | { type: 'selectItem'; panelId: string; itemId: string | null }

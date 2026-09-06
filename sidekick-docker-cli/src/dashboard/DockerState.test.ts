@@ -58,11 +58,37 @@ describe('DockerState', () => {
     it('sets daemonConnected false on failure', async () => {
       client = makeMockClient({
         listContainers: vi.fn().mockRejectedValue(new Error('connection refused')),
+        listImages: vi.fn().mockRejectedValue(new Error('connection refused')),
+        listVolumes: vi.fn().mockRejectedValue(new Error('connection refused')),
+        listNetworks: vi.fn().mockRejectedValue(new Error('connection refused')),
       });
       state = new DockerState(client);
       await state.refresh();
       expect(state.getMetrics().daemonConnected).toBe(false);
     });
+  });
+
+  it('coalesces an in-flight refresh and notifies only after its replacement completes', async () => {
+    let finish!: (items: ReturnType<typeof makeContainer>[]) => void;
+    const pending = new Promise<ReturnType<typeof makeContainer>[]>(resolve => { finish = resolve; });
+    vi.mocked(client.listContainers).mockReturnValueOnce(pending).mockResolvedValueOnce([makeContainer({ name: 'new' })]);
+    const changed = vi.fn();
+    state = new DockerState(client, undefined, changed);
+    const refresh = state.refresh();
+    void state.refresh(); void state.refresh();
+    finish([makeContainer({ name: 'old' })]);
+    await refresh;
+    expect(client.listContainers).toHaveBeenCalledTimes(2);
+    expect(state.getMetrics().containers[0].name).toBe('new');
+    expect(changed).toHaveBeenCalledTimes(1);
+  });
+
+  it('retains previously loaded resources on partial failure', async () => {
+    await state.refresh();
+    vi.mocked(client.listContainers).mockRejectedValueOnce(new Error('containers denied'));
+    await state.refresh();
+    expect(state.getMetrics()).toMatchObject({ daemonConnected: true, resourceErrors: { containers: 'containers denied' } });
+    expect(state.getMetrics().containers).toHaveLength(1);
   });
 
   describe('processEvent', () => {

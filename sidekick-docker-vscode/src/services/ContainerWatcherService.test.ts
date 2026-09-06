@@ -48,6 +48,30 @@ describe('ContainerWatcherService', () => {
     vi.clearAllMocks();
   });
 
+  it('does not reconnect or publish data when disposed during a pending ping', async () => {
+    let resolve!: (value: boolean) => void;
+    pingMock.mockReturnValue(new Promise<boolean>(r => { resolve = r; }));
+    const callbacks = createCallbacks();
+    service = new ContainerWatcherService(callbacks);
+    const start = service.start();
+    service.dispose();
+    resolve(true);
+    await start;
+    expect(listContainersMock).not.toHaveBeenCalled();
+    expect(callbacks.onConnectionChanged).not.toHaveBeenCalled();
+  });
+
+  it('ignores a refresh result that arrives after disposal', async () => {
+    let resolve!: (value: ContainerInfo[]) => void;
+    listContainersMock.mockReturnValue(new Promise<ContainerInfo[]>(r => { resolve = r; }));
+    const callbacks = createCallbacks();
+    service = new ContainerWatcherService(callbacks);
+    const pending = service.forceRefresh();
+    service.dispose(); resolve([makeContainer()]);
+    await pending;
+    expect(callbacks.onContainersChanged).not.toHaveBeenCalled();
+  });
+
   it('notifies disconnected when the initial connect fails (ping false)', async () => {
     pingMock.mockResolvedValue(false);
     const callbacks = createCallbacks();

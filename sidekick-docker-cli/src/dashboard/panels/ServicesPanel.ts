@@ -1,5 +1,5 @@
-import type { ComposeService, ComposeProject, ComposeExecResult } from 'sidekick-docker-shared';
-import { ComposeClient, filterLine, throwIfComposeFailed, resolveComposeCwd } from 'sidekick-docker-shared';
+import type { ComposeService, ComposeProject, ComposeExecResult, ComposeCommandOptions } from 'sidekick-docker-shared';
+import { ComposeClient, filterLine, throwIfComposeFailed, resolveComposeOptions } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -57,6 +57,7 @@ export class ServicesPanel implements SidePanel {
           colorizeDetailKey(`Project:   ${s.projectName}`),
           colorizeDetailKey(`Image:     ${s.image}`),
           colorizeDetailKey(`State:     ${colorizeState(s.state)}`),
+          colorizeDetailKey(`Replicas:  ${s.runningReplicas ?? Number(s.state === 'running')}/${s.totalReplicas ?? Number(!!s.containerId)} running`),
           colorizeDetailKey(`Container: ${s.containerId ? colorizeId(s.containerId) : 'not created'}`),
           colorizeDetailKey(`Ports:     ${s.ports.join(', ') || 'none'}`),
         ].join('\n');
@@ -102,6 +103,7 @@ export class ServicesPanel implements SidePanel {
           sortKey: sortKey++,
           data: { type: 'service' as const, service },
           iconColor: stateColor(service.state),
+          rightLabel: `${service.runningReplicas ?? Number(service.state === 'running')}/${service.totalReplicas ?? Number(!!service.containerId)}`,
         });
       }
     }
@@ -126,12 +128,12 @@ export class ServicesPanel implements SidePanel {
    * ~ and hitting Up on a project created in ~/work/api ran compose in the
    * wrong place. Resolve from the project's own recorded location instead.
    */
-  private cwdFor(d: ServiceItemData): string | undefined {
+  private cwdFor(d: ServiceItemData): ComposeCommandOptions {
     const projectName = getProjectName(d);
     const project = d.type === 'project'
       ? d.project
       : this.lastMetrics?.composeProjects.find(p => p.name === projectName);
-    return resolveComposeCwd(project, this.cwd);
+    return resolveComposeOptions(project, this.cwd);
   }
 
   /**

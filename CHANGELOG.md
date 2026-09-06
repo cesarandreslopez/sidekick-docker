@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [Unreleased]
+
+### Fixed
+
+- Preserve split JSON records and UTF-8 characters in Docker stats, events, and logs; decode live TTY logs without multiplex headers.
+- Cancel obsolete streams when selections change, views hide, or services are disposed. Empty streams stop retrying after the reconnect budget is exhausted.
+- Keep the VS Code list selection, details, and action target aligned after filtering or refresh, and preserve the current detail tab when selecting another item.
+- Respect modified keyboard shortcuts and native Tab traversal in the webview. Sort choices support clicks; modal dialogs confine focus and background updates preserve the focused control.
+- Refresh pinned log comparisons when only the secondary container or service produces output.
+- Preserve Compose override file order for lifecycle actions, report missing configuration files, and show running/total replicas for scaled services.
+- Suspend the existing Ink session for fallback exec so returning from the shell retains dashboard state.
+- Restore SSH connections in the packaged CLI and extension by bundling the real SSH transport.
+- Coalesce concurrent refreshes, retain successful resource data on partial failures, and prevent pending watcher work from publishing after disposal.
+
+### Added
+
+- Detail-load and stream status messages with Retry controls in the VS Code dashboard; partial refresh warnings in both dashboards.
+- DOM regression tests and `npm run test:packages` for SSH checks against the npm tarball and production VSIX.
+
 ## [0.4.0] - 2026-07-24
 
 ### Fixed

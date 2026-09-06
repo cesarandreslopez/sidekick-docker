@@ -5,6 +5,8 @@
  * all public API surfaces and that cross-module composition works correctly.
  */
 import { describe, it, expect } from 'vitest';
+// Load the entry point before test timers: these checks cover exports, not transpilation speed.
+import * as barrel from '../index';
 import { StatsCollector } from '../stats/StatsCollector';
 import { formatPorts, stateIcon, stateColor } from '../formatters';
 import { tokenizeLogLine, filterLine, detectSeverity, parseLine, detectFormat, LogAnalytics } from '../log/index';
@@ -14,7 +16,6 @@ import type { PortBinding } from '../types/container';
 
 describe('Barrel export completeness', () => {
   it('exports all types from the main barrel', async () => {
-    const barrel = await import('../index');
 
     // Docker module
     expect(barrel.DockerClient).toBeDefined();
@@ -104,7 +105,6 @@ describe('Sub-path exports', () => {
   });
 
   it('barrel and sub-path exports return identical references', async () => {
-    const barrel = await import('../index');
     const log = await import('../log/index');
     const fmt = await import('../formatters');
 
@@ -132,7 +132,6 @@ describe('Events module composition', () => {
   });
 
   it('ReconnectScheduler from events/ barrel matches main barrel', async () => {
-    const barrel = await import('../index');
     const events = await import('../events/index');
 
     expect(barrel.ReconnectScheduler).toBe(events.ReconnectScheduler);

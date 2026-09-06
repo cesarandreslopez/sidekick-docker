@@ -79,3 +79,9 @@ Key files:
 | `src/types/messages.ts` | Typed request/response messages |
 
 See [Architecture Overview](../architecture/overview.md) for more details.
+
+## Keyboard focus and recovery
+
+Use Tab and Shift+Tab to move between webview controls. The terminal dashboard keeps its own Tab focus toggle. Browser and editor shortcuts using Ctrl, Cmd, or Alt are preserved, apart from the documented Ctrl+D/Ctrl+U scroll commands. Dialogs keep focus inside their controls until closed.
+
+Selecting another item keeps the current detail tab. Filtering or removing the selected item selects the next visible item, or clears the selection if nothing matches. Failed detail loads and disconnected streams provide Retry controls; partial refresh failures identify the affected resource while retaining the last successful data.

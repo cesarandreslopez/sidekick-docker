@@ -9,7 +9,7 @@ import type {
   DockerEvent,
   ComposeFileConfig,
 } from 'sidekick-docker-shared';
-import { DockerClient, ComposeDetector, StatsCollector, ComposeFileReader, MAX_LOG_LINES } from 'sidekick-docker-shared';
+import { DockerClient, ComposeDetector, StatsCollector, ComposeFileReader, MAX_LOG_LINES, errorMessage } from 'sidekick-docker-shared';
 import type { LogEntry, FilterMode, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
 import { debugLog } from '../utils/debug';
 
@@ -31,6 +31,7 @@ export interface DockerDashboardMetrics {
   secondaryComposeLogs: LogEntry[];
   lastRefresh: Date | null;
   daemonConnected: boolean;
+  resourceErrors?: Record<string, string>;
   logFilterString: string;
   logFilterMode: FilterMode;
   logSeverityCounts: SeverityCounts | null;
@@ -65,18 +66,24 @@ export class DockerState {
    * pane reading "Loading…" forever with no indication anything went wrong.
    */
   private detailErrors = new Map<string, string>();
+  private refreshPromise: Promise<void> | null = null;
+  private refreshQueued = false;
+  private resourceErrors: Record<string, string> = {};
   private lastRefresh: Date | null = null;
   private daemonConnected = false;
   private cachedFileConfig: ComposeFileConfig | null = null;
+  private disposed = false;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(client: DockerClient, cwd?: string) {
+  constructor(client: DockerClient, cwd?: string, private onChange?: () => void) {
     this.client = client;
     this.cwd = cwd;
   }
 
   /** Debounced refresh — coalesces rapid event-driven refreshes into a single call. */
   private scheduleRefresh(): void {
+    if (this.disposed) return;
+    if (this.refreshPromise) { this.refreshQueued = true; return; }
     if (this.refreshTimer) return;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = null;
@@ -85,59 +92,68 @@ export class DockerState {
   }
 
   dispose(): void {
+    this.disposed = true;
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = null;
     }
   }
 
-  async refresh(): Promise<void> {
-    try {
-      const promises: [
-        Promise<ContainerInfo[]>,
-        Promise<ImageInfo[]>,
-        Promise<VolumeInfo[]>,
-        Promise<NetworkInfo[]>,
-        Promise<ComposeFileConfig | null>,
-      ] = [
-        this.client.listContainers(true),
-        this.client.listImages(),
-        this.client.listVolumes(),
-        this.client.listNetworks(),
+  refresh(): Promise<void> {
+    if (this.disposed) return Promise.resolve();
+    if (this.refreshPromise) {
+      this.refreshQueued = true;
+      return this.refreshPromise;
+    }
+    this.refreshPromise = this.refreshLoop().finally(() => { this.refreshPromise = null; });
+    return this.refreshPromise;
+  }
+
+  private async refreshLoop(): Promise<void> {
+    do {
+      this.refreshQueued = false;
+      const [containers, images, volumes, networks, fileConfig] = await Promise.allSettled([
+        this.client.listContainers(true), this.client.listImages(),
+        this.client.listVolumes(), this.client.listNetworks(),
         this.cwd ? this.composeFileReader.readFromDirectory(this.cwd) : Promise.resolve(null),
-      ];
-
-      const [containers, images, volumes, networks, fileConfig] = await Promise.all(promises);
-
-      this.containers = containers;
-      this.images = images;
-      this.volumes = volumes;
-      this.networks = networks;
-      this.cachedFileConfig = fileConfig;
-      this.composeProjects = this.composeDetector.detect(containers, fileConfig);
-      this.lastRefresh = new Date();
-      this.daemonConnected = true;
-
+      ]);
+      if (this.disposed) return;
+      // A newer request arrived while these results were being fetched.
+      if (this.refreshQueued) continue;
+      this.resourceErrors = {};
+      const results = { containers, images, volumes, networks, services: fileConfig };
+      for (const [kind, result] of Object.entries(results)) {
+        if (result.status === 'rejected') this.resourceErrors[kind] = errorMessage(result.reason);
+      }
+      if (containers.status === 'fulfilled') this.containers = containers.value;
+      if (images.status === 'fulfilled') this.images = images.value;
+      if (volumes.status === 'fulfilled') this.volumes = volumes.value;
+      if (networks.status === 'fulfilled') this.networks = networks.value;
+      if (fileConfig.status === 'fulfilled') this.cachedFileConfig = fileConfig.value;
+      this.composeProjects = this.composeDetector.detect(this.containers, this.cachedFileConfig);
+      this.daemonConnected = [containers, images, volumes, networks].some(r => r.status === 'fulfilled');
+      if (this.daemonConnected) this.lastRefresh = new Date();
       // Prune stale cache entries for removed containers/images
-      const currentContainerIds = new Set(containers.map(c => c.id));
+      const currentContainerIds = new Set(this.containers.map(c => c.id));
       for (const id of this.inspectedEnv.keys()) {
         if (!currentContainerIds.has(id)) this.inspectedEnv.delete(id);
       }
       for (const id of this.containerChanges.keys()) {
         if (!currentContainerIds.has(id)) this.containerChanges.delete(id);
       }
-      const currentImageIds = new Set(images.map(i => i.id));
+      const currentImageIds = new Set(this.images.map(i => i.id));
       for (const id of this.imageLayers.keys()) {
         if (!currentImageIds.has(id)) this.imageLayers.delete(id);
       }
-      const runningIds = new Set(containers.filter(c => c.state === 'running').map(c => c.id));
+      const runningIds = new Set(this.containers.filter(c => c.state === 'running').map(c => c.id));
       this.statsCollector.prune(runningIds);
-    } catch {
-      this.daemonConnected = false;
-    }
+      this.onChange?.();
+    } while (this.refreshQueued && !this.disposed);
   }
 
   processEvent(event: DockerEvent): void {
+    if (this.disposed) return;
+    if (this.refreshPromise) this.refreshQueued = true;
     // Incremental updates based on Docker event type
     switch (event.resourceType) {
       case 'container':
@@ -314,6 +330,7 @@ export class DockerState {
       secondaryComposeLogs: this.secondaryComposeLogs,
       lastRefresh: this.lastRefresh,
       daemonConnected: this.daemonConnected,
+      resourceErrors: { ...this.resourceErrors },
       logFilterString: '',
       logFilterMode: 'exact',
       logSeverityCounts: null,

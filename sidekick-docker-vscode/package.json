@@ -319,9 +319,11 @@
     "build:production": "npm run clean && node esbuild.cjs --production"
   },
   "devDependencies": {
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^24.0.0",
     "@types/vscode": "~1.109.0",
     "esbuild": "^0.28.1",
+    "jsdom": "^27.4.0",
     "sidekick-docker-shared": "file:../sidekick-docker-shared",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10",

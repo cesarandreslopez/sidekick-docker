@@ -6,6 +6,7 @@ import type { ComposeFileConfig } from './ComposeFileReader';
 export interface ComposeProjectSource {
   workingDir?: string;
   configFile?: string;
+  configFiles?: string[];
 }
 
 /**
@@ -21,12 +22,12 @@ export class ComposeDetector {
    * Extract the compose source location Docker recorded as labels on a
    * compose-managed container: `com.docker.compose.project.working_dir`
    * (preferred as cwd for compose actions) and
-   * `com.docker.compose.project.config_files` (comma-separated; first wins).
+   * `com.docker.compose.project.config_files` (comma-separated, in override order).
    */
   static projectSourceFromLabels(labels?: Record<string, string | undefined>): ComposeProjectSource {
     const workingDir = labels?.['com.docker.compose.project.working_dir'] || undefined;
-    const configFile = labels?.['com.docker.compose.project.config_files']?.split(',')[0]?.trim() || undefined;
-    return { workingDir, configFile };
+    const configFiles = labels?.['com.docker.compose.project.config_files']?.split(',').map(f => f.trim()).filter(Boolean);
+    return { workingDir, configFile: configFiles?.[0], configFiles };
   }
 
   detect(containers: ContainerInfo[], fileConfig?: ComposeFileConfig | null): ComposeProject[] {
@@ -48,15 +49,26 @@ export class ComposeDetector {
       }
 
       const services = projectMap.get(c.composeProject)!;
+      const replica = {
+        containerId: c.id,
+        state: c.state as ComposeService['state'],
+        image: c.image,
+        ports: c.ports.filter(p => p.hostPort > 0).map(p => `${p.hostPort}:${p.containerPort}/${p.protocol}`),
+      };
+      const existing = services.get(c.composeService);
+      const replicas = [...(existing?.replicas ?? []), replica].sort((a, b) =>
+        Number(b.state === 'running') - Number(a.state === 'running') || a.containerId.localeCompare(b.containerId));
+      const primary = replicas[0];
       services.set(c.composeService, {
         name: c.composeService,
         projectName: c.composeProject,
-        containerId: c.id,
-        state: c.state === 'running' ? 'running' : c.state as ComposeService['state'],
-        image: c.image,
-        ports: c.ports
-          .filter(p => p.hostPort > 0)
-          .map(p => `${p.hostPort}:${p.containerPort}/${p.protocol}`),
+        containerId: primary.containerId,
+        state: primary.state,
+        image: primary.image,
+        ports: [...new Set(replicas.flatMap(r => r.ports))],
+        replicas,
+        runningReplicas: replicas.filter(r => r.state === 'running').length,
+        totalReplicas: replicas.length,
       });
     }
 
@@ -74,6 +86,9 @@ export class ComposeDetector {
             name: fileSvc.name,
             projectName,
             state: 'not_created',
+            replicas: [],
+            runningReplicas: 0,
+            totalReplicas: 0,
             image: fileSvc.image || (fileSvc.hasBuild ? '<build>' : 'unknown'),
             ports: fileSvc.ports,
           });
@@ -84,10 +99,11 @@ export class ComposeDetector {
     const projects: ComposeProject[] = [];
     for (const [name, services] of projectMap) {
       const serviceList = Array.from(services.values());
-      const runningCount = serviceList.filter(s => s.state === 'running').length;
+      const runningCount = serviceList.reduce((n, s) => n + (s.runningReplicas ?? 0), 0);
+      const totalCount = serviceList.reduce((n, s) => n + Math.max(1, s.totalReplicas ?? 0), 0);
 
       let status: ComposeProject['status'];
-      if (runningCount === serviceList.length) {
+      if (runningCount === totalCount) {
         status = 'running';
       } else if (runningCount > 0) {
         status = 'partial';
@@ -100,6 +116,7 @@ export class ComposeDetector {
         name,
         workingDir: source?.workingDir,
         configFile: source?.configFile,
+        configFiles: source?.configFiles,
         services: serviceList,
         status,
       });

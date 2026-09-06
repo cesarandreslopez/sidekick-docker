@@ -905,6 +905,13 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
 
     /* ─── Sort overlay items ────────────────────────────────────── */
     .sort-item {
+      display: block;
+      width: 100%;
+      text-align: left;
+      font-family: inherit;
+      color: inherit;
+      background: none;
+      border: none;
       padding: 3px 20px;
       font-size: 12px;
       cursor: pointer;
@@ -916,6 +923,21 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
     .sort-item.current {
       color: var(--vscode-editorWarning-foreground, #cca700);
+    }
+
+    #resource-warning, .load-error, .stream-status {
+      padding: 8px 12px;
+      color: var(--vscode-editorWarning-foreground, #cca700);
+      overflow-wrap: anywhere;
+      font-size: 12px;
+      flex-shrink: 0;
+    }
+    #resource-warning button, .load-error button, .stream-status button {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+      border: 1px solid var(--vscode-button-border, transparent);
+      padding: 3px 8px;
+      cursor: pointer;
     }
 
     /* ─── Help overlay ──────────────────────────────────────────── */
@@ -1107,7 +1129,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     <div id="side-list"></div>
     <div id="detail-pane">
       <div id="detail-tab-bar"></div>
-      <div id="detail-content"></div>
+      <div id="detail-content" tabindex="0" role="region" aria-label="Item details"></div>
     </div>
   </div>
   <div id="disconnected-banner">

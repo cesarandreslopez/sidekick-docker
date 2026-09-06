@@ -144,9 +144,11 @@ targets VS Code 1.109 or newer.
 - Compose discovery merges labels from running containers with
   `docker compose config` data so planned and running services can appear
   together.
-- The CLI esbuild configuration stubs `ssh2`, `cpu-features`, and
-  `react-devtools-core`, externalizes `node-pty`, and injects
-  `__CLI_VERSION__`.
+- Both bundles include `ssh2` with JavaScript fallbacks for its optional
+  native accelerators (`scripts/native-fallbacks.cjs`). The CLI stubs
+  `react-devtools-core`, externalizes `node-pty`, and injects `__CLI_VERSION__`.
+- `npm run test:packages` builds and exercises SSH using the npm tarball and
+  production VSIX in a temporary directory, with an ephemeral local SSH server.
 - The extension host and webview communicate with typed `postMessage()`
   payloads.
 
