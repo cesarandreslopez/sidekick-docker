@@ -5,6 +5,25 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-09-06
+
+### Fixed
+
+- Preserve fragmented Docker JSON and UTF-8 log data, including live TTY output and final Compose log lines.
+- Abort obsolete streams on selection changes, hidden dashboards, and disposal; stop retrying empty streams after the reconnect budget is exhausted.
+- Keep visible selection, details, and action targets aligned after filtering or refresh, and preserve the detail tab when selecting another item.
+- Preserve modified editor shortcuts and native Tab/Shift+Tab traversal; support sort clicks and keep modal focus contained during updates.
+- Refresh pinned comparisons when only the secondary source produces logs, and restore comparison pins when switching panels.
+- Update Patterns as selected logs arrive without losing focus or scroll position.
+- Preserve Compose override order, report missing project files, and display running/total replicas for scaled services.
+- Restore SSH in the packaged extension by bundling the SSH transport with JavaScript fallbacks for optional native accelerators.
+- Coalesce refreshes, retain successful resource data on partial failures, and prevent pending watcher or detail work from publishing after disposal.
+
+### Added
+
+- Detail-load and stream status messages with Retry controls, plus partial refresh warnings.
+- DOM regression tests and SSH smoke checks against the production VSIX.
+
 ## [0.4.0] - 2026-07-24
 
 ### Added
@@ -212,3 +231,5 @@ _No changes — CLI-only bugfix release._
 [0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
+
+[0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1

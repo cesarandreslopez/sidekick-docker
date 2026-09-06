@@ -5,6 +5,23 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-09-06
+
+### Fixed
+
+- Preserve fragmented JSON records and UTF-8 characters in Docker stats, events, and logs, including live logs from TTY containers.
+- Cancel pending and idle Docker streams when their selection ends; preserve final Compose log lines and report failed log commands.
+- Retain dashboard selection and view state after fallback exec by suspending the existing Ink session; report shell launch and exit failures.
+- Restore SSH connections in the published CLI by bundling the SSH transport with JavaScript fallbacks for optional native accelerators.
+- Preserve Compose override file order for lifecycle actions and report missing project files before running an action.
+- Coalesce concurrent refreshes and retain previously loaded resources when only part of a refresh fails.
+
+### Added
+
+- Running/total replica counts for scaled Compose services.
+- Status-bar warnings identifying resources that failed to refresh.
+- SSH smoke checks against the actual npm tarball.
+
 ## [0.4.0] - 2026-07-24
 
 ### Added
@@ -268,3 +285,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
+
+[0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1

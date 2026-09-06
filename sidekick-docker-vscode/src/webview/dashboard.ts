@@ -1069,6 +1069,8 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       }
       if (isViewingTab('containers', 'Logs')) {
         patchActiveContainerLogs(msg.containerId);
+      } else if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Patterns')) {
+        renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true });
       }
       break;
     }

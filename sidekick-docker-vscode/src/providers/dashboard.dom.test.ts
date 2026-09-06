@@ -105,6 +105,27 @@ describe('dashboard DOM', () => {
     expect(element('[data-compare="secondary"]').textContent).toContain('secondary only');
   });
 
+  it('updates Patterns as selected logs arrive while preserving focus and scroll', () => {
+    element('[data-tab="6"]').click();
+    receive({ type: 'streamState', update: { kind: 'logs', itemId: 'alpha', state: 'live' } });
+    const detail = element('#detail-content');
+    detail.focus();
+    detail.scrollTop = 64;
+    const entry = { timestamp: null, stream: 'stdout' as const, message: 'GET /api/orders 200' };
+
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: [entry] });
+    expect(element('.pattern-count').textContent).toBe('1');
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: [entry, entry] });
+    expect(element('.pattern-count').textContent).toBe('2');
+    expect(detail.scrollTop).toBe(64);
+    expect(dom.window.document.activeElement).toBe(detail);
+
+    const patterns = element('.patterns-list');
+    receive({ type: 'updateLogs', containerId: 'beta', entries: [entry] });
+    expect(element('.patterns-list')).toBe(patterns);
+    expect(element('.pattern-count').textContent).toBe('2');
+  });
+
   it('restores each panel’s comparison pin when switching panels', () => {
     element('[data-pin-id="beta"]').click();
     element('[data-panel="1"]').click();

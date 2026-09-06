@@ -35,7 +35,7 @@ jobs:
       - name: Verify all package versions match
         run: |
           TAG="${{ steps.extract.outputs.version }}"
-          for pkg in sidekick-docker-vscode/package.json sidekick-docker-cli/package.json sidekick-docker-shared/package.json; do
+          for pkg in package.json sidekick-docker-vscode/package.json sidekick-docker-cli/package.json sidekick-docker-shared/package.json; do
             PKG_VERSION=$(node -e "console.log(require('./$pkg').version)")
             if [[ "$PKG_VERSION" != "$TAG" ]]; then
               echo "::error::$pkg version ($PKG_VERSION) does not match tag (v$TAG)"
@@ -83,8 +83,22 @@ jobs:
           path: sidekick-docker-vscode/sidekick-docker-vscode-${{ needs.validate.outputs.version }}.vsix
 
       - name: Publish to Open VSX
-        run: npx ovsx publish sidekick-docker-vscode-${{ needs.validate.outputs.version }}.vsix || echo "Already published — continuing"
+        run: |
+          METADATA="$RUNNER_TEMP/openvsx-version.json"
+          STATUS=$(curl --silent --show-error --location --max-time 30 \
+            --output "$METADATA" --write-out '%{http_code}' \
+            "https://open-vsx.org/api/CesarAndresLopez/sidekick-docker-vscode/$VERSION")
+          if [[ "$STATUS" == "200" ]]; then
+            node -e 'const fs = require("node:fs"); const data = JSON.parse(fs.readFileSync(process.argv[1], "utf8")); if (data.version !== process.argv[2]) throw new Error("Unexpected Open VSX version response");' "$METADATA" "$VERSION"
+            echo "Version $VERSION already published, skipping"
+          elif [[ "$STATUS" == "404" ]]; then
+            npx --yes ovsx publish "sidekick-docker-vscode-$VERSION.vsix"
+          else
+            echo "::error::Open VSX version lookup failed (HTTP $STATUS)"
+            exit 1
+          fi
         env:
+          VERSION: ${{ needs.validate.outputs.version }}
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
   publish-cli:
@@ -180,4 +194,4 @@ jobs:
             ```
           files: |
             sidekick-docker-vscode-${{ needs.validate.outputs.version }}.vsix
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true

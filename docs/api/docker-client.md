@@ -74,6 +74,8 @@ const client = new DockerClient(parseDockerEndpoint('tcp://192.168.1.100:2376'))
 |--------|-----------|-------------|
 | `streamEvents` | `(filters?: Record<string, string[]>, signal?: AbortSignal) => AsyncIterable<DockerEvent>` | Stream Docker daemon events |
 
+All three streaming methods accept an optional abort signal that cancels pending requests as well as active streams. Decoding preserves split JSON records and UTF-8 characters; live logs distinguish TTY output from multiplexed stdout/stderr. See [Streaming Architecture](../architecture/streaming.md) for ownership and reconnection behavior.
+
 ## Usage Examples
 
 ### List all running containers

@@ -51,8 +51,8 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 | `inspectContainer` | `(id: string) => Promise<ContainerInspectInfo>` | Get full container details |
 | `getContainerEnv` | `(id: string) => Promise<string[]>` | Get container environment variables |
 | `getContainerChanges` | `(id: string) => Promise<FilesystemChange[]>` | Get filesystem changes vs base image |
-| `streamLogs` | `(id: string, opts?: LogStreamOptions) => AsyncIterable<LogEntry>` | Stream container logs |
-| `streamStats` | `(id: string) => AsyncIterable<ContainerStats>` | Stream live container stats |
+| `streamLogs` | `(id: string, opts?: LogStreamOptions, signal?: AbortSignal) => AsyncIterable<LogEntry>` | Stream container logs |
+| `streamStats` | `(id: string, signal?: AbortSignal) => AsyncIterable<ContainerStats>` | Stream live container stats |
 
 #### Image Methods
 
@@ -83,7 +83,9 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `streamEvents` | `(filters?: Record<string, string[]>) => AsyncIterable<DockerEvent>` | Stream Docker daemon events |
+| `streamEvents` | `(filters?: Record<string, string[]>, signal?: AbortSignal) => AsyncIterable<DockerEvent>` | Stream Docker daemon events |
+
+Abort signals cancel both pending requests and active streams. Decoders preserve JSON records and UTF-8 characters across transport chunks, and live logs distinguish TTY output from multiplexed stdout/stderr.
 
 ### ComposeDetector
 
@@ -97,6 +99,8 @@ const containers = await client.listContainers();
 const projects = detector.detect(containers);
 ```
 
+Projects retain optional `workingDir`, `configFile`, and ordered `configFiles` metadata. Each service aggregates its discovered replicas into `replicas`, `runningReplicas`, and `totalReplicas`; the existing `containerId` identifies a representative, preferring a running replica. These fields are optional on the public types for compatibility.
+
 ### ComposeClient
 
 Wraps `docker compose` CLI commands.
@@ -109,6 +113,10 @@ await compose.up('my-project');
 await compose.down('my-project');
 await compose.restart('my-project', 'web');
 ```
+
+Lifecycle methods also accept `ComposeCommandOptions` (`{ cwd?: string; configFiles?: string[] }`) in place of the optional string `cwd`. Use `resolveComposeOptions(project, fallbackDirectory)` to resolve the recorded files, preserve override order, and reject missing paths before an action. Pass each result to `throwIfComposeFailed(result, operation)` to surface command failures.
+
+`compose.streamLogs(project, service?, tail = 100, signal?)` returns an `AsyncIterable<LogEntry>`. It preserves split UTF-8 and final unterminated lines, throws on command failure, and terminates its subprocess on cancellation. See the [Compose API reference](https://cesarandreslopez.github.io/sidekick-docker/api/compose-detector/) for examples.
 
 ### EventWatcher
 

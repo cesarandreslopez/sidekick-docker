@@ -20,8 +20,9 @@ Key `DockerClient` methods:
 - `startContainer(id)`, `stopContainer(id)`, `restartContainer(id)`, etc.
 - `removeContainer(id, force?)`, `removeImage(id)`, `removeVolume(name)`, `removeNetwork(id)`
 - `pruneImages()`, `pruneVolumes()`, `pruneNetworks()`
-- `streamLogs(id, opts)` — AsyncIterable<LogEntry>
-- `streamStats(id)` — AsyncIterable<ContainerStats>
+- `streamLogs(id, opts?, signal?)` — AsyncIterable<LogEntry>; TTY-aware with separate stdout/stderr decoding
+- `streamStats(id, signal?)` — AsyncIterable<ContainerStats>
+- `streamEvents(filters?, signal?)` — AsyncIterable<DockerEvent>
 - `getContainerEnv(id)` — Inspect container environment variables
 - `dispose()` — Close connection
 
@@ -29,12 +30,16 @@ Key `DockerClient` methods:
 
 ```
 sidekick-docker-shared/src/docker/
-├── DockerClient.ts       # Main facade class (451 LOC)
+├── DockerClient.ts       # Main facade class
 ├── DockerClient.test.ts  # Tests
+├── streams.ts            # Abort ownership and incremental UTF-8/line decoding
+├── streaming.test.ts     # Fragmentation and cancellation regression tests
 └── schemas.ts            # Zod schemas for Docker API responses
 ```
 
 ## Dependencies
+
+Streaming requests propagate abort signals while pending and after response acquisition. Incremental decoding preserves records across transport chunks, including final records without a newline, and stream cleanup removes abort listeners.
 
 - **Allowed imports**: `types` (internal), `dockerode` (external), `zod` (external)
 - **Forbidden imports**: `compose`, `log`, `events`, `stats`, `core` — DockerClient must not depend on higher-level modules

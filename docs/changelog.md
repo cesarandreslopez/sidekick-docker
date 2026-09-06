@@ -6,7 +6,7 @@ All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.1] - 2026-09-06
 
 ### Fixed
 
@@ -15,6 +15,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Keep the VS Code list selection, details, and action target aligned after filtering or refresh, and preserve the current detail tab when selecting another item.
 - Respect modified keyboard shortcuts and native Tab traversal in the webview. Sort choices support clicks; modal dialogs confine focus and background updates preserve the focused control.
 - Refresh pinned log comparisons when only the secondary container or service produces output.
+- Update the VS Code Patterns tab as logs arrive, preserving focus and scroll position.
 - Preserve Compose override file order for lifecycle actions, report missing configuration files, and show running/total replicas for scaled services.
 - Suspend the existing Ink session for fallback exec so returning from the shell retains dashboard state.
 - Restore SSH connections in the packaged CLI and extension by bundling the real SSH transport.
@@ -24,6 +25,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 - Detail-load and stream status messages with Retry controls in the VS Code dashboard; partial refresh warnings in both dashboards.
 - DOM regression tests and `npm run test:packages` for SSH checks against the npm tarball and production VSIX.
+
+### Changed
+
+- Synchronize root and package lockfile versions when bumping a release, including local shared-package references.
+- Fail releases on Open VSX lookup or publish errors and missing VSIX assets; skip Open VSX publishing only when the exact version already exists.
 
 ## [0.4.0] - 2026-07-24
 
@@ -573,3 +579,5 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - tsc for shared library (CommonJS + declarations)
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
+
+[0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1

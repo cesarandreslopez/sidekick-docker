@@ -72,6 +72,12 @@ The dashboard has 5 panels, each mapped to a number key:
 | 4 | **Volumes** | Named volumes with driver, mount path, usage status | Info |
 | 5 | **Networks** | Docker networks with driver, scope, connected containers | Info |
 
+Services show running/total replica counts. Lifecycle actions use the project's recorded Compose files in override order and report missing files before running.
+
+Partial refresh failures retain the last successful resource data and identify the affected resources in the status bar. Refresh to try again.
+
+When `node-pty` is unavailable, Exec temporarily hands the terminal to `docker exec`. Exit the shell with `exit` or `Ctrl+D` to return to the same dashboard selection and view. `Ctrl+]` detaches only from the embedded PTY session.
+
 ## Keybindings
 
 ### Navigation

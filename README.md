@@ -43,7 +43,7 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 - **Sparkline charts** — CPU, memory, network I/O, block I/O, and log severity rendered as inline sparklines
 - **Filesystem inspector** — view all filesystem changes inside containers (added/changed/deleted files)
 - **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions
-- **Compose support** — detect projects from container labels, run `up`/`down`/`restart` per project
+- **Compose support** — detect projects from container labels, show running/total replicas, and preserve recorded override files for lifecycle actions
 - **Interactive exec** — drop into a running container shell without leaving the dashboard
 - **Filter & search** — `/` to filter any resource list by name
 - **Confirmation modals** — destructive actions (remove, prune) always ask first
@@ -52,6 +52,8 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 - **Disk usage** — `df` reports images, containers, volumes and build cache, the last of which is usually the biggest surprise
 - **Prune everything** — reclaim space from stopped containers, dangling images, unused volumes and networks, with the reclaimed total reported back
 - **Flexible endpoints** — `--socket` accepts a socket path, `unix://` URL, or `tcp://host:port` for remote daemons
+- **SSH connections** — connect with `DOCKER_HOST=ssh://user@host`; the CLI and extension include the SSH transport
+- **Refresh recovery** — keep the last successful resource data when part of a refresh fails; the VS Code dashboard also offers Retry controls for detail loads and streams
 - **VS Code extension** — the same dashboard, embedded as a webview panel
 
 ## Quick Start

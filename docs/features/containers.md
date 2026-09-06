@@ -112,6 +112,8 @@ Press `x` to open the context menu:
 
 The exec action drops you into a shell session inside the container using `node-pty`, running `/bin/sh`. Press `Ctrl+]` to detach back to the dashboard, or end the shell with `Ctrl+D` / `exit`.
 
+If `node-pty` is unavailable, the dashboard suspends its terminal rendering and runs `docker exec` directly. End that shell with `Ctrl+D` / `exit` to return to the same selection and view state. The `Ctrl+]` detach shortcut applies only to the embedded PTY session.
+
 <p align="center">
   <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/shell_bash_into_container_cli.gif" alt="Interactive Exec Demo" width="800">
 </p>

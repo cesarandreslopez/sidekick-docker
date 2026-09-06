@@ -49,6 +49,7 @@ npm run build:vscode             # esbuild in sidekick-docker-vscode
 
 # Tests (vitest, co-located .test.ts files)
 npm test                         # runs shared + cli + vscode tests
+npm run test:packages             # builds and checks SSH in the npm tarball and production VSIX
 cd sidekick-docker-shared && npx vitest run   # shared only
 cd sidekick-docker-cli && npx vitest run      # cli only
 cd sidekick-docker-vscode && npx vitest run   # vscode only (vscode API mocked via src/test/vscode.ts)
@@ -59,7 +60,7 @@ npm run lint:fix                 # lint + auto-fix
 bash scripts/lint-all.sh         # alternative: also accepts extra args (e.g. --fix)
 
 # Version management
-bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 packages)
+bash scripts/bump-version.sh 0.4.1   # updates all 4 manifests and lockfiles, including local shared references
 ```
 
 ### Code Style
@@ -76,6 +77,24 @@ Tests use Vitest and are co-located with source files (e.g., `FooService.ts` / `
 npm test             # Run all tests (shared + cli + vscode)
 cd sidekick-docker-shared && npx vitest   # Watch mode
 ```
+
+Before handing off code changes, run the complete gate from the repository root:
+
+```bash
+(cd sidekick-docker-shared && npx tsc --noEmit)
+(cd sidekick-docker-cli && npx tsc --noEmit)
+(cd sidekick-docker-vscode && npx tsc --noEmit)
+npm run lint
+npm test
+node scripts/check-imports.mjs
+npm run build
+```
+
+Install root lint dependencies with `npm ci` if needed. For changes to packaging or SSH, also run `npm run test:packages`. It packs the CLI and production VSIX into a temporary directory and connects both to an ephemeral local SSH fixture; it requires `tar`, `unzip`, npm, and network access to fetch `vsce`, but no real Docker daemon or SSH credentials. Documentation changes should pass `zensical build` after installing Zensical.
+
+### Releases
+
+Use `scripts/bump-version.sh` to synchronize manifests and lockfiles, then update the root, CLI, extension, and documentation changelogs. After validation, commit and push `main`, wait for CI and documentation deployment, and push an annotated `vX.Y.Z` tag on that commit. The Release workflow publishes the CLI to npm and the extension to Open VSX, then creates a GitHub release with the VSIX. The shared package remains internal. Monitor each job and verify the registry listings and release asset before reporting completion.
 
 ## Project Structure
 

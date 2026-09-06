@@ -22,9 +22,11 @@ for await (const entry of client.streamLogs(containerId, {}, controller.signal))
 // controller.abort() immediately destroys the underlying stream
 ```
 
+Cancellation also reaches pending Docker requests. Streaming decoders preserve UTF-8 characters and JSON records split across transport chunks, and flush final records without a newline. Live container logs inspect the TTY flag to distinguish raw terminal output from multiplexed stdout/stderr frames. Compose logs decode stdout and stderr separately, flush trailing lines, and surface command failures.
+
 ## Stream Managers
 
-The dashboard uses manager classes to control when streaming starts and stops. Streaming is **selection-driven** — it only runs for the currently selected container, avoiding unnecessary resource usage.
+The dashboards use view state to control when streaming starts and stops. Log and stats streams follow the selected item and detail tab; a pinned comparison can request a second log stream. Stats-based sorting also samples other running containers so every visible row can be compared.
 
 ### LogStreamManager
 
@@ -58,6 +60,10 @@ All stream managers use `ReconnectScheduler` for fault-tolerant streaming:
 - **Bounded retries** — streams give up after a maximum number of attempts on permanent failures
 - **Error logging** — all stream errors are logged for debugging
 - **Resource cleanup** — try/finally blocks ensure proper teardown on failure
+
+The VS Code service gives each primary and comparison stream a `StreamSession` with its own abort signal and generation. Late output from a replaced session is ignored, including A → B → A selection changes. Hiding the dashboard or disposing the service cancels its streams. Empty responses do not reset the reconnect budget; after repeated failures the webview offers Retry. Detail-load and stream-status messages use the typed extension/webview protocol, and retry requests are validated on receipt.
+
+Concurrent resource refreshes are coalesced. A failed resource request retains its previous data while successful resources update, with warnings identifying the failures. Disposed services ignore pending refresh and detail completions.
 
 ### EventWatcher
 

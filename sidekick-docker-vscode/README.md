@@ -84,13 +84,17 @@ the context menu and a status-bar item showing running/total counts.
 - **Connection awareness** — status-bar connection indicator, a disconnected banner with one-click Retry when the daemon goes away, and a "Retry Connection" action in the Containers view
 - **Mouse-friendly** — click rows and tabs to select, right-click a container row for its action menu, clickable status-bar hint chips
 - **Accessible** — ARIA roles, labels, and live regions; tabs and overlays reachable by keyboard
-- **Workspace-aware Compose** — compose files are detected in your workspace folders, and Compose actions run from the folder containing the compose file
+- **Workspace-aware Compose** — detect workspace projects, preserve recorded override files for lifecycle actions, and display running/total replicas for scaled services
+- **Recovery controls** — retry failed detail loads and streams; partial refresh warnings retain the last successful resource data
+- **SSH connections** — the packaged extension includes the SSH transport for `DOCKER_HOST=ssh://user@host`
+
+Tab and Shift+Tab move between webview controls, and modal dialogs keep focus inside their controls until closed. Selecting another item preserves the detail tab. Filtering or deleting the selection chooses the first visible item, or clears the selection when nothing matches. Pinned comparison panes and Patterns update as new logs arrive.
 
 ## Requirements
 
 - **VSCode** >= 1.109
 - **Docker** running and accessible
-- **Node.js** >= 20 (for building from source)
+- **Node.js** >= 22.12 (for building from source)
 
 ## Architecture
 

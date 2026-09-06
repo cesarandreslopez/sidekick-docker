@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bump version across all 3 packages in the monorepo.
-# Usage: bash scripts/bump-version.sh 0.12.0
+# Bump the root and all 3 packages, including lockfile metadata.
+# Usage: bash scripts/bump-version.sh 0.4.1
 
 VERSION="${1:-}"
 
 if [[ -z "$VERSION" ]]; then
   echo "Usage: $0 <semver>"
-  echo "Example: $0 0.12.0"
+  echo "Example: $0 0.4.1"
   exit 1
 fi
 
@@ -20,35 +20,41 @@ fi
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-PACKAGES=(
-  "package.json"
-  "sidekick-docker-shared/package.json"
-  "sidekick-docker-cli/package.json"
-  "sidekick-docker-vscode/package.json"
-)
+node - "$REPO_ROOT" "$VERSION" <<'NODE'
+const fs = require('node:fs');
+const path = require('node:path');
+const [root, version] = process.argv.slice(2);
+const directories = ['.', 'sidekick-docker-shared', 'sidekick-docker-cli', 'sidekick-docker-vscode'];
+const updates = [];
 
-for pkg in "${PACKAGES[@]}"; do
-  filepath="$REPO_ROOT/$pkg"
-  if [[ ! -f "$filepath" ]]; then
-    echo "Warning: $pkg not found, skipping"
-    continue
-  fi
+// Read every file before writing so missing or invalid metadata fails up front.
+for (const directory of directories) {
+  for (const name of ['package.json', 'package-lock.json']) {
+    const file = path.join(root, directory, name);
+    const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const previous = data.version;
+    data.version = version;
+    if (name === 'package-lock.json') {
+      data.packages[''].version = version;
+      const shared = data.packages['../sidekick-docker-shared'];
+      if (shared) shared.version = version;
+    }
+    updates.push({ file, data, previous });
+  }
+}
 
-  node -e "
-    const fs = require('fs');
-    const p = JSON.parse(fs.readFileSync('$filepath', 'utf8'));
-    const old = p.version;
-    p.version = '$VERSION';
-    fs.writeFileSync('$filepath', JSON.stringify(p, null, 2) + '\n');
-    console.log('  $pkg: ' + old + ' -> $VERSION');
-  "
-done
+for (const { file, data, previous } of updates) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
+  console.log(`  ${path.relative(root, file)}: ${previous} -> ${version}`);
+}
+NODE
 
 echo ""
 echo "All packages bumped to $VERSION."
 echo ""
 echo "Next steps:"
-echo "  1. Update CHANGELOG.md"
-echo "  2. git add -A && git commit -m 'chore: bump version to $VERSION'"
-echo "  3. git tag v$VERSION"
-echo "  4. git push && git push --tags"
+echo "  1. Update the root, CLI, extension, and docs changelogs and relevant documentation"
+echo "  2. Run the validation gate in AGENTS.md and npm run test:packages"
+echo "  3. Commit the release changes and push main; wait for CI and documentation deployment"
+echo "  4. git tag -a v$VERSION -m 'Release v$VERSION'"
+echo "  5. git push origin v$VERSION and monitor the Release workflow"

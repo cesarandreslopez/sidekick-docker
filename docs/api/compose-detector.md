@@ -27,6 +27,10 @@ Returns an array of `ComposeProject` objects, each containing:
 
 - `name` — project name
 - `services` — array of `ComposeService` objects with name, state, container ID (if running), and configuration
+- `workingDir`, `configFile`, `configFiles` — optional recorded project location and files in override order; `configFile` remains the first file for compatibility
+- `status` — `running`, `partial`, or `stopped`, accounting for all discovered replicas
+
+Services include optional `replicas`, `runningReplicas`, and `totalReplicas` fields. Each `ComposeReplica` records `containerId`, `state`, `image`, and `ports`. The service's existing `containerId` refers to a deterministic representative, preferring a running replica. Planned services have an empty replica list and zero counts.
 
 ## ComposeClient
 
@@ -47,11 +51,26 @@ await compose.restart('my-project', 'web');
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `up` | `(project: string, cwd?: string) => Promise<ComposeExecResult>` | Start a Compose project (`docker compose up -d`) |
-| `down` | `(project: string, cwd?: string) => Promise<ComposeExecResult>` | Stop a Compose project (`docker compose down`) |
-| `restart` | `(project: string, service?: string, cwd?: string) => Promise<ComposeExecResult>` | Restart a project or specific service |
-| `stop` | `(project: string, service?: string, cwd?: string) => Promise<ComposeExecResult>` | Stop a project or specific service |
+| `up` | <code>(project: string, cwd?: string &#124; ComposeCommandOptions) =&gt; Promise&lt;ComposeExecResult&gt;</code> | Start a Compose project (`docker compose up -d`) |
+| `down` | <code>(project: string, cwd?: string &#124; ComposeCommandOptions) =&gt; Promise&lt;ComposeExecResult&gt;</code> | Stop a Compose project (`docker compose down`) |
+| `restart` | <code>(project: string, service?: string, cwd?: string &#124; ComposeCommandOptions) =&gt; Promise&lt;ComposeExecResult&gt;</code> | Restart a project or specific service |
+| `stop` | <code>(project: string, service?: string, cwd?: string &#124; ComposeCommandOptions) =&gt; Promise&lt;ComposeExecResult&gt;</code> | Stop a project or specific service |
+| `start` | <code>(project: string, service?: string, cwd?: string &#124; ComposeCommandOptions) =&gt; Promise&lt;ComposeExecResult&gt;</code> | Start existing service containers |
+| `streamLogs` | `(project: string, service?: string, tail?: number, signal?: AbortSignal) => AsyncIterable<LogEntry>` | Follow logs; default tail is 100 |
 
-Each method resolves to a `ComposeExecResult` (`exitCode`, `stdout`, `stderr`); pass `cwd` to run compose from a specific project directory.
+Lifecycle methods resolve to a `ComposeExecResult` (`exitCode`, `stdout`, `stderr`); use `throwIfComposeFailed(result, operation)` to turn a nonzero exit into a `ComposeError`. String `cwd` arguments remain supported. `ComposeCommandOptions` accepts `{ cwd?: string; configFiles?: string[] }`, passing every file with `-f` in the supplied order.
+
+Use `resolveComposeOptions(source, fallback?)` to resolve recorded paths and reject missing files before an action:
+
+```typescript
+import { ComposeClient, resolveComposeOptions, throwIfComposeFailed } from 'sidekick-docker-shared';
+
+const compose = new ComposeClient();
+const options = resolveComposeOptions(project, workspaceDirectory);
+const result = await compose.up(project.name, options);
+throwIfComposeFailed(result, 'Up');
+```
+
+`streamLogs` has its own abort signal, preserves split UTF-8 and trailing output, and throws when the command fails. The lifecycle options object does not change its signature.
 
 All operations shell out to `docker compose` rather than using the Docker API directly, because compose orchestration logic lives in the compose CLI.

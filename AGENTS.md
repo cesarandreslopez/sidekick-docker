@@ -51,8 +51,8 @@ npm test
 npm run lint
 node scripts/check-imports.mjs
 
-# Version all three packages and the root manifest
-bash scripts/bump-version.sh 0.4.0
+# Version all three packages and the root, including lockfiles
+bash scripts/bump-version.sh 0.4.1
 ```
 
 Before committing code changes, run:

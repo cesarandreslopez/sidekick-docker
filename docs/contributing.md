@@ -32,6 +32,7 @@ npm run build:shared       # Shared library only
 npm run build:cli          # CLI only
 npm run build:vscode       # VS Code extension only
 npm test                   # Run all tests
+npm run test:packages      # Build and check SSH in the npm tarball and production VSIX
 npm run lint               # Lint all packages (ESLint 10)
 npm run lint:fix           # Lint + auto-fix
 ```
@@ -42,6 +43,24 @@ npm run lint:fix           # Lint + auto-fix
 - Vitest for testing, co-located `.test.ts` files
 - ESLint 10 (flat config) for code quality — run `npm run lint` before submitting PRs
 - [Conventional Commits](https://www.conventionalcommits.org/) for commit messages
+
+## Validation and Releases
+
+Before handing off changes, run the complete gate from the repository root:
+
+```bash
+(cd sidekick-docker-shared && npx tsc --noEmit)
+(cd sidekick-docker-cli && npx tsc --noEmit)
+(cd sidekick-docker-vscode && npx tsc --noEmit)
+npm run lint
+npm test
+node scripts/check-imports.mjs
+npm run build
+```
+
+Install root lint dependencies with `npm ci` if needed. Packaging or SSH changes also require `npm run test:packages`, which tests the packed CLI and production VSIX against a temporary local SSH fixture. It needs `tar`, `unzip`, npm, and network access to fetch `vsce`; it does not use a real Docker daemon or SSH credentials. Build documentation with `zensical build` after installing Zensical.
+
+`bash scripts/bump-version.sh X.Y.Z` updates all four manifests and lockfiles, including local shared-package references. Update the root, CLI, extension, and docs changelogs, validate, commit, and push `main`. Wait for CI and documentation deployment before pushing an annotated `vX.Y.Z` tag. The Release workflow publishes to npm and Open VSX and creates a GitHub release containing the VSIX; verify each destination after the workflow finishes. The shared package remains internal.
 
 ## Making Changes
 
