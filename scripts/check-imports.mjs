@@ -34,6 +34,7 @@ function classifyFile(relPath) {
     if (rest.startsWith('log/')) return 'shared/log';
     if (rest.startsWith('events/')) return 'shared/events';
     if (rest.startsWith('stats/')) return 'shared/stats';
+    if (rest.startsWith('state/')) return 'shared/state';
     return 'shared/core';
   }
   if (relPath.startsWith(CLI_SRC + '/')) {
@@ -98,9 +99,12 @@ const ALLOWED_DEPS = {
   'shared/log':     [],
   'shared/events':  ['shared/docker', 'shared/types'],
   'shared/stats':   ['shared/types'],
+  // The store needs compose (detector + config reader), so it cannot live in
+  // events, which may not depend on compose.
+  'shared/state':   ['shared/docker', 'shared/compose', 'shared/types'],
   'shared/core':    ['shared/types',
                      'shared/docker', 'shared/compose', 'shared/events',
-                     'shared/stats', 'shared/log'], // barrel index.ts re-exports all sub-modules
+                     'shared/stats', 'shared/log', 'shared/state'], // barrel index.ts re-exports all sub-modules
 
   // === CLI package ===
   'cli/utils':      ['shared'], // connect/textTable wrap DockerClient + shared formatters

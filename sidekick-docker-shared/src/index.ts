@@ -46,6 +46,12 @@ export { FollowStream } from './events/FollowStream';
 export type { FollowStreamState, FollowStreamOptions } from './events/FollowStream';
 export { LogResumeCursor } from './events/LogResumeCursor';
 
+// State
+export { DockerStateStore } from './state/DockerStateStore';
+export type { DockerStateSnapshot, DockerStateStoreOptions, StoreChange } from './state/DockerStateStore';
+export { classifyEvent, applyEffect, splitEventAction } from './state/eventPolicy';
+export type { EventEffect, ResourceKind } from './state/eventPolicy';
+
 // Formatters
 export {
   formatBytes,

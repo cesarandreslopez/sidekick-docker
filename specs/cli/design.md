@@ -120,4 +120,4 @@ shared (external)
 
 - **Dashboard.tsx decomposition**: The main component has 29 imports and handles state, rendering, keyboard, panels, and overlays. Future phase should extract: (a) panel content rendering, (b) overlay management, (c) layout structure as separate components.
 - **useKeyboardHandler.ts decomposition**: 361 LOC handling all keyboard input. Could be split into panel-specific key handlers that each panel registers via its `getKeybindings()` method.
-- **DockerState vs DockerService convergence**: CLI's DockerState and VSCode's DockerService both implement `handleContainerEvent()` with nearly identical logic. A shared `DockerStateManager` could be extracted to shared in a future phase.
+- ~~**DockerState vs DockerService convergence**~~: resolved in 0.5.0 — both delegate refresh and event handling to the shared `DockerStateStore` (see `specs/state/design.md`).

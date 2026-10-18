@@ -42,6 +42,16 @@ describe('Barrel export completeness', () => {
 
     // Events module
     expect(barrel.EventWatcher).toBeDefined();
+    expect(barrel.FollowStream).toBeDefined();
+    expect(barrel.LogResumeCursor).toBeDefined();
+
+    // State module
+    expect(barrel.DockerStateStore).toBeDefined();
+    expect(barrel.classifyEvent).toBeTypeOf('function');
+
+    // Compose helpers
+    expect(barrel.CachedComposeFileReader).toBeDefined();
+    expect(barrel.runProcess).toBeTypeOf('function');
 
     // Reconnect (from events/)
     expect(barrel.ReconnectScheduler).toBeDefined();
@@ -136,6 +146,16 @@ describe('Events module composition', () => {
 
     expect(barrel.ReconnectScheduler).toBe(events.ReconnectScheduler);
     expect(barrel.INITIAL_RECONNECT_DELAY).toBe(events.INITIAL_RECONNECT_DELAY);
+    expect(barrel.FollowStream).toBe(events.FollowStream);
+    expect(barrel.LogResumeCursor).toBe(events.LogResumeCursor);
+  });
+
+  it('state/ barrel matches main barrel', async () => {
+    const state = await import('../state/index');
+
+    expect(barrel.DockerStateStore).toBe(state.DockerStateStore);
+    expect(barrel.classifyEvent).toBe(state.classifyEvent);
+    expect(barrel.applyEffect).toBe(state.applyEffect);
   });
 
 });
