@@ -41,7 +41,37 @@ export interface DockerClientOptions {
   host?: string;
   port?: number;
   protocol?: 'http' | 'https';
+  /**
+   * Deadline for non-streaming reads (lists, inspect, ping, history…). Default 30s.
+   * Streams are exempt: a quiet log or event stream is not a hung one.
+   */
+  requestTimeoutMs?: number;
 }
+
+export interface ListResourcesOptions {
+  images?: boolean;
+  volumes?: boolean;
+  networks?: boolean;
+  signal?: AbortSignal;
+}
+
+/** One refresh pass's worth of listings; each settles independently. */
+export interface ResourceListing {
+  containers: PromiseSettledResult<ContainerInfo[]>;
+  images?: PromiseSettledResult<ImageInfo[]>;
+  volumes?: PromiseSettledResult<VolumeInfo[]>;
+  networks?: PromiseSettledResult<NetworkInfo[]>;
+}
+
+/** Raised when a Docker request outlives its deadline. */
+export class DockerTimeoutError extends Error {
+  constructor(readonly timeoutMs: number) {
+    super(`Docker did not respond within ${Math.round(timeoutMs / 1000)}s`);
+    this.name = 'DockerTimeoutError';
+  }
+}
+
+type RawContainer = Dockerode.ContainerInfo;
 
 export type PingResult = { ok: true } | { ok: false; error: unknown };
 
@@ -55,16 +85,46 @@ export interface LogStreamOptions {
 
 export class DockerClient {
   private docker: Dockerode;
+  private readonly requestTimeoutMs: number;
 
   constructor(opts?: DockerClientOptions) {
+    const { requestTimeoutMs, ...endpoint } = opts ?? {};
+    this.requestTimeoutMs = requestTimeoutMs ?? 30_000;
     // docker-modem merges DOCKER_HOST-derived defaults under these options and
     // prefers host over socketPath, so an explicit socketPath would silently
     // lose to an ambient DOCKER_HOST. Explicit undefined keys survive the
     // Object.assign merge and pin the requested socket.
-    const pinned = opts?.socketPath && !opts.host
-      ? { ...opts, host: undefined, port: undefined, protocol: undefined }
-      : opts;
+    //
+    // docker-modem's own `timeout` option is deliberately not used: it is a
+    // socket idle timeout applied to every request, so it would also kill a
+    // quiet follow stream. Reads get a per-call deadline instead (request()).
+    const pinned = endpoint.socketPath && !endpoint.host
+      ? { ...endpoint, host: undefined, port: undefined, protocol: undefined }
+      : opts ? endpoint : undefined;
     this.docker = new Dockerode(pinned);
+  }
+
+  /**
+   * Run one non-streaming call with a deadline. The call receives a signal that
+   * aborts at the deadline (or when `signal` does); the race is a backstop for
+   * calls that ignore their signal, so a hung daemon can never hang a caller.
+   */
+  private request<T>(call: (signal: AbortSignal) => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const ms = this.requestTimeoutMs;
+    const deadline = new AbortController();
+    const timer = setTimeout(() => deadline.abort(new DockerTimeoutError(ms)), ms);
+    timer.unref?.();
+    const combined = signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal;
+    let onAbort: (() => void) | undefined;
+    const aborted = new Promise<never>((_, reject) => {
+      onAbort = () => reject(combined.reason instanceof Error ? combined.reason : new Error('Request aborted'));
+      if (combined.aborted) onAbort();
+      else combined.addEventListener('abort', onAbort, { once: true });
+    });
+    return Promise.race([call(combined), aborted]).finally(() => {
+      clearTimeout(timer);
+      if (onAbort) combined.removeEventListener('abort', onAbort);
+    });
   }
 
   async ping(): Promise<boolean> {
@@ -74,40 +134,50 @@ export class DockerClient {
   /** Like ping(), but preserves the underlying error so callers can explain the failure. */
   async pingDetailed(): Promise<PingResult> {
     try {
-      await this.docker.ping();
+      // ping, df and changes accept abortSignal at runtime; their typings only declare a callback.
+      await this.request(abortSignal => (this.docker.ping as (o: object) => Promise<unknown>).call(this.docker, { abortSignal }));
       return { ok: true };
     } catch (error) {
       return { ok: false, error };
     }
   }
 
-  async listContainers(all = true): Promise<ContainerInfo[]> {
-    const containers = await this.docker.listContainers({ all });
-    return containers.map((c): ContainerInfo => {
-      let healthStatus: ContainerInfo['healthStatus'];
-      if (/\(healthy\)/.test(c.Status)) healthStatus = 'healthy';
-      else if (/\(unhealthy\)/.test(c.Status)) healthStatus = 'unhealthy';
-      else if (/\(health: starting\)/.test(c.Status)) healthStatus = 'starting';
+  async listContainers(all = true, signal?: AbortSignal): Promise<ContainerInfo[]> {
+    const containers = await this.rawContainers(all, signal);
+    return containers.map(toContainerInfo);
+  }
 
-      return {
-        id: c.Id,
-        name: (c.Names[0] || '').replace(/^\//, ''),
-        image: c.Image,
-        state: ContainerStateSchema.parse(c.State),
-        status: c.Status,
-        ports: (c.Ports || []).map((p): PortBinding => ({
-          hostIp: p.IP || '0.0.0.0',
-          hostPort: p.PublicPort || 0,
-          containerPort: p.PrivatePort,
-          protocol: PortProtocolSchema.parse(p.Type || 'tcp'),
-        })),
-        created: new Date(c.Created * 1000),
-        composeProject: c.Labels?.['com.docker.compose.project'],
-        composeService: c.Labels?.['com.docker.compose.service'],
-        labels: c.Labels,
-        healthStatus,
-      };
-    });
+  private rawContainers(all: boolean, signal?: AbortSignal): Promise<RawContainer[]> {
+    return this.request(abortSignal => this.docker.listContainers({ all, abortSignal }), signal);
+  }
+
+  /**
+   * Everything one dashboard refresh needs, with a single container listing.
+   *
+   * listVolumes() and listNetworks() each list containers again to work out
+   * mounts and attachments, so a refresh built from the individual calls made
+   * three container listings. Here one raw listing feeds all three. When it
+   * fails, volumes and networks fail with it rather than report every volume
+   * as unused.
+   */
+  async listResources(opts: ListResourcesOptions = {}): Promise<ResourceListing> {
+    const { signal } = opts;
+    const raw = this.rawContainers(true, signal);
+    const [containers, images, volumes, networks] = await Promise.allSettled([
+      raw.then(list => list.map(toContainerInfo)),
+      opts.images === false ? Promise.resolve(undefined) : this.listImages(false, signal),
+      opts.volumes === false ? Promise.resolve(undefined)
+        : Promise.all([this.request(abortSignal => this.docker.listVolumes({ abortSignal }), signal), raw])
+          .then(([res, list]) => buildVolumeInfos(res.Volumes || [], list)),
+      opts.networks === false ? Promise.resolve(undefined)
+        : Promise.all([this.request(abortSignal => this.docker.listNetworks({ abortSignal }), signal), raw])
+          .then(([nets, list]) => buildNetworkInfos(nets, list)),
+    ]);
+    const listing: ResourceListing = { containers };
+    if (opts.images !== false) listing.images = images as PromiseSettledResult<ImageInfo[]>;
+    if (opts.volumes !== false) listing.volumes = volumes as PromiseSettledResult<VolumeInfo[]>;
+    if (opts.networks !== false) listing.networks = networks as PromiseSettledResult<NetworkInfo[]>;
+    return listing;
   }
 
   async startContainer(id: string): Promise<void> {
@@ -135,11 +205,11 @@ export class DockerClient {
   }
 
   async inspectContainer(id: string): Promise<Dockerode.ContainerInspectInfo> {
-    return this.docker.getContainer(id).inspect();
+    return this.request(abortSignal => this.docker.getContainer(id).inspect({ abortSignal }));
   }
 
   async getContainerEnv(id: string): Promise<string[]> {
-    const info = await this.docker.getContainer(id).inspect();
+    const info = await this.inspectContainer(id);
     const validated = ContainerInspectEnvSchema.parse(info);
     return validated.Config.Env ?? [];
   }
@@ -188,18 +258,13 @@ export class DockerClient {
           }
           continue;
         }
-        pending = Buffer.concat([pending, chunk]);
-        let offset = 0;
-        while (offset + 8 <= pending.length) {
-          const size = pending.readUInt32BE(offset + 4);
-          if (offset + 8 + size > pending.length) break;
-          const channel = pending[offset] === 2 ? 'stderr' : 'stdout';
-          for (const line of decoders[channel].push(pending.subarray(offset + 8, offset + 8 + size))) {
-            if (line) yield parseLogLine(line, channel);
+        const { frames, rest } = demuxFrames(Buffer.concat([pending, chunk]));
+        for (const frame of frames) {
+          for (const line of decoders[frame.stream].push(frame.payload)) {
+            if (line) yield parseLogLine(line, frame.stream);
           }
-          offset += 8 + size;
         }
-        pending = Buffer.from(pending.subarray(offset));
+        pending = Buffer.from(rest);
       }
       if (!signal?.aborted) {
         for (const channel of ['stdout', 'stderr'] as const) {
@@ -296,7 +361,8 @@ export class DockerClient {
    */
   async sampleStats(id: string): Promise<ContainerStats> {
     const container = this.docker.getContainer(id);
-    const snapshot = await container.stats({ stream: false });
+    // dockerode supports abortSignal here; its stats overload declarations lag behind.
+    const snapshot: unknown = await this.request(abortSignal => container.stats({ stream: false, abortSignal } as { stream: false }));
     const validated = DockerStatsRawSchema.parse(snapshot);
     return this.parseStats(validated, 0, 0).stats;
   }
@@ -342,8 +408,8 @@ export class DockerClient {
     }
   }
 
-  async listImages(all = false): Promise<ImageInfo[]> {
-    const images = await this.docker.listImages({ all });
+  async listImages(all = false, signal?: AbortSignal): Promise<ImageInfo[]> {
+    const images = await this.request(abortSignal => this.docker.listImages({ all, abortSignal }), signal);
     return images.map((img): ImageInfo => {
       const validated = ImageItemRawSchema.parse(img);
       const repoTags = validated.RepoTags ?? ['<none>:<none>'];
@@ -368,35 +434,11 @@ export class DockerClient {
   }
 
   async listVolumes(): Promise<VolumeInfo[]> {
-    const result = await this.docker.listVolumes();
-    const volumes = result.Volumes || [];
-    // Get containers to check volume usage
-    const containers = await this.docker.listContainers({ all: true });
-    // Keep *which* containers use each volume, not just whether any do. A Set
-    // because one container can mount the same named volume at more than one
-    // path, and it should still be listed once.
-    const volumeUsers = new Map<string, Set<string>>();
-    for (const c of containers) {
-      const containerName = (c.Names?.[0] || c.Id).replace(/^\//, '');
-      for (const mount of c.Mounts || []) {
-        if (!mount.Name) continue;
-        const users = volumeUsers.get(mount.Name);
-        if (users) users.add(containerName);
-        else volumeUsers.set(mount.Name, new Set([containerName]));
-      }
-    }
-
-    return volumes.map((v): VolumeInfo => {
-      const validated = VolumeItemRawSchema.parse(v);
-      return {
-        name: validated.Name,
-        driver: validated.Driver,
-        mountpoint: validated.Mountpoint,
-        created: new Date(validated.CreatedAt || 0),
-        isInUse: volumeUsers.has(validated.Name),
-        usedBy: [...(volumeUsers.get(validated.Name) ?? [])],
-      };
-    });
+    const [result, containers] = await Promise.all([
+      this.request(abortSignal => this.docker.listVolumes({ abortSignal })),
+      this.rawContainers(true),
+    ]);
+    return buildVolumeInfos(result.Volumes || [], containers);
   }
 
   async removeVolume(name: string): Promise<void> {
@@ -410,61 +452,11 @@ export class DockerClient {
   }
 
   async listNetworks(): Promise<NetworkInfo[]> {
-    // GET /networks omits the Containers map entirely — only `network inspect`
-    // returns it — so attachments have to be derived from the container
-    // listing, which does carry NetworkSettings.Networks. Same cross-reference
-    // listVolumes already does for mounts.
     const [networks, containerList] = await Promise.all([
-      this.docker.listNetworks(),
-      this.docker.listContainers({ all: true }),
+      this.request(abortSignal => this.docker.listNetworks({ abortSignal })),
+      this.rawContainers(true),
     ]);
-    const defaultNetworks = ['bridge', 'host', 'none'];
-
-    const membersByNetwork = new Map<string, NetworkContainerRef[]>();
-    for (const c of containerList) {
-      const attached = (c as { NetworkSettings?: { Networks?: Record<string, unknown> } })
-        .NetworkSettings?.Networks ?? {};
-      for (const [netName, raw] of Object.entries(attached)) {
-        const validated = ContainerNetworkAttachmentRawSchema.parse(raw);
-        const ref: NetworkContainerRef = {
-          containerId: shortId(c.Id),
-          containerName: (c.Names?.[0] || c.Id).replace(/^\//, ''),
-          ipv4Address: validated.IPAddress || undefined,
-          ipv6Address: validated.GlobalIPv6Address || undefined,
-          macAddress: validated.MacAddress || undefined,
-        };
-        const existing = membersByNetwork.get(netName);
-        if (existing) existing.push(ref);
-        else membersByNetwork.set(netName, [ref]);
-      }
-    }
-
-    return networks.map((n): NetworkInfo => {
-      const containers = membersByNetwork.get(n.Name) ?? [];
-
-      // The daemon returns the address pools on the listing; they were being
-      // dropped, which is why "which subnet is this on / what IP does this
-      // container have" was unanswerable in either frontend.
-      const ipamRaw = (n as { IPAM?: { Driver?: string; Config?: unknown[] } }).IPAM;
-      const ipam = (ipamRaw?.Config ?? []).map((entry) => {
-        const cfg = NetworkIpamConfigRawSchema.parse(entry);
-        return { subnet: cfg.Subnet, gateway: cfg.Gateway, ipRange: cfg.IPRange };
-      });
-
-      return {
-        id: shortId(n.Id),
-        name: n.Name,
-        driver: n.Driver || '',
-        scope: n.Scope || '',
-        containers,
-        isDefault: defaultNetworks.includes(n.Name),
-        ipamDriver: ipamRaw?.Driver || undefined,
-        ipam,
-        internal: Boolean((n as { Internal?: boolean }).Internal),
-        attachable: Boolean((n as { Attachable?: boolean }).Attachable),
-        labels: (n as { Labels?: Record<string, string> }).Labels ?? {},
-      };
-    });
+    return buildNetworkInfos(networks, containerList);
   }
 
   async removeNetwork(id: string): Promise<void> {
@@ -500,7 +492,7 @@ export class DockerClient {
    * represented nowhere else in the app, and is often the largest consumer.
    */
   async diskUsage(): Promise<DiskUsage> {
-    const raw = await this.docker.df();
+    const raw: unknown = await this.request(abortSignal => (this.docker.df as (o: object) => Promise<unknown>).call(this.docker, { abortSignal }));
     const v = DiskUsageResponseSchema.parse(raw);
 
     // LayersSize is the authoritative image total; the per-image Size figures
@@ -526,7 +518,7 @@ export class DockerClient {
 
   async getContainerChanges(id: string): Promise<FilesystemChange[]> {
     const container = this.docker.getContainer(id);
-    const raw = await container.changes();
+    const raw: unknown = await this.request(abortSignal => (container.changes as (o: object) => Promise<unknown>).call(container, { abortSignal }));
     const validated = ContainerChangesResponseSchema.parse(raw);
     return (validated || []).map(c => ({
       path: c.Path,
@@ -536,7 +528,8 @@ export class DockerClient {
 
   async getImageHistory(nameOrId: string): Promise<ImageLayer[]> {
     const image = this.docker.getImage(nameOrId);
-    const raw = await image.history();
+    // history() takes no options at all (an object would be taken as the callback); the deadline race still applies.
+    const raw: unknown = await this.request(() => image.history());
     const validated = ImageHistoryResponseSchema.parse(raw);
     return validated.map(h => ({
       id: h.Id === '<missing>' ? '' : shortId(h.Id.replace('sha256:', '')),
@@ -576,6 +569,119 @@ export class DockerClient {
   }
 }
 
+/** Map one raw `GET /containers/json` row to the app's container shape. */
+export function toContainerInfo(c: RawContainer): ContainerInfo {
+  let healthStatus: ContainerInfo['healthStatus'];
+  if (/\(healthy\)/.test(c.Status)) healthStatus = 'healthy';
+  else if (/\(unhealthy\)/.test(c.Status)) healthStatus = 'unhealthy';
+  else if (/\(health: starting\)/.test(c.Status)) healthStatus = 'starting';
+
+  return {
+    id: c.Id,
+    name: (c.Names[0] || '').replace(/^\//, ''),
+    image: c.Image,
+    state: ContainerStateSchema.parse(c.State),
+    status: c.Status,
+    ports: (c.Ports || []).map((p): PortBinding => ({
+      hostIp: p.IP || '0.0.0.0',
+      hostPort: p.PublicPort || 0,
+      containerPort: p.PrivatePort,
+      protocol: PortProtocolSchema.parse(p.Type || 'tcp'),
+    })),
+    created: new Date(c.Created * 1000),
+    composeProject: c.Labels?.['com.docker.compose.project'],
+    composeService: c.Labels?.['com.docker.compose.service'],
+    labels: c.Labels,
+    healthStatus,
+  };
+}
+
+/** Volumes, annotated with which containers mount them (from a raw container listing). */
+export function buildVolumeInfos(volumes: unknown[], containers: RawContainer[]): VolumeInfo[] {
+  // Keep *which* containers use each volume, not just whether any do. A Set
+  // because one container can mount the same named volume at more than one
+  // path, and it should still be listed once.
+  const volumeUsers = new Map<string, Set<string>>();
+  for (const c of containers) {
+    const containerName = (c.Names?.[0] || c.Id).replace(/^\//, '');
+    for (const mount of c.Mounts || []) {
+      if (!mount.Name) continue;
+      const users = volumeUsers.get(mount.Name);
+      if (users) users.add(containerName);
+      else volumeUsers.set(mount.Name, new Set([containerName]));
+    }
+  }
+
+  return volumes.map((v): VolumeInfo => {
+    const validated = VolumeItemRawSchema.parse(v);
+    return {
+      name: validated.Name,
+      driver: validated.Driver,
+      mountpoint: validated.Mountpoint,
+      created: new Date(validated.CreatedAt || 0),
+      isInUse: volumeUsers.has(validated.Name),
+      usedBy: [...(volumeUsers.get(validated.Name) ?? [])],
+    };
+  });
+}
+
+/**
+ * Networks, annotated with their attached containers.
+ *
+ * GET /networks omits the Containers map entirely — only `network inspect`
+ * returns it — so attachments are derived from the container listing, which
+ * does carry NetworkSettings.Networks.
+ */
+export function buildNetworkInfos(networks: Dockerode.NetworkInspectInfo[], containerList: RawContainer[]): NetworkInfo[] {
+  const defaultNetworks = ['bridge', 'host', 'none'];
+
+  const membersByNetwork = new Map<string, NetworkContainerRef[]>();
+  for (const c of containerList) {
+    const attached = (c as { NetworkSettings?: { Networks?: Record<string, unknown> } })
+      .NetworkSettings?.Networks ?? {};
+    for (const [netName, raw] of Object.entries(attached)) {
+      const validated = ContainerNetworkAttachmentRawSchema.parse(raw);
+      const ref: NetworkContainerRef = {
+        containerId: shortId(c.Id),
+        containerName: (c.Names?.[0] || c.Id).replace(/^\//, ''),
+        ipv4Address: validated.IPAddress || undefined,
+        ipv6Address: validated.GlobalIPv6Address || undefined,
+        macAddress: validated.MacAddress || undefined,
+      };
+      const existing = membersByNetwork.get(netName);
+      if (existing) existing.push(ref);
+      else membersByNetwork.set(netName, [ref]);
+    }
+  }
+
+  return networks.map((n): NetworkInfo => {
+    const containers = membersByNetwork.get(n.Name) ?? [];
+
+    // The daemon returns the address pools on the listing; they were being
+    // dropped, which is why "which subnet is this on / what IP does this
+    // container have" was unanswerable in either frontend.
+    const ipamRaw = (n as { IPAM?: { Driver?: string; Config?: unknown[] } }).IPAM;
+    const ipam = (ipamRaw?.Config ?? []).map((entry) => {
+      const cfg = NetworkIpamConfigRawSchema.parse(entry);
+      return { subnet: cfg.Subnet, gateway: cfg.Gateway, ipRange: cfg.IPRange };
+    });
+
+    return {
+      id: shortId(n.Id),
+      name: n.Name,
+      driver: n.Driver || '',
+      scope: n.Scope || '',
+      containers,
+      isDefault: defaultNetworks.includes(n.Name),
+      ipamDriver: ipamRaw?.Driver || undefined,
+      ipam,
+      internal: Boolean((n as { Internal?: boolean }).Internal),
+      attachable: Boolean((n as { Attachable?: boolean }).Attachable),
+      labels: (n as { Labels?: Record<string, string> }).Labels ?? {},
+    };
+  });
+}
+
 function mapResourceType(type: string): DockerResourceType {
   switch (type) {
     case 'container': return 'container';
@@ -592,7 +698,8 @@ function cleanDockerInstruction(raw: string): string {
 
 export interface DemuxedFrame {
   stream: 'stdout' | 'stderr';
-  payload: string;
+  /** Raw bytes (a view into the input): a UTF-8 character may span two frames, so decode with a LineDecoder. */
+  payload: Buffer;
 }
 
 /**
@@ -609,7 +716,7 @@ export function demuxFrames(buf: Buffer): { frames: DemuxedFrame[]; rest: Buffer
     if (offset + 8 + size > buf.length) break;
     frames.push({
       stream: streamType === 2 ? 'stderr' : 'stdout',
-      payload: buf.subarray(offset + 8, offset + 8 + size).toString('utf8'),
+      payload: buf.subarray(offset + 8, offset + 8 + size),
     });
     offset += 8 + size;
   }

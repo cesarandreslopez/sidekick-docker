@@ -146,6 +146,51 @@ describe('DockerClient', () => {
     if (!result.ok) expect(result.error).toBe(err);
     expect(await failing.ping()).toBe(false);
   });
+
+  describe('listResources', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const docker = (c: DockerClient) => (c as any).docker as Record<string, ReturnType<typeof vi.fn>>;
+
+    it('derives volume usage and network members from a single container listing', async () => {
+      const d = docker(client);
+      d.listContainers.mockResolvedValueOnce([{
+        Id: 'c1', Names: ['/web'], Image: 'nginx', State: 'running', Status: 'Up', Ports: [], Created: 0, Labels: {},
+        Mounts: [{ Name: 'test-vol' }],
+        NetworkSettings: { Networks: { bridge: { IPAddress: '172.17.0.2' } } },
+      }]);
+      const r = await client.listResources();
+      expect(d.listContainers).toHaveBeenCalledTimes(1);
+      expect(r.containers.status).toBe('fulfilled');
+      expect(r.volumes).toMatchObject({ status: 'fulfilled', value: [{ name: 'test-vol', isInUse: true, usedBy: ['web'] }] });
+      expect(r.networks).toMatchObject({ status: 'fulfilled', value: [{ name: 'bridge', containers: [{ containerName: 'web', ipv4Address: '172.17.0.2' }] }] });
+      expect(r.images?.status).toBe('fulfilled');
+    });
+
+    it('fails volumes and networks with the container listing instead of reporting them unused', async () => {
+      docker(client).listContainers.mockRejectedValueOnce(new Error('daemon gone'));
+      const r = await client.listResources();
+      expect(r.containers.status).toBe('rejected');
+      expect(r.volumes?.status).toBe('rejected');
+      expect(r.networks?.status).toBe('rejected');
+      expect(r.images?.status).toBe('fulfilled');
+    });
+
+    it('skips resources that are switched off and forwards the abort signal', async () => {
+      const d = docker(client);
+      const abort = new AbortController();
+      const r = await client.listResources({ images: false, volumes: false, networks: false, signal: abort.signal });
+      expect(Object.keys(r)).toEqual(['containers']);
+      expect(d.listImages).not.toHaveBeenCalled();
+      expect(d.listContainers.mock.calls[0][0]).toMatchObject({ all: true, abortSignal: expect.any(AbortSignal) });
+    });
+  });
+
+  it('gives up on a read that outlives requestTimeoutMs', async () => {
+    const slow = new DockerClient({ requestTimeoutMs: 50 });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (slow as any).docker.listContainers = vi.fn(() => new Promise(() => {}));
+    await expect(slow.listContainers()).rejects.toThrow(/did not respond within/);
+  });
 });
 
 function frame(streamType: 1 | 2, payload: string): Buffer {
@@ -160,7 +205,7 @@ describe('demuxFrames', () => {
   it('splits multiplexed stdout and stderr frames', () => {
     const buf = Buffer.concat([frame(1, 'out line\n'), frame(2, 'err line\n')]);
     const { frames, rest } = demuxFrames(buf);
-    expect(frames).toEqual([
+    expect(frames.map(f => ({ stream: f.stream, payload: f.payload.toString() }))).toEqual([
       { stream: 'stdout', payload: 'out line\n' },
       { stream: 'stderr', payload: 'err line\n' },
     ]);
@@ -172,7 +217,7 @@ describe('demuxFrames', () => {
     const partial = frame(2, 'partial payload').subarray(0, 10);
     const { frames, rest } = demuxFrames(Buffer.concat([full, partial]));
     expect(frames).toHaveLength(1);
-    expect(frames[0].payload).toBe('complete\n');
+    expect(frames[0].payload.toString()).toBe('complete\n');
     expect(rest.length).toBe(10);
   });
 });

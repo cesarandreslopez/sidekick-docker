@@ -2,8 +2,8 @@
 export * from './types';
 
 // Docker client
-export { DockerClient } from './docker/DockerClient';
-export type { DockerClientOptions, LogStreamOptions, PingResult } from './docker/DockerClient';
+export { DockerClient, DockerTimeoutError } from './docker/DockerClient';
+export type { DockerClientOptions, LogStreamOptions, PingResult, ListResourcesOptions, ResourceListing } from './docker/DockerClient';
 export { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv } from './docker/endpoint';
 
 // Compose
