@@ -21,11 +21,11 @@ the names of the containers mounting it.
 
 ## Actions
 
-Press `x` to open the context menu:
+Press `x` to open the context menu, or press `d` (Remove) / `P` (Prune) directly:
 
 | Action | Description |
 |--------|-------------|
 | Remove | Remove the selected volume (confirmation required) |
-| Prune | Remove all unused volumes (confirmation required) |
+| Prune | Remove all unused volumes (the confirmation names how many) |
 
 Prune reports the total space reclaimed.

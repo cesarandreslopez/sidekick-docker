@@ -41,9 +41,9 @@ Switch between the five panels using number keys:
 
 ## Take Actions
 
-Press **`x`** to open the context menu for the selected item. Available actions depend on the resource type:
+Press **`x`** to open the context menu for the selected item, or press an action's key directly (the menu shows each key). Available actions depend on the resource type and its current state:
 
-- **Containers**: Start, Stop, Restart, Remove, Exec
+- **Containers**: Start, Stop, Restart, Pause/Unpause, Remove, Exec, Open in Browser (`b`, for a published port), Copy Logs, Prune
 - **Compose projects**: Up, Down, Restart, Stop
 - **Images/Volumes/Networks**: Remove, Prune
 
@@ -55,10 +55,10 @@ Press **`/`** to open the filter bar. Type to narrow the list by name. Press **`
 
 ## Get Help
 
-Press **`?`** at any time to see the full keybinding reference overlay.
+Press **`?`** at any time to see the full keybinding reference overlay (scroll it with `j`/`k` if it does not fit). Press **`Ctrl+R`** to refresh everything immediately.
 
 ## Next Steps
 
 - [Dashboard Overview](../features/dashboard.md) — panel system in detail
 - [Keybindings](../features/keybindings.md) — complete keyboard reference
-- [CLI Commands](../features/cli-commands.md) — non-interactive commands (`ps`, `logs`)
+- [CLI Commands](../features/cli-commands.md) — non-interactive commands (`ps`, `logs`, `images`, `volumes`, `networks`, `stats`, `df`, `inspect`)

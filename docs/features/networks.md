@@ -25,12 +25,12 @@ does not include them.
 
 ## Actions
 
-Press `x` to open the context menu:
+Press `x` to open the context menu, or press `d` (Remove) / `P` (Prune) directly:
 
 | Action | Description |
 |--------|-------------|
 | Remove | Remove the selected network (confirmation required) |
-| Prune | Remove all unused networks (confirmation required) |
+| Prune | Remove all unused networks (the confirmation names how many) |
 
 !!! warning
     Built-in networks (`bridge`, `host`, `none`) cannot be removed.

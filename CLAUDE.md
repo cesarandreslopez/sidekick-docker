@@ -10,7 +10,8 @@ Docker management TUI/CLI + VSCode extension.
 
 Monorepo with 3 packages (NOT npm workspaces — each package manages its own deps):
 
-- `sidekick-docker-shared/` — Docker API layer, types, compose detection. Built with `tsc` to `dist/` (CommonJS + declarations).
+- `sidekick-docker-shared/` — Docker API layer, types, compose detection, the shared state store and stream
+  policy, UI-policy formatters. Built with `tsc` to `dist/` (CommonJS + declarations).
 - `sidekick-docker-cli/` — TUI dashboard (Ink 7 + React 19). Bundled with esbuild to single ESM binary `dist/sidekick-docker.mjs`.
 - `sidekick-docker-vscode/` — VSCode extension. esbuild produces dual output: `out/extension.js` (CJS, Node) + `out/webview/dashboard.js` (IIFE, browser).
 
@@ -48,17 +49,16 @@ node ./sidekick-docker-cli/dist/sidekick-docker.mjs   # run the built TUI
 npm run clean                                         # rm -rf dist/ + out/ across packages
 
 # Version management
-bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json files (root + 3 packages)
+bash scripts/bump-version.sh 0.2.0   # bumps all 4 package.json + 4 package-lock.json files
 ```
 
-Two things that bite:
+One thing that bites: **no `launch.json` is committed**, so F5 does not "just work". Open
+`sidekick-docker-vscode/` as the workspace root (the monorepo root has no extension manifest) and pick
+"VS Code Extension Development" from the debugger picker on first run.
 
-- **The built CLI is not executable.** esbuild writes `dist/sidekick-docker.mjs` with mode 0644 and
-  never chmods it, so the `#!/usr/bin/env node` banner is inert — invoking the path directly exits 126.
-  Run it as `node dist/sidekick-docker.mjs`, which is what CI does.
-- **No `launch.json` is committed**, so F5 does not "just work". Open `sidekick-docker-vscode/` as the
-  workspace root (the monorepo root has no extension manifest) and pick "VS Code Extension Development"
-  from the debugger picker on first run.
+The built CLI *is* executable: `esbuild.cjs` chmods `dist/sidekick-docker.mjs` to 0755 after the build, so
+the `#!/usr/bin/env node` banner works. Both `esbuild.cjs` scripts print non-esbuild build errors before
+exiting 1 (esbuild prints its own).
 
 `sidekick-docker-vscode` is the only package with a `vitest.config.ts` — it aliases `vscode` →
 `src/test/vscode.ts`. shared and cli run on vitest defaults (no config file, no setup files).
@@ -77,29 +77,30 @@ cd sidekick-docker-vscode && npx tsc --noEmit
 ```
 
 **The `tsc --noEmit` runs are not optional for cli and vscode.** Those builds are esbuild, which strips
-types without checking them, so `tsc --noEmit` is the *only* type gate for those two packages — and CI
-never runs it. `sidekick-docker-shared` is the exception: its `build` script *is* `tsc`, so type errors
-there fail the build, and CI does run that build (in both the `cli-tests` and `build-extension` jobs).
-There is no root `tsconfig.json`, so running `tsc` from the repo root checks nothing.
+types without checking them, so `tsc --noEmit` is the *only* type gate for those two packages (CI's
+`quality` job runs it; run it locally too). `sidekick-docker-shared`'s `build` script *is* `tsc`, so type
+errors there also fail the build. There is no root `tsconfig.json`, so running `tsc` from the repo root
+checks nothing.
 
 ## CI & Release
 
-- **`ci.yml`** — push/PR to `main`, **path-filtered to `sidekick-docker-*/**`**. Node 22. Runs tests and
-  builds only: **no lint, no `check-imports.mjs`, no `tsc --noEmit`**, and the `build-extension` job
-  packages the `.vsix` but never runs the vscode tests. Edits confined to root `package.json`,
-  `eslint.config.mjs`, `scripts/`, or the workflows themselves trigger **no CI at all** — verify those locally.
-- **`release.yml`** — on tag `v*`. Asserts the tag commit is an ancestor of `origin/main` and that all
-  three package versions equal the tag, then publishes to **Open VSX only (no VS Code Marketplace)**,
-  `npm publish`es `sidekick-docker`, and creates a GitHub Release from the matching CHANGELOG section.
+- **`ci.yml`** — push/PR to `main`, path-filtered to `sidekick-docker-*/**`, `scripts/**`, root
+  `package.json`/`package-lock.json`, `eslint.config.mjs` and `ci.yml` itself (edits to *other* workflows
+  trigger nothing). Node 22. Jobs: `quality` (lint, `check-imports.mjs`, `tsc --noEmit` ×3),
+  `shared-tests`, `cli-tests` (tests, build, `node dist/sidekick-docker.mjs --version`), and
+  `build-extension` (vscode tests, build, `scripts/test-packages.mjs` SSH checks, `.vsix` package).
+- **`release.yml`** — on tag `v*`. `validate` asserts the tag commit is an ancestor of `origin/main` and
+  that root + three package versions equal the tag; `checks` re-runs every gate (lint, imports, tsc ×3,
+  all three test suites). Both publish jobs `need` `validate` + `checks`: **Open VSX only (no VS Code
+  Marketplace)**, `npm publish` of `sidekick-docker`, then a GitHub Release from the matching CHANGELOG section.
 - **`docs.yml`** — `docs/**` or `mkdocs.yml` → `pip install zensical && zensical build` → GitHub Pages.
   No npm script and no pinned Python requirements file; to build docs locally, install zensical yourself.
-- **Release flow**: `bash scripts/bump-version.sh X.Y.Z` (rewrites 4 package.json files; **does not commit
-  or tag**) → update CHANGELOG.md → commit → `git tag vX.Y.Z` → push tags.
-- **`bump-version.sh` does not touch the lockfiles.** `npm ci` tolerates the resulting root-version skew,
-  so nothing fails — but the three `package-lock.json` files keep the *previous* version in `.version` and
-  `.packages[""].version` (plus `.packages["../sidekick-docker-shared"].version` in cli and vscode) unless
-  you update them by hand. Do not `sed` the lockfiles: `@alcalzone/ansi-tokenize` is genuinely `0.3.0`, so
-  a blind version replace corrupts a real dependency pin.
+- **Release flow**: `bash scripts/bump-version.sh X.Y.Z` (rewrites 4 package.json + 4 lockfiles; **does not
+  commit or tag**) → update the changelogs → commit → `git tag vX.Y.Z` → push tags.
+- **`bump-version.sh` updates the lockfiles as JSON** — `.version`, `.packages[""].version`, and
+  `.packages["../sidekick-docker-shared"].version` where present (cli, vscode) — in the root and all three
+  packages. Use it rather than editing versions by hand, and never `sed` the lockfiles:
+  `@alcalzone/ansi-tokenize` is genuinely `0.3.0`, so a blind version replace corrupts a real dependency pin.
 - **Node**: CI and release both pin 22. Only the CLI declares `engines.node` (`>=22.12.0`, raised from
   `>=20` in 0.4.0 for Ink 7 / Commander 15). There is no `.nvmrc` or `.npmrc`.
 
@@ -111,7 +112,9 @@ There is no root `tsconfig.json`, so running `tsc` from the repo root checks not
 - **dockerode** for Docker API, **zod** for validating daemon responses and webview messages
 - **Commander.js** for CLI argument parsing
 - **vitest** for testing
-- **node-pty** for interactive exec (native module, excluded from bundle)
+- **node-pty** for embedded interactive exec (native module, externalized from the bundle and only a
+  *devDependency* — the published npm package does not ship it, so npm installs use the `docker exec -it`
+  fallback)
 
 ## Conventions
 
@@ -122,18 +125,28 @@ There is no root `tsconfig.json`, so running `tsc` from the repo root checks not
 - Docker API interactions go through `DockerClient` facade (never use dockerode directly in CLI/VSCode)
 - Streams (logs, stats, events) use `AsyncIterable` with async generators
 - Compose operations use `docker compose` CLI (not Docker API)
-- UI state uses `useReducer` in Dashboard component; domain state in `DockerState` class
+- UI state uses `useReducer` in Dashboard component; domain state lives in the shared `DockerStateStore`
+  (`shared/src/state/`), which the CLI's `DockerState` and VS Code's `DockerService` /
+  `ContainerWatcherService` wrap — don't re-implement refresh or event handling in a consumer
+- **Action gating and wording are shared UI policy** in `shared/src/formatters.ts` (browser-safe, also
+  imported by the webview via `sidekick-docker-shared/formatters`): `canStart`/`canStop`,
+  `pruneCandidateCount`/`pruneConfirmMessage`, `removeContainerConfirmMessage`, `sortDirectionLabel`,
+  `publishedPortUrls`/`browserHostForEndpoint`, `actionText`, plus the Config-tab helpers
+  (`summarizeHealth`, `summarizeRestartPolicy`, `formatMount`). Change behaviour there so both surfaces move together
 - VI keybindings: j/k navigation, g/G top/bottom, h/l focus, 1-5 panel switch, [/] detail tabs,
-  PgUp/PgDn + Ctrl+D/U paging. TUI global bindings live in `ink/keyRegistry.ts` — the single
+  PgUp/PgDn + Ctrl+D/U paging, Ctrl+R refresh. TUI global bindings live in `ink/keyRegistry.ts` — the single
   source of truth driving dispatch, the help overlay, and status-bar hints; add new global keys
   there, not in `useKeyboardHandler`
 - **`keyRegistry` matching is first-hit.** `useKeyboardHandler` runs the first binding whose `match()`
   returns true, so order matters only between bindings whose predicates overlap — today none do
   (`keyRegistry.test.ts` asserts every key resolves to exactly one binding). When adding a global key,
   check that no earlier binding already matches it, and note that a global whose `isAvailable` is false
-  swallows the key with a "Not available here" toast rather than falling through to a panel action
+  swallows the key with a "Not available here" toast rather than falling through to a panel action.
+  Panel action shortcuts (`getActions()` keys) fire directly, without the `x` menu, but never on a
+  Ctrl/Meta chord (`findPanelAction`)
 - Confirmation modal required for all destructive actions (remove, prune); confirm messages
-  name their target (`confirmMessage` accepts a function of the item); Enter cancels (safe default)
+  name their target (`confirmMessage` accepts a function of the item) — prunes name a count, removing a
+  running container says it is force-stopped first; Enter cancels (safe default)
 - **Panel action handlers returning a string set the success-toast text** (e.g. "Pruned — 1.2 GB
   reclaimed"); returning nothing falls back to the action label. `confirm: true` stores the wrapped
   closure in reducer state instead of executing it — clearing that closure is what closes the modal
@@ -141,26 +154,39 @@ There is no root `tsconfig.json`, so running `tsc` from the repo root checks not
   the overlay components render at *and* the hit functions `useMouseHandler` uses. Change an overlay's
   JSX rows and you must update the matching hit function, or clicks silently miss
 - CLI colors are gated centrally in `sidekick-docker-cli/src/formatters.ts`
-  (NO_COLOR/FORCE_COLOR/isTTY + `--no-color`); never emit raw ANSI directly.
-  **Note `--no-color` only reaches `formatters.ts`** — Ink's own `<Text color>` props are hardcoded, so
-  the TUI chrome stays colored; Ink/chalk honor only the `NO_COLOR`/`FORCE_COLOR` env vars
+  (NO_COLOR/FORCE_COLOR/isTTY + `--no-color`); never emit raw ANSI directly. TUI colour tokens live in
+  `sidekick-docker-cli/src/theme.ts` (`ACCENT` `#5B8BD9` for text/borders/selection, `ACCENT_FILL` navy
+  behind white text). ESLint bans hex colour literals and raw ANSI escapes under
+  `sidekick-docker-cli/src/dashboard/**` (tests excepted) — use a theme token or the `ansi.*` helpers.
+  **Ink's chrome is coloured by chalk, which honours `FORCE_COLOR` and the `--no-color` argv flag but not
+  `NO_COLOR`** — so the esbuild banner maps `NO_COLOR` → `FORCE_COLOR=0` before any module loads. Both
+  `NO_COLOR` and `--no-color` therefore make the whole TUI monochrome (only in the bundle, not under vitest)
 - **There is no `exec` method on `DockerClient`** — exec is implemented per consumer. CLI uses node-pty
   via `dashboard/ExecManager.ts` (dynamic `import('node-pty')`; returns `false` when the native module is
-  missing, falling back to unmounting Ink and `spawnSync`-ing `docker exec -it`). VSCode creates a
-  `vscode.Terminal` with `shellPath: 'docker'`
+  missing — the normal case for npm installs — falling back to suspending Ink and spawning
+  `docker exec -it`). The shell is `--shell` → `SIDEKICK_DOCKER_SHELL` → `/bin/sh`
+  (`dashboard/execShell.ts`, which also explains a missing shell). Ctrl+] detaches the embedded session
+  (Ink delivers stdin as utf8 strings, so match `'\x1d'`, not a byte). VSCode creates a `vscode.Terminal`
+  with `shellPath: 'docker'` and `exec.defaultShell`
 - **Endpoint resolution lives in `shared/src/docker/endpoint.ts`** — `parseDockerEndpoint`,
   `describeDockerEndpoint`, and `dockerCliEnv` (which exists because spawned `docker compose` subprocesses
   don't inherit dockerode's endpoint). There is **no `docker context` detection** anywhere in the repo
 - **Zod guards both trust boundaries**: `shared/src/docker/schemas.ts` validates raw daemon responses;
   `vscode/src/types/messageSchemas.ts` (`WebviewMessageSchema`) `safeParse`s every inbound webview message.
-  That schema is **hand-synced** with the `WebviewMessage` union — update both together
+  That schema is hand-written alongside the `WebviewMessage` union — update both together; the
+  compile-time `WebviewMessageSchemaInSync` assertion makes any drift fail `tsc --noEmit`
 - VSCode settings are read only through `sidekick-docker-vscode/src/settings.ts`;
   action feedback goes through `providers/actionRegistry.ts` (`runDockerAction`)
-- **VSCode has two independent surfaces** — the TreeView (`ContainerWatcherService`, its own `DockerClient`)
-  and the webview dashboard (`DockerDashboardProvider`, its own `DockerService`). They poll separately
+- **VSCode has two independent surfaces** — the TreeView (`ContainerWatcherService`, its own `DockerClient`
+  and a containers-only `DockerStateStore`) and the webview dashboard (`DockerDashboardProvider`, its own
+  `DockerService` with a full store). They poll separately; the dashboard stops polling while hidden
+- **`socketPath` and `exec.defaultShell` are `restrictedConfigurations`** in the extension manifest: VS Code
+  ignores workspace values for them until the folder is trusted, and `onDidGrantWorkspaceTrust` rebuilds
+  the watcher and dashboard service. Compose is refused in untrusted workspaces (tree menu items are hidden
+  via `isWorkspaceTrusted`)
 - **Webview CSP is `default-src 'none'` with a nonce-only `script-src`.** HTML is built by string
   templating, so every interpolation must go through `escapeHtml`/`escapeAttr` in `webview/formatters.ts`
-- Tests are co-located as `.test.ts` files
+- Tests are co-located as `.test.ts` files (one `.test.tsx`)
 
 ## Key Entry Points
 
@@ -170,8 +196,12 @@ There is no root `tsconfig.json`, so running `tsc` from the repo root checks not
 | Dashboard action | `sidekick-docker-cli/src/commands/dashboard.ts` (wires everything) |
 | Main TUI component | `sidekick-docker-cli/src/dashboard/ink/Dashboard.tsx` |
 | Panel interface | `sidekick-docker-cli/src/dashboard/panels/types.ts` (`SidePanel`) |
-| Domain state | `sidekick-docker-cli/src/dashboard/DockerState.ts` |
+| Domain state (CLI wrapper) | `sidekick-docker-cli/src/dashboard/DockerState.ts` |
+| Shared state store + event policy | `sidekick-docker-shared/src/state/DockerStateStore.ts` + `eventPolicy.ts` |
+| Follow/reconnect policy | `sidekick-docker-shared/src/events/FollowStream.ts` (+ `LogResumeCursor.ts`) |
 | Stream manager base | `sidekick-docker-cli/src/dashboard/BaseStreamManager.ts` |
+| TUI colour tokens | `sidekick-docker-cli/src/theme.ts` |
+| Shared UI policy (gating, confirms, sort labels) | `sidekick-docker-shared/src/formatters.ts` |
 | Docker facade | `sidekick-docker-shared/src/docker/DockerClient.ts` |
 | Endpoint / DOCKER_HOST parsing | `sidekick-docker-shared/src/docker/endpoint.ts` |
 | Shared exports | `sidekick-docker-shared/src/index.ts` |
@@ -188,14 +218,16 @@ There is no root `tsconfig.json`, so running `tsc` from the repo root checks not
 ## Key Patterns
 
 - **Panel system**: Implement `SidePanel` interface for each resource type. Panels define `getItems()`, `detailTabs[]` with render functions, and `getActions()` (per-item shortcuts, confirm metadata, handlers that may return a success-toast string). Panel-contextual *global* keys (filter, sort, compare) belong in `ink/keyRegistry.ts`. The VSCode webview mirrors this with its own `PanelDefinition` in `webview/panels/types.ts` — the two are parallel, not shared.
-- **State flow**: Docker events → `EventWatcher` → `DockerState.processEvent()` → `scheduleRender()`. `processEvent` optimistically patches local state (start/unpause → `running`, stop/die → `exited`, pause → `paused`, destroy → dropped via `filter` reassignment plus cache eviction), then schedules a debounced (500ms) refresh for `create`, non-container resource events, and named misc events (rename/update/health_status) — and *also* after start/unpause, to re-sync accurate status. Fallback: 30s periodic full refresh.
-- **Stream managers**: Three classes (`LogStreamManager`, `ComposeLogStreamManager`, `StatsStreamManager`) extend `BaseStreamManager`, which owns the select/abort/generation/reconnect lifecycle. Subclasses implement eight abstract members — `streamLabel`, `emptyId`, `isSameId`, `isValidId`, `idLabel`, `createStream`, `processItem`, `onClear` — plus optional `onBeforeStream`/`onStop` hooks. `commands/dashboard.ts` instantiates five managers from those three classes: primary + secondary (compare-mode) container logs, primary + secondary compose logs, and stats.
+- **State flow**: Docker events → `EventWatcher` (one loop across stop/start) → `DockerState.processEvent()` → shared `DockerStateStore.processEvent()` → store `onChange` (only when something actually changed) → stream managers' `targetStateChanged()` + `scheduleRender()`. The store is passive (callers own the event stream and the 30s fallback interval) and its snapshot arrays are replaced, never mutated. Event policy is the pure `classifyEvent`/`applyEffect` in `state/eventPolicy.ts`: healthcheck `exec_*`, attach/resize/kill/oom, volume mount/unmount and daemon events are ignored; `health_status` patches in place; start/unpause/restart patch then re-sync; stop/die/pause patch; destroy removes; create/rename/update/unknown verbs and image/volume/network changes request a refresh debounced 500ms (same in both surfaces). A refresh pass always commits — events arriving mid-fetch are journalled and replayed over the fetched lists — does **one** container listing (`DockerClient.listResources()`), reads compose config through `CachedComposeFileReader` (spawns `docker compose config` only when the compose files change), and is abandoned after 20s, keeping previous data and setting `resourceErrors`. Ctrl+R calls `refresh({ reloadCompose: true })`. See `specs/state/design.md`.
+- **Stream managers**: Three classes (`LogStreamManager`, `ComposeLogStreamManager`, `StatsStreamManager`) extend `BaseStreamManager`, which owns selection and delegates the reconnect policy to the shared `FollowStream` (one instance per selection). Subclasses implement eight abstract members — `streamLabel`, `emptyId`, `isSameId`, `isValidId`, `idLabel`, `createStream(id, signal, attempt: { reconnect })`, `processItem`, `onClear` — plus optional `acceptItem` (drop replayed items) and `onBeforeStream`/`onStop` hooks. Constructors take `{ isTargetRunning }` so the stream knows whether its target is stopped; `targetStateChanged()` resumes a finished stream and `getStreamState()` exposes the `FollowStreamState`. `commands/dashboard.ts` instantiates five managers from those three classes: primary + secondary (compare-mode) container logs, primary + secondary compose logs, and stats. VS Code uses the same `FollowStream` via `services/LogSlot.ts` (and directly for stats).
+- **FollowStream policy** (`shared/src/events/FollowStream.ts`): when a source ends and its target is known to be stopped → `ended`/`empty`, no reconnect (stopped containers used to be re-requested every 2s, duplicating the tail); otherwise reconnect with exponential backoff (2s → 30s, 10 attempts, then `error`); backoff resets only after an attempt delivers an accepted item; `resume()` restarts a finished stream once the target runs. Log reconnects ask for `since` the `LogResumeCursor` position and drop same-millisecond replays.
+- **Process & request deadlines**: compose subprocesses go through `runProcess` (`shared/src/compose/process.ts`; StringDecoder per stream, SIGTERM→SIGKILL, resolves with exit 124 on timeout): compose queries 30s, actions 15 min, `compose config` 10s. `DockerClient` non-streaming reads honour `requestTimeoutMs` (default 30s; streams exempt) and throw `DockerTimeoutError`.
 - **Stats streaming**: Selection-driven (expensive). `StatsStreamManager.select(id)` starts stream → pushes to `StatsCollector` ring buffer (60 samples) → sparklines. Only streams when the Stats tab is active or the sort field needs live data.
 - **Log streaming**: Selection-driven. `LogStreamManager.select(id)` starts stream → ring buffer (1000 lines).
 - **Render throttling**: `scheduleRender()` batches at 200ms and **drops the frame** when `process.stdout.writableLength > writableHighWaterMark` (backpressure guard); stream callbacks add a further 100ms flush debounce. `SIDEKICK_DEBUG_STREAMS=1` dumps heap/stdout diagnostics every 60s.
 - **Compose detection**: Primary from container labels (`com.docker.compose.*`), secondary from `docker compose config`. Merged to show running + planned services.
-- **esbuild plugins** (CLI): Stubs `ssh2`, `cpu-features`, `react-devtools-core`. Externalizes `node-pty`. Injects `__CLI_VERSION__`.
-- **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts` (11 extension→webview, 12 webview→extension variants).
+- **esbuild** (CLI): bundles `ssh2` with its optional native accelerators (`cpu-features`, `sshcrypto.node`) stubbed to throw so ssh2 uses its JS fallback (`scripts/native-fallbacks.cjs`, shared with vscode); stubs `react-devtools-core`; externalizes `node-pty`; injects `__CLI_VERSION__`; the banner adds the shebang and the `NO_COLOR` → `FORCE_COLOR=0` mapping; the output is chmodded 0755.
+- **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts` (13 `ExtensionMessage` extension→webview, 14 `WebviewMessage` webview→extension variants). Lazy detail loads use `DetailKind = 'inspect' | 'changes' | 'layers'`; `inspect` is one `DockerClient.getContainerDetails()` call (env, restart policy + count, mounts, exit code/OOM/error, health log) delivered as `updateInspect` (formerly `updateEnv`).
 
 ## Module Architecture
 
@@ -212,13 +244,15 @@ The import DAG is enforced across **all three packages** by `scripts/check-impor
 | log | `shared/src/log/` | (leaf) | `sidekick-docker-shared/log` |
 | events | `shared/src/events/` | docker, types | — |
 | stats | `shared/src/stats/` | types | — |
-| core | `shared/src/` (root) | **all six sub-modules** | `sidekick-docker-shared/formatters` |
+| state | `shared/src/state/` | docker, compose, types | — |
+| core | `shared/src/` (root) | **all seven sub-modules** | `sidekick-docker-shared/formatters` |
 | integration | `shared/src/integration/` | (test-only, no barrel) | — |
 
 `core` is the root-level files (`index.ts`, `formatters.ts`, `errors.ts`, `branding.ts`, `phrases.ts`) and
 may import everything — `formatters.ts` genuinely depends on `docker/utils`. `integration/` holds
 `module-boundaries.test.ts`, which asserts barrel-export completeness and sub-path reference identity;
-`check-imports.mjs` classifies it as `shared/core` by fall-through.
+`check-imports.mjs` classifies it as `shared/core` by fall-through. `state/` needs compose (detector +
+config reader), which is why it is its own module rather than part of `events/`.
 
 ### Enforced Dependency DAG
 
@@ -229,9 +263,10 @@ shared/types  → ()                          [leaf]
 shared/log    → ()                          [leaf]
 shared/docker, shared/compose, shared/stats → shared/types
 shared/events → shared/docker, shared/types
-shared/core   → all six sub-modules
+shared/state  → shared/docker, shared/compose, shared/types
+shared/core   → all seven sub-modules
 
-cli/utils, cli/formatters → shared
+cli/utils, cli/formatters → shared         (cli/src/theme.ts is classified as cli/formatters)
 cli/state     → cli/utils, shared
 cli/panels    → cli/state, cli/formatters, shared
 cli/ink       → cli/panels, cli/state, cli/formatters, shared
@@ -257,11 +292,15 @@ Checker semantics worth knowing before trusting a green result:
 
 ## Testing Reality
 
-Don't go looking for test infrastructure that doesn't exist. 40 co-located test files (shared 17, cli 15,
-vscode 8), **zero `.test.tsx`**, **no `ink-testing-library`**, no `__mocks__`, no `setupFiles`, and **no
-coverage tooling at all**. No React component is rendered in any test. The one genuinely shared test double
-is `sidekick-docker-vscode/src/test/vscode.ts` (62 LOC), aliased over the `vscode` module for that
-package's tests and seeded/inspected via its exported `__mock`; shared and cli have no shared helpers.
+Don't go looking for test infrastructure that doesn't exist. 64 co-located test files (shared 27, cli 26,
+vscode 11), **no `ink-testing-library`**, no `__mocks__`, no `setupFiles`, and **no coverage tooling at all**.
+Two tests render real UI, both without a harness library: `cli/src/dashboard/ink/execFallback.test.tsx` (the
+only `.test.tsx`) mounts `Dashboard` with Ink's own `render()` over `PassThrough` streams, mocking
+`ExecManager`/mouse/terminal-size; `vscode/src/providers/dashboard.dom.test.ts` esbuild-bundles the webview
+and runs it in `jsdom`. The one genuinely shared test double is `sidekick-docker-vscode/src/test/vscode.ts`
+(90 LOC: `workspace`, `window` incl. `showQuickPick`/`withProgress`, `Uri.parse`, `env.asExternalUri`/
+`openExternal`), aliased over the `vscode` module for that package's tests and seeded/inspected via its
+exported `__mock`; shared and cli have no shared helpers.
 
 Testability comes from deliberately extracting pure logic out of components — `reducer`/`initialState` are
 exported from `Dashboard.tsx` specifically so they can be tested headlessly, as are `GLOBAL_BINDINGS` /
@@ -270,30 +309,32 @@ the hit functions in `overlayHitTest.ts` (`contextMenuHit`/`confirmHit`/`sortHit
 `executeAction`.
 
 Mocking follows three patterns, chosen per file: local `{ ... } as unknown as DockerClient` literals in the
-stream/state tests (`EventWatcher`, `DockerState`, `LogStreamManager`, `StatsStreamManager`); `vi.mock()`
-module factories, usually with `vi.hoisted()`, in `DockerClient.test.ts`, `connect.test.ts`,
-`ContainerWatcherService.test.ts`, and `DockerDashboardProvider.test.ts`; and the aliased `vscode` module
-mock for the vscode package.
+stream/state tests (`EventWatcher`, `DockerStateStore`, `DockerState`, `LogStreamManager`,
+`StatsStreamManager`); `vi.mock()` module factories, usually with `vi.hoisted()`, in `DockerClient.test.ts`,
+`ComposeStreaming.test.ts`, `connect.test.ts`, `execFallback.test.ts(x)`, `ContainerWatcherService.test.ts`,
+`DockerService.test.ts`, and `DockerDashboardProvider.test.ts`; and the aliased `vscode` module mock for the
+vscode package. Pure policy is tested directly: `eventPolicy`, `FollowStream`, `LogResumeCursor`,
+`runProcess`, `ComposeConfigCache`, and the shared UI-policy formatters.
 
-**Follow that pattern**: extract logic out of the component rather than adding a render harness.
-`Dashboard.tsx`'s JSX, every `.tsx` component, `useMouseHandler`, `useKeyboardHandler`, `ExecManager`,
-`commands/dashboard.ts`, and all panel files are currently untested — changes there need manual verification.
+**Follow that pattern**: extract logic out of the component rather than adding a render harness (recent
+examples: `helpLayout.ts`, `toastLayout.ts`, `execOutput.ts`, `execShell.ts`, `buildStatusSegments` in
+`StatusBar.tsx`, `copyLogsAction` in `panels/types.ts`). Apart from the one exec-fallback render test,
+`Dashboard.tsx`'s JSX, the `.tsx` components, `useMouseHandler`, `useKeyboardHandler`, `ExecManager`,
+`commands/dashboard.ts`, and the panel classes are untested — changes there need manual verification.
 
 ## Known Technical Debt
 
-- `webview/dashboard.ts` is still large (1097 LOC, ~390 of it renderers; keyboard/overlays/HTML
-  extracted to their own modules). `providers/dashboardHtml.ts` is 1132 LOC, nearly all one inline
-  `<style>` block. `services/DockerService.ts` is 1069 LOC. `Dashboard.tsx` ~698 LOC
-- `noUncheckedIndexedAccess` not yet enabled — 186 errors under each package's own tsconfig (shared 11,
-  cli 73, vscode 102; some of vscode's are in `.test.ts`, which only its tsconfig type-checks). Also absent
+- `webview/dashboard.ts` is still large (1222 LOC; keyboard/overlays/HTML extracted to their own modules).
+  `providers/dashboardHtml.ts` is 1185 LOC, nearly all one inline `<style>` block.
+  `services/DockerService.ts` is down to 837 LOC now that refresh/event policy lives in `DockerStateStore`
+  and log streams in `LogSlot`. `Dashboard.tsx` ~756 LOC
+- `noUncheckedIndexedAccess` not yet enabled — 213 errors under each package's own tsconfig (shared 20,
+  cli 73, vscode 120; some of vscode's are in `.test.ts`, which only its tsconfig type-checks). Also absent
   are `noUnusedLocals`, `noUnusedParameters`, and `exactOptionalPropertyTypes`
-- CI runs none of the quality gates (no lint, no import check, no typecheck) and skips vscode tests —
-  local verification is the real gate
 - The vscode webview bundle is esbuild `format: 'iife'` but loaded via `<script type="module">` — works,
   but the two disagree
 - `esbuild.cjs --production` (minify + drop sourcemaps) exists **only** in `sidekick-docker-vscode`. As of
   0.4.0 it is actually wired up — `vscode:prepublish` → `build:production` → `esbuild.cjs --production` —
   so `vsce package` now ships a minified bundle. The CLI's `esbuild.cjs` still has no argv parsing at all
-  (`minify: false` is hardcoded), so `--production` remains a silent no-op there. Both scripts end in
-  `.catch(() => process.exit(1))`, swallowing the build error message
+  (`minify: false` is hardcoded), so `--production` remains a silent no-op there
 - See `specs/_archive/` for refactoring history and `specs/*/design.md` for module design docs

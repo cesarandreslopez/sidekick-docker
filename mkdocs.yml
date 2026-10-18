@@ -89,7 +89,8 @@ nav:
   - API Reference:
     - DockerClient: api/docker-client.md
     - ComposeDetector: api/compose-detector.md
-    - EventWatcher: api/event-watcher.md
+    - EventWatcher & FollowStream: api/event-watcher.md
+    - DockerStateStore: api/state-store.md
     - StatsCollector: api/stats-collector.md
   - Contributing: contributing.md
   - Changelog: changelog.md

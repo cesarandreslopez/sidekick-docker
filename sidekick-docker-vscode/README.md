@@ -53,10 +53,18 @@ capabilities as the terminal TUI, and survives window reloads.
 | `Sidekick Docker: Open Dashboard to the Side` | Open in a split editor column |
 | `Sidekick Docker: Refresh Containers` | Refresh the tree view (`Ctrl+Alt+R` / `Cmd+Alt+R` when focused) |
 | `Sidekick Docker: Start/Stop/Restart Container...` | Quick-pick a container to act on |
+| `Sidekick Docker: Exec into Container...` | Quick-pick a running container and open a terminal in it (`exec.defaultShell`) |
+| `Sidekick Docker: Show Container Logs...` | Quick-pick a container and open a terminal running `docker logs -f --tail 200` |
+| `Open in Dashboard` *(tree only)* | Open the dashboard on a container |
+| `Compose Up` / `Compose Restart` / `Compose Down` *(tree only)* | Run on a Compose project group; Restart and Down for running projects, Down asks first; hidden in untrusted workspaces |
 
 The activity-bar **Containers** tree groups containers by state (and by Compose
-project), with start/stop/restart/pause/unpause/remove and **Open in Dashboard** in
-the context menu and a status-bar item showing running/total counts.
+project), with start/stop/restart/pause/unpause/remove, Exec, Show Logs and
+**Open in Dashboard** in the context menu — only the actions valid for the
+container's state. It says **Connecting to Docker…** during the first connect and,
+when Docker is offline, shows why (permission denied, missing socket, connection
+refused…). The status-bar item shows running/total counts and an unhealthy count;
+its tooltip names the endpoint or the offline reason.
 
 ### Settings
 
@@ -67,6 +75,10 @@ the context menu and a status-bar item showing running/total counts.
 | `sidekick-docker.statusBar.visible` | `true` | Show the status-bar container counts. |
 | `sidekick-docker.exec.defaultShell` | `/bin/sh` | Shell used by "Exec into container". |
 
+In an untrusted workspace, `socketPath` and `exec.defaultShell` are read from user
+settings only (they are restricted settings), and Compose is disabled. Trusting the
+folder applies the workspace values and reconnects.
+
 ## Features
 
 - **Full Docker dashboard in VSCode** — containers, Compose, images, volumes, networks
@@ -76,14 +88,16 @@ the context menu and a status-bar item showing running/total counts.
 - **Log analytics** — severity count badges and pattern clustering that groups similar logs into templates
 - **Container management** — start, stop, restart, pause, unpause, remove containers directly
 - **Health status** — shows healthy/unhealthy/starting indicators for containers with health checks
+- **Config tab details** — health failing streak and last probe output, exit code with OOM/daemon error, restart policy and count, mounts
+- **Open in Browser** — press `b` on a running container with a published port (quick pick when there are several; works through remote port forwarding)
 - **Compose support** — detect and manage Compose projects
 - **Stats monitoring** — live CPU, memory, network I/O, and block I/O metrics with sparkline charts
 - **Filesystem inspector** — view all filesystem changes inside containers (Files tab)
 - **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions (Layers tab)
 - **Exec into containers** — open an interactive terminal inside a container (shell configurable via `sidekick-docker.exec.defaultShell`)
-- **Connection awareness** — status-bar connection indicator, a disconnected banner with one-click Retry when the daemon goes away, and a "Retry Connection" action in the Containers view
+- **Connection awareness** — status-bar connection indicator, a disconnected banner and toast that give the real reason (permission denied, missing socket, refused…) with one-click Retry, and a "Retry Connection" action in the Containers view
 - **Mouse-friendly** — click rows and tabs to select, right-click a container row for its action menu, clickable status-bar hint chips
-- **Accessible** — ARIA roles, labels, and live regions; tabs and overlays reachable by keyboard
+- **Accessible** — ARIA roles, labels, and live regions; list rows named with state, health and pin status; arrow keys move between tabs (roving tabindex); a focusable context menu with `aria-activedescendant`; high-contrast focus outlines
 - **Workspace-aware Compose** — detect workspace projects, preserve recorded override files for lifecycle actions, and display running/total replicas for scaled services
 - **Recovery controls** — retry failed detail loads and streams; partial refresh warnings retain the last successful resource data
 - **SSH connections** — the packaged extension includes the SSH transport for `DOCKER_HOST=ssh://user@host`

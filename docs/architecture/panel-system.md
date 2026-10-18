@@ -10,7 +10,7 @@ Each panel implements:
 |--------|---------|
 | `getItems()` | Returns the list of resources to display in the side list |
 | `detailTabs[]` | Array of tab definitions, each with a render function |
-| `getActions()` | Returns per-item actions (shortcut key, confirm metadata, handler) for the actions menu |
+| `getActions()` | Returns per-item actions (shortcut key, `condition`, confirm metadata, handler) for the actions menu and direct shortcuts |
 | `getSearchableText()` | Optional per-item text used by the `/` filter |
 
 The interface is defined in `sidekick-docker-cli/src/dashboard/panels/types.ts`. Panels do not define keybindings themselves: global keys (including panel-contextual ones like filter, sort, and compare) live in the central registry at `sidekick-docker-cli/src/dashboard/ink/keyRegistry.ts`, while per-item action shortcuts come from `getActions()`.
@@ -33,10 +33,11 @@ The main `Dashboard` component uses `useReducer` for UI state (selected panel, s
 
 Domain state (the actual Docker resources) lives in the `DockerState` class, which:
 
-1. Holds the current lists of containers, images, volumes, networks, and compose projects
-2. Exposes methods to refresh individual resource types
-3. Processes Docker events to update resources incrementally
-4. Calls `scheduleRender()` to notify the UI of changes
+1. Delegates the resource lists (containers, images, volumes, networks, compose projects), refreshes and Docker event handling to the shared `DockerStateStore` — the same store the VS Code extension uses
+2. Adds the TUI-only buffers: log rings, lazily fetched detail caches (inspect details, filesystem changes, image layers) and the stats collector
+3. Notifies the dashboard through a change callback only when something actually changed, which calls `scheduleRender()`
+
+Panels gate their actions with `condition` and word confirmations through shared helpers (`canStart`, `canStop`, `pruneConfirmMessage`, `removeContainerConfirmMessage`) so the TUI and the VS Code webview offer the same actions with the same wording.
 
 ## Rendering Flow
 
@@ -48,8 +49,8 @@ sequenceDiagram
     participant P as Active Panel
 
     E->>DS: processEvent(event)
-    DS->>DS: Update resource list
-    DS->>D: scheduleRender()
+    DS->>DS: DockerStateStore patches or schedules a refresh
+    DS->>D: onChange → scheduleRender()
     D->>P: getItems()
     P-->>D: Updated resource list
     D->>D: Re-render UI

@@ -52,25 +52,27 @@ The dashboards use view state to control when streaming starts and stops. Log an
 
 ### Reconnection & Resilience
 
-All stream managers use `ReconnectScheduler` for fault-tolerant streaming:
+Every followed stream — container logs, Compose logs and stats, in both the TUI and VS Code — runs through one shared policy, `FollowStream` (in `sidekick-docker-shared`'s events module). The TUI's `BaseStreamManager` creates one per selection; the VS Code service uses it through `LogSlot` (logs) and directly (stats).
 
-- **Immediate teardown** — each stream manager owns an `AbortController` that is aborted on `stop()`, immediately destroying the underlying Docker HTTP connection or child process
-- **Generation counter** — monotonically increasing counter invalidates stale reconnect callbacks when selections change rapidly
-- **Exponential backoff** — retry delays increase on consecutive failures, preventing rapid retry storms
-- **Bounded retries** — streams give up after a maximum number of attempts on permanent failures
-- **Error logging** — all stream errors are logged for debugging
-- **Resource cleanup** — try/finally blocks ensure proper teardown on failure
+- **Stopped targets end** — when a source ends and its container (or Compose service) is known to be stopped, the stream reports `ended` (or `empty` if it never produced anything) and does not reconnect. A follow stream of a stopped container ends right after its backlog, so reconnecting would only replay the same tail.
+- **Running or unknown targets reconnect** with exponential backoff (2s doubling to 30s, at most 10 attempts, then `error` and a Retry control in VS Code).
+- **Progress resets backoff** — only an attempt that delivered at least one accepted item resets the delay, so a source that keeps ending without new data eventually gives up.
+- **Resume on start** — when the state store sees the target start again, a finished stream reconnects at once.
+- **No duplicated tail** — `LogResumeCursor` remembers the last log timestamp; reconnects ask the daemon (or `docker compose logs`) for entries `since` then, and entries replayed from the same millisecond are dropped.
+- **Immediate teardown** — each attempt owns an `AbortController`, aborted on `stop()`, which destroys the Docker HTTP connection or child process. A generation counter drops late items from a replaced attempt, including A → B → A selection changes.
 
-The VS Code service gives each primary and comparison stream a `StreamSession` with its own abort signal and generation. Late output from a replaced session is ignored, including A → B → A selection changes. Hiding the dashboard or disposing the service cancels its streams. Empty responses do not reset the reconnect budget; after repeated failures the webview offers Retry. Detail-load and stream-status messages use the typed extension/webview protocol, and retry requests are validated on receipt.
+Hiding the VS Code dashboard or disposing its service cancels its streams. Detail-load and stream-status messages use the typed extension/webview protocol, and retry requests are validated on receipt.
 
-Concurrent resource refreshes are coalesced. A failed resource request retains its previous data while successful resources update, with warnings identifying the failures. Disposed services ignore pending refresh and detail completions.
+### State refresh
+
+Both surfaces keep domain state in the shared `DockerStateStore`. Events patch it immediately where the event says enough (start, stop, die, pause, destroy, health status) and otherwise request a refresh, debounced by 500ms; healthcheck `exec_*` and other no-op events are ignored. A refresh pass lists containers once (`DockerClient.listResources()`), always commits — events that arrive mid-fetch are replayed over the result — and is abandoned after 20 seconds, keeping the previous data. A failed resource request retains its previous data while successful resources update, with warnings identifying the failures. Non-streaming Docker requests time out after 30 seconds; `docker compose` subprocesses have their own deadlines.
 
 ### EventWatcher
 
-- Runs continuously while the dashboard is open
+- Runs continuously while the dashboard is open (one loop, even across stop/start)
 - Auto-reconnects on connection loss with exponential backoff
 - Fires typed callbacks: `onEvent`, `onError`, `onReconnect`
-- Feeds events into `DockerState.processEvent()` for incremental updates
+- Feeds events into `DockerStateStore.processEvent()` (via the TUI's `DockerState` or the VS Code services) for incremental updates
 
 ## StatsCollector
 

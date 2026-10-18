@@ -29,11 +29,19 @@ or press `Ctrl+Alt+D` — `Ctrl`, not `Cmd`, on macOS too (macOS reserves `Cmd+O
 | `Sidekick Docker: Refresh Containers` | Refresh the tree view (`Ctrl+Alt+R` / `Cmd+Alt+R` when the Containers view is focused) |
 | `Sidekick Docker: Start/Stop/Restart Container...` | Quick-pick a container to act on |
 | `Sidekick Docker: Exec into Container...` | Quick-pick a running container and open a terminal inside it, using `sidekick-docker.exec.defaultShell` |
-| `Sidekick Docker: Show Container Logs...` | Quick-pick a container and open the dashboard on its logs |
+| `Sidekick Docker: Show Container Logs...` | Quick-pick a container and open a terminal running `docker logs -f --tail 200` for it |
+
+The tree view adds **Open in Dashboard** for containers and **Compose Up / Compose Restart / Compose Down** for Compose project groups; those appear only in its context menu, not in the command palette.
 
 ## Containers Tree View
 
-The activity-bar **Containers** view groups containers by state (and by Compose project), with start/stop/restart/pause/unpause/remove and "Open in Dashboard" in the context menu. A status-bar item shows running/total counts and opens the dashboard on click. When the Docker daemon is unreachable, the view offers a **Retry Connection** action.
+The activity-bar **Containers** view groups containers by state (and by Compose project). A container's context menu offers the actions that apply to its state — start, stop, restart, pause/unpause, remove (stopped containers; asks first), **Exec**, **Show Logs** and **Open in Dashboard** — and running-but-unhealthy containers are marked as such.
+
+Right-click a **Compose project group** for **Compose Up**, and for a running project **Compose Restart** and **Compose Down** (Down asks for confirmation). They run `docker compose` with the project's recorded files, against the same endpoint as the rest of the extension. Compose actions are hidden, and refused, in an untrusted workspace, because running them would execute the workspace's compose file.
+
+While the first connection is in progress the view says **Connecting to Docker…**. When the daemon is unreachable, the view shows *why* (permission denied on the socket, socket not found, connection refused, host unreachable…) and offers a **Retry Connection** action.
+
+The status-bar item shows running/total counts, plus a warning count of unhealthy containers, and opens the dashboard on click. Its tooltip names the endpoint (or, when offline, the reason), and it carries an accessibility label for screen readers.
 
 ## Settings
 
@@ -46,6 +54,10 @@ The activity-bar **Containers** view groups containers by state (and by Compose 
 
 Settings apply immediately — the extension reconnects without a window reload.
 
+### Restricted Mode
+
+In an untrusted workspace (Restricted Mode), `sidekick-docker.socketPath` and `sidekick-docker.exec.defaultShell` are read from your user settings only — VS Code ignores the workspace's values, so a cloned repository's `.vscode/settings.json` cannot point the extension at another daemon or shell. Compose is disabled there too. Granting trust re-reads the settings and reconnects both the tree view and the dashboard.
+
 ## Features
 
 - **Full Docker dashboard** — containers, Compose, images, volumes, networks
@@ -53,8 +65,11 @@ Settings apply immediately — the extension reconnects without a window reload.
 - **Smart log highlighting** — token-level syntax coloring for HTTP methods, status codes, URLs, IPs, timestamps, JSON keys, and more
 - **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
 - **Log analytics** — severity count badges and pattern clustering that groups similar logs into templates
-- **Container management** — start, stop, restart, pause, unpause, remove directly
+- **Container management** — start, stop, restart, pause, unpause, remove directly; only actions valid for the container's state are offered, and prune/remove confirmations name what they remove
 - **Health status** — shows healthy/unhealthy/starting indicators for containers with health checks
+- **Config tab** — health failing streak and last probe output, exit code with OOM/daemon error, restart policy and restart count, and mounts
+- **Open in Browser** — press `b` on a running container with a published port; with several ports a quick pick asks which. URLs go through `asExternalUri`, so they work over Remote-SSH, WSL and Codespaces port forwarding
+- **Sort direction in words** — the sort menu, toasts and status bar say "A→Z", "highest first" or "running first" rather than ascending/descending
 - **Compose support** — detect and manage projects
 - **Stats monitoring** — live CPU, memory, network I/O, and block I/O metrics with sparkline charts
 - **Filesystem inspector** — view all filesystem changes inside containers (Files tab)
@@ -82,8 +97,8 @@ See [Architecture Overview](../architecture/overview.md) for more details.
 
 ## Keyboard focus and recovery
 
-Use Tab and Shift+Tab to move between webview controls. The terminal dashboard keeps its own Tab focus toggle. Browser and editor shortcuts using Ctrl, Cmd, or Alt are preserved, apart from the documented Ctrl+D/Ctrl+U scroll commands. Dialogs keep focus inside their controls until closed.
+Use Tab and Shift+Tab to move between webview controls. Tab strips use a roving tab index — arrow keys (and Home/End) move between tabs. List rows have accessible names that include state, health and pin status; the context menu is focusable and announces the active item via `aria-activedescendant`; focus outlines follow high-contrast themes. The terminal dashboard keeps its own Tab focus toggle. Browser and editor shortcuts using Ctrl, Cmd, or Alt are preserved, apart from the documented Ctrl+D/Ctrl+U scroll commands. Dialogs keep focus inside their controls until closed.
 
-Selecting another item keeps the current detail tab. Filtering or removing the selected item selects the first visible item, or clears the selection if nothing matches. Failed detail loads and disconnected streams provide Retry controls; partial refresh failures identify the affected resource while retaining the last successful data.
+Selecting another item keeps the current detail tab. Filtering or removing the selected item selects the first visible item, or clears the selection if nothing matches. Failed detail loads and disconnected streams provide Retry controls; partial refresh failures identify the affected resource while retaining the last successful data. When the connection fails, the disconnected banner and the error toast give the actual reason (permission denied, missing socket, connection refused…).
 
-The Patterns tab updates as the selected container produces logs. Pinned comparison panes update independently, so a quiet primary stream does not hide output from the pinned container or service. Log, stats, and Compose streams stop when the dashboard is hidden or their selection changes; streams that repeatedly end without output eventually stop retrying and offer an explicit Retry control.
+The Patterns tab updates as the selected container produces logs. Pinned comparison panes update independently, so a quiet primary stream does not hide output from the pinned container or service. Log, stats, and Compose streams stop when the dashboard is hidden or their selection changes, and the dashboard stops polling while hidden. The logs of a stopped container end instead of reconnecting (and resume when it starts again); streams that repeatedly end without output eventually stop retrying and offer an explicit Retry control.

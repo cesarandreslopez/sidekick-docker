@@ -37,7 +37,8 @@ A full-featured Docker management dashboard that runs in your terminal and in VS
 - **Log search & filter** — search within log output with exact or fuzzy matching and match highlighting
 - **Log analytics** — severity counts, severity sparkline over time, and pattern clustering that groups similar logs into templates
 - **Health status tracking** — shows healthy/unhealthy/starting badges for containers with health checks
-- **Full container lifecycle** — start, stop, restart, pause, unpause, remove, exec
+- **Full container lifecycle** — start, stop, restart, pause, unpause, remove, exec, and open a published port in the browser
+- **Container details** — health check failures with the last probe's output, exit code and OOM kills, restart policy and count, mounts
 - **Container sorting** — sort by state, name, CPU, memory, network I/O, block I/O, or PIDs with reverse toggle
 - **Show all / running toggle** — filter container list to running-only with a single keypress
 - **Filesystem inspector** — view all filesystem changes inside containers (added/changed/deleted files)

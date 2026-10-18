@@ -29,11 +29,11 @@ The `/bin/sh -c #(nop)` prefix is automatically stripped for cleaner display. A 
 
 ## Actions
 
-Press `x` to open the context menu:
+Press `x` to open the context menu, or press `d` (Remove) / `P` (Prune) directly:
 
 | Action | Description |
 |--------|-------------|
 | Remove | Remove the selected image (confirmation required) |
-| Prune | Remove all dangling (untagged) images (confirmation required) |
+| Prune | Remove all dangling (untagged) images (the confirmation names how many) |
 
 Prune reports the total space reclaimed.

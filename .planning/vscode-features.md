@@ -1,5 +1,10 @@
 # VSCode Extension Feature Inventory
 
+> **STALE — pre-0.5.0.** Written before the shared `DockerStateStore`/`FollowStream`
+> refactor and the 0.5.0 features (Ctrl+R refresh, Open in Browser, `--shell`, Config-tab
+> health/restart/mounts, tree Compose actions, …). Check the code and the docs site for the extension's
+> current behaviour; treat this as historical context, not a current inventory.
+
 Complete feature inventory of `sidekick-docker-vscode/` — the VSCode extension package of the Docker management dashboard.
 
 ---

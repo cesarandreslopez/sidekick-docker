@@ -14,7 +14,11 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 const client = new DockerClient({ host: '192.168.1.100', port: 2376, protocol: 'https' });
 // or parse a user-supplied endpoint (bare socket path, unix:// URL, or tcp://host[:port] URL):
 const client = new DockerClient(parseDockerEndpoint('tcp://192.168.1.100:2376'));
+// non-streaming reads time out after requestTimeoutMs (default 30s; streams are exempt):
+const client = new DockerClient({ socketPath: '/var/run/docker.sock', requestTimeoutMs: 10_000 });
 ```
+
+A read that outlives its deadline rejects with `DockerTimeoutError`.
 
 ## Container Methods
 
@@ -22,7 +26,8 @@ const client = new DockerClient(parseDockerEndpoint('tcp://192.168.1.100:2376'))
 |--------|-----------|-------------|
 | `ping` | `() => Promise<boolean>` | Check Docker daemon connectivity |
 | `pingDetailed` | `() => Promise<PingResult>` | Like `ping()`, but preserves the underlying error so callers can explain the failure |
-| `listContainers` | `(all?: boolean) => Promise<ContainerInfo[]>` | List containers (default: all including stopped) |
+| `listContainers` | `(all?: boolean, signal?: AbortSignal) => Promise<ContainerInfo[]>` | List containers (default: all including stopped) |
+| `listResources` | `(opts?: ListResourcesOptions) => Promise<ResourceListing>` | One refresh pass: containers plus (unless disabled with `images`/`volumes`/`networks: false`) images, volumes and networks, from a **single** container listing. Each list settles independently (`PromiseSettledResult`) |
 | `startContainer` | `(id: string) => Promise<void>` | Start a container |
 | `stopContainer` | `(id: string) => Promise<void>` | Stop a container |
 | `restartContainer` | `(id: string) => Promise<void>` | Restart a container |
@@ -31,6 +36,7 @@ const client = new DockerClient(parseDockerEndpoint('tcp://192.168.1.100:2376'))
 | `removeContainer` | `(id: string, force?: boolean) => Promise<void>` | Remove a container |
 | `inspectContainer` | `(id: string) => Promise<ContainerInspectInfo>` | Get full container details |
 | `getContainerEnv` | `(id: string) => Promise<string[]>` | Get container environment variables |
+| `getContainerDetails` | `(id: string) => Promise<ContainerDetails>` | One inspect call, validated: env, restart policy and restart count, mounts, exit code, OOM flag, daemon error, and health (status, failing streak, last probes) |
 | `pruneContainers` | `() => Promise<{ containersDeleted: string[]; spaceReclaimed: number }>` | Remove all stopped containers |
 | `sampleStats` | `(id: string) => Promise<ContainerStats>` | One-shot stats reading; the non-streaming counterpart to `streamStats`, used to fill list-wide sorting |
 | `getContainerChanges` | `(id: string) => Promise<FilesystemChange[]>` | Get filesystem changes vs base image |

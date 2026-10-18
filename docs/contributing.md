@@ -21,7 +21,7 @@ npm test
 
 ### Running Locally
 
-- **TUI dashboard**: `node ./sidekick-docker-cli/dist/sidekick-docker.mjs` (esbuild writes the file mode 0644, so the `#!` line is inert and invoking the path directly exits 126)
+- **TUI dashboard**: `node ./sidekick-docker-cli/dist/sidekick-docker.mjs` (the build marks it executable, so `./sidekick-docker-cli/dist/sidekick-docker.mjs` works too)
 - **VS Code extension**: Open `sidekick-docker-vscode/` in VS Code and press `F5`
 
 ## Available Commands
@@ -41,7 +41,7 @@ npm run lint:fix           # Lint + auto-fix
 
 - TypeScript strict mode everywhere
 - Vitest for testing, co-located `.test.ts` files
-- ESLint 10 (flat config) for code quality — run `npm run lint` before submitting PRs
+- ESLint 10 (flat config) for code quality — run `npm run lint` before submitting PRs. In the TUI (`sidekick-docker-cli/src/dashboard/`), take colours from `sidekick-docker-cli/src/theme.ts` and the `ansi.*` helpers in `formatters.ts`; lint rejects hex colour literals and raw ANSI escapes there
 - [Conventional Commits](https://www.conventionalcommits.org/) for commit messages
 
 ## Validation and Releases
@@ -58,7 +58,7 @@ node scripts/check-imports.mjs
 npm run build
 ```
 
-Install root lint dependencies with `npm ci` if needed. Packaging or SSH changes also require `npm run test:packages`, which tests the packed CLI and production VSIX against a temporary local SSH fixture. It needs `tar`, `unzip`, npm, and network access to fetch `vsce`; it does not use a real Docker daemon or SSH credentials. Build documentation with `zensical build` after installing Zensical.
+CI runs the same lint, import-DAG and type checks alongside the tests, and the Release workflow re-runs them all before publishing. Install root lint dependencies with `npm ci` if needed. Packaging or SSH changes also require `npm run test:packages`, which tests the packed CLI and production VSIX against a temporary local SSH fixture. It needs `tar`, `unzip`, npm, and network access to fetch `vsce`; it does not use a real Docker daemon or SSH credentials. Build documentation with `zensical build` after installing Zensical.
 
 `bash scripts/bump-version.sh X.Y.Z` updates all four manifests and lockfiles, including local shared-package references. Update the root, CLI, extension, and docs changelogs, validate, commit, and push `main`. Wait for CI and documentation deployment before pushing an annotated `vX.Y.Z` tag. The Release workflow publishes to npm and Open VSX and creates a GitHub release containing the VSIX; verify each destination after the workflow finishes. The shared package remains internal.
 

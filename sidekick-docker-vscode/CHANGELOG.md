@@ -5,6 +5,31 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-10-18
+
+### Fixed
+
+- Log streams of stopped containers and Compose projects end instead of reconnecting every 2 seconds and appending the same tail (Compose spawned a new `docker compose logs` each time); reconnects resume from the last timestamp, and streams return when the target starts.
+- The dashboard and tree keep updating on hosts with healthchecks: refreshes always commit, healthcheck events are ignored, and event-driven refreshes are debounced instead of running immediately for every event.
+- Docker reads, refresh passes and `docker compose` commands have deadlines, so a hung call cannot freeze the dashboard.
+- A dashboard recreated behind a hidden panel (for example after a settings change) no longer keeps polling.
+- An untrusted workspace can no longer redirect the extension to another Docker endpoint or exec shell: `sidekick-docker.socketPath` and `sidekick-docker.exec.defaultShell` are restricted settings, and trusting the folder reconnects with its settings.
+- Start is no longer offered for paused containers; Stop is offered for paused and restarting ones.
+- Name sort compares full names, and sort toasts name the correct direction.
+- `docker compose config` honours `socketPath`.
+
+### Added
+
+- Compose Up, Restart and Down on Compose project groups in the container tree (Down asks for confirmation; unavailable in untrusted workspaces).
+- Open a running container's published port in the browser (`b` in the dashboard), through VS Code's port forwarding when remote.
+- Config tab: health check failing streak and last output, exit code with OOM or daemon error, restart policy and count, and mounts.
+- The connection banner, toast and tree explain why Docker is unreachable; the tree shows "Connecting to Docker…" during the first connect; the status bar counts unhealthy containers and shows the endpoint in its tooltip.
+- Accessibility: list rows announce state, health and pin; tabs use arrow-key navigation; the actions menu is focusable; high-contrast themes outline selections.
+
+### Changed
+
+- Prune confirmations show how many items they remove, removing a running container warns that it is stopped first, and the status bar reads "3/5 running" and shows the sort direction in words.
+
 ## [0.4.1] - 2026-09-06
 
 ### Fixed
@@ -232,4 +257,5 @@ _No changes — CLI-only bugfix release._
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
 
+[0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1

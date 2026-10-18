@@ -24,11 +24,11 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `1`-`5` | Switch to panel |
 | `[` / `]` | Cycle detail tab left / right |
 
-## Actions
+## Global Keys
 
 | Key | Action |
 |-----|--------|
-| `x` | Open context menu (actions for selected item) |
+| `x` | Open the actions menu for the selected item |
 | `f` | Open log filter (when on Logs tab) |
 | `/` | Open filter |
 | `a` | Toggle all/running containers (Containers panel) |
@@ -37,37 +37,45 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `m` | Pin/unpin item for log comparison (Containers/Services) |
 | `J` / `K` | Scroll compare pane (when in detail focus) |
 | `z` | Cycle layout (Normal/Wide/Expanded) |
+| `Ctrl+R` | Refresh now (the status bar shows `(Ctrl+R)` once the last refresh is a minute old) |
 | `?` | Show help overlay |
 | `V` | Show version |
 | `q` / `Ctrl+C` | Quit |
 
-## Container Actions (via context menu)
+## Item Actions
+
+The keys below work directly on the selected item — the `x` menu lists the same
+actions with their keys. Only actions that apply to the item's current state are
+offered; others are ignored.
+
+### Containers
 
 | Key | Action |
 |-----|--------|
-| `s` | Start |
-| `S` | Stop |
+| `s` | Start (stopped or created containers) |
+| `S` | Stop (running, paused or restarting containers) |
 | `r` | Restart |
 | `p` | Pause |
 | `u` | Unpause |
-| `d` | Remove (with confirmation) |
+| `d` | Remove (with confirmation; a running container is force-stopped first, and the prompt says so) |
 | `e` | Exec into container |
-| `c` | Copy logs to clipboard |
-| `P` | Prune — remove all stopped containers (with confirmation) |
+| `b` | Open a published port in the browser (running containers with a published TCP port) |
+| `c` | Copy logs to clipboard (what the Logs tab shows, respecting the log filter) |
+| `P` | Prune — remove all stopped containers (confirmation names the count) |
 
-Exec sessions detach with `Ctrl+]`.
+Embedded exec sessions detach with `Ctrl+]`; ending the shell (`exit` / `Ctrl+D`) also returns to the dashboard.
 
-## Image, Volume and Network Actions (via context menu)
+### Images, Volumes and Networks
 
 | Key | Action |
 |-----|--------|
 | `d` | Remove the selected image / volume / network (with confirmation) |
-| `P` | Prune — remove all dangling images, unused volumes, or unused networks |
+| `P` | Prune — remove all dangling images, unused volumes, or unused networks (confirmation names the count) |
 
 Remove is offered only where it can succeed: volumes that are not in use, and
 networks that are neither built-in nor still attached to a container.
 
-## Compose Actions (via context menu)
+### Compose
 
 | Key | Action |
 |-----|--------|
@@ -76,6 +84,14 @@ networks that are neither built-in nor still attached to a container.
 | `r` | Restart |
 | `S` | Stop |
 | `c` | Copy logs to clipboard |
+
+## Help Overlay
+
+`?` lists every global key (with all its aliases, e.g. `j/k ↑/↓`) and the active
+panel's actions. It switches to two columns on wide terminals (96+ columns) and
+scrolls when it does not fit: `j`/`k` or arrows, `PgUp`/`PgDn` or `Ctrl+D`/`Ctrl+U`,
+`g`/`G`. `?`, `q` or `Esc` closes it. The `?:Help` hint stays in the status bar at
+any width.
 
 ## Mouse
 

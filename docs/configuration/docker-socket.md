@@ -47,6 +47,8 @@ The VS Code extension reads the same endpoint formats from the `sidekick-docker.
 
 Leave it empty to use the platform default socket (or `DOCKER_HOST` if set). An invalid value is ignored with a warning and the default socket is used. Changes apply immediately — the extension reconnects without a window reload.
 
+`socketPath` (like `exec.defaultShell`) is a *restricted* setting: in an untrusted workspace VS Code ignores a value set in the workspace's `.vscode/settings.json` and only your user settings apply, so a cloned repository cannot point the extension at a daemon of its choosing. Trusting the folder applies the workspace value and reconnects.
+
 ## Environment Variables
 
 The underlying Docker client (dockerode) also respects standard Docker environment variables:
@@ -58,3 +60,16 @@ The underlying Docker client (dockerode) also respects standard Docker environme
 | `DOCKER_CERT_PATH` | Path to TLS certificates |
 
 The `--socket` flag takes precedence over environment variables — an explicit `--socket` socket path wins even when `DOCKER_HOST` is set.
+
+## Connection Errors
+
+When the daemon cannot be reached, both the TUI and the VS Code extension (its disconnected banner, error toast and Containers view) say why:
+
+| Cause | Message |
+|-------|---------|
+| No permission on the socket | Permission denied — add your user to the `docker` group, or run with elevated permissions |
+| No socket at the path | Docker socket not found — is Docker installed and running? |
+| Nothing listening | Connection refused — is the Docker daemon running? |
+| Bad host or network | Cannot reach the host — check the address and your network |
+
+Requests that get no answer time out after 30 seconds instead of hanging.

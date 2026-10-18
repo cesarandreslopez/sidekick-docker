@@ -1,5 +1,10 @@
 # CLI/TUI Feature Inventory
 
+> **STALE — pre-0.5.0.** Written before the shared `DockerStateStore`/`FollowStream`
+> refactor and the 0.5.0 features (Ctrl+R refresh, Open in Browser, `--shell`, Config-tab
+> health/restart/mounts, tree Compose actions, …). Check the code and the docs site for the CLI's
+> current behaviour; treat this as historical context, not a current inventory.
+
 Exhaustive feature catalog of `sidekick-docker-cli` — the Ink/React TUI dashboard and CLI commands.
 
 ---

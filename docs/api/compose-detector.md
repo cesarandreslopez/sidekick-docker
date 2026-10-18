@@ -56,7 +56,7 @@ await compose.restart('my-project', 'web');
 | `restart` | <code>(project: string, service?: string, cwd?: string &#124; ComposeCommandOptions) =&gt; Promise&lt;ComposeExecResult&gt;</code> | Restart a project or specific service |
 | `stop` | <code>(project: string, service?: string, cwd?: string &#124; ComposeCommandOptions) =&gt; Promise&lt;ComposeExecResult&gt;</code> | Stop a project or specific service |
 | `start` | <code>(project: string, service?: string, cwd?: string &#124; ComposeCommandOptions) =&gt; Promise&lt;ComposeExecResult&gt;</code> | Start existing service containers |
-| `streamLogs` | `(project: string, service?: string, tail?: number, signal?: AbortSignal) => AsyncIterable<LogEntry>` | Follow logs; default tail is 100 |
+| `streamLogs` | `(project: string, service?: string, tail?: number, signal?: AbortSignal, since?: string) => AsyncIterable<LogEntry>` | Follow logs; default tail is 100; `since` (RFC 3339) resumes after a reconnect |
 
 Lifecycle methods resolve to a `ComposeExecResult` (`exitCode`, `stdout`, `stderr`); use `throwIfComposeFailed(result, operation)` to turn a nonzero exit into a `ComposeError`. String `cwd` arguments remain supported. `ComposeCommandOptions` accepts `{ cwd?: string; configFiles?: string[] }`, passing every file with `-f` in the supplied order.
 
@@ -74,3 +74,24 @@ throwIfComposeFailed(result, 'Up');
 `streamLogs` has its own abort signal, preserves split UTF-8 and trailing output, and throws when the command fails. The lifecycle options object does not change its signature.
 
 All operations shell out to `docker compose` rather than using the Docker API directly, because compose orchestration logic lives in the compose CLI.
+
+`new ComposeClient(extraEnv?, options?)` — `extraEnv` points every spawned `docker compose` at the same endpoint as the API client (see `dockerCliEnv`); `options` sets deadlines: `queryTimeoutMs` (logs/ps, default 30s) and `actionTimeoutMs` (lifecycle commands, default 15 min, since `up` may pull or build). A command killed by its deadline resolves with exit code `124` (`TIMEOUT_EXIT_CODE`) and a "timed out" line on stderr.
+
+## runProcess
+
+`runProcess(cmd, args, { cwd?, env?, timeoutMs?, signal?, killGraceMs? })` runs a command to completion and resolves with `{ exitCode, stdout, stderr }`. It is the process runner behind `ComposeClient` and `ComposeFileReader`: output is decoded with a `StringDecoder` per stream (split multi-byte characters survive), a process past its deadline gets `SIGTERM` then `SIGKILL`, and spawn failures (e.g. no `docker` binary) reject.
+
+## CachedComposeFileReader
+
+Wraps `ComposeFileReader` (`docker compose config`, 10s deadline) so the config is only re-read when its inputs could have changed:
+
+```typescript
+import { CachedComposeFileReader, ComposeFileReader } from 'sidekick-docker-shared';
+
+const reader = new CachedComposeFileReader(new ComposeFileReader(cliEnv));
+const config = await reader.read(process.cwd());            // spawns once
+await reader.read(process.cwd());                            // cached: compose files unchanged
+await reader.read(process.cwd(), { force: true });          // re-read now
+```
+
+No compose file → `null` without spawning; unchanged files (by a stat signature) → the cached result, re-read anyway after `maxAgeMs` (default 5 min) to catch `include:`/`extends:` edits; concurrent reads share one spawn; timeouts and other transient failures are not cached. `DockerStateStore` uses it by default.

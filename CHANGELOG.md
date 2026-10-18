@@ -5,6 +5,44 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-10-18
+
+### Fixed
+
+- Log streams of stopped containers and stopped Compose projects no longer reconnect every 2 seconds and append the same tail again. Reconnects resume from the last timestamp, and a stream comes back by itself when its container starts.
+- Dashboards keep updating on hosts with healthchecks. An event arriving during a refresh used to discard that refresh's results, and healthcheck `exec_*` events arrive constantly. Refreshes now always commit, events that change nothing on screen are ignored, and event-driven refreshes are debounced in VS Code as well as the TUI.
+- A hung daemon or `docker compose` call no longer freezes the dashboard: Docker reads time out after 30s, a refresh pass after 20s (keeping the previous data), and compose commands are killed after their deadline.
+- TUI: clicking during an embedded exec session no longer closes the overlay and strands the shell, and Ctrl+] detaches again.
+- TUI: Ctrl+R, Ctrl+S, Ctrl+P and Ctrl+E no longer run Restart, Start, Pause or Exec without confirmation.
+- TUI: Copy Logs copies what the log filter shows instead of the whole buffer.
+- TUI: SIGTERM exits and restores the terminal instead of leaving a frozen dashboard.
+- TUI: switching from a long log to a short one no longer shows an empty pane.
+- TUI: the Files and Patterns tabs honour `NO_COLOR` and `--no-color`, and `NO_COLOR` now turns the whole TUI monochrome.
+- Start is no longer offered for paused containers (Docker rejects it); Stop is offered for paused and restarting ones.
+- VS Code: a dashboard recreated behind a hidden panel no longer keeps polling.
+- VS Code: an untrusted workspace can no longer redirect the extension to another Docker endpoint or exec shell through `.vscode/settings.json`; `socketPath` and `exec.defaultShell` are restricted settings until the folder is trusted.
+- VS Code: name sort compares full names, and sort toasts name the correct direction.
+- `docker compose config` honours `--socket` / `socketPath`, and multi-byte characters split across output chunks are decoded correctly.
+
+### Added
+
+- Config tab: health check failing streak and last probe output, exit code with OOM or daemon error, restart policy and restart count, and mounts.
+- Open a container's published port in the browser with `b`.
+- TUI: Ctrl+R refreshes immediately. `--shell <path>` or `SIDEKICK_DOCKER_SHELL` selects the exec shell, with a clear message when it is missing from the image.
+- VS Code: Compose Up, Restart and Down on Compose project groups in the container tree.
+- VS Code: the tree, banner and status bar explain why Docker is unreachable (permission denied, missing socket, connection refused); the status bar counts unhealthy containers and shows the endpoint.
+- VS Code: accessible names for list rows, arrow-key navigation between tabs, a focusable actions menu, and high-contrast outlines.
+
+### Changed
+
+- The TUI accent colour is readable on dark terminals.
+- The help overlay fits the terminal (two columns, scrolling, every key alias) and `?:Help` is always shown in the status bar.
+- Error toasts wrap to three lines and stay up longer for long messages.
+- Sort direction is shown in words ("A→Z", "highest first"), prune confirmations show how many items they remove, removing a running container warns that it is stopped first, and action toasts read "Stopped web".
+- Each refresh lists containers once instead of three times, and `docker compose config` runs only when the Compose files change.
+- Both dashboards share one domain-state store and one stream reconnect policy (`DockerStateStore`, `FollowStream`) in the shared package.
+- CI runs lint, type-checking and the import-DAG check, and releases are published only when these and all tests pass. The built CLI is executable.
+
 ## [0.4.1] - 2026-09-06
 
 ### Fixed
@@ -589,6 +627,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1
 [0.4.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.0
 [0.3.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.3.0

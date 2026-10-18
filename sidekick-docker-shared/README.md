@@ -3,7 +3,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cesarandreslopez/sidekick-docker/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cesarandreslopez/sidekick-docker)
 
-The Docker API abstraction layer that powers Sidekick Docker. Wraps dockerode into a typed, opinionated facade with async generators for streaming, Compose detection, and stats collection.
+The Docker API abstraction layer that powers Sidekick Docker. Wraps dockerode into a typed, opinionated facade with async generators for streaming, Compose detection, and stats collection — plus the state store, stream reconnect policy and UI rules that the TUI and the VS Code extension share.
 
 ## Install
 
@@ -36,20 +36,29 @@ const client = new DockerClient();
 // or with options:
 const client = new DockerClient({ socketPath: '/var/run/docker.sock' });
 const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
+const client = new DockerClient({ requestTimeoutMs: 10_000 }); // non-streaming reads; default 30s
 ```
+
+A read that outlives `requestTimeoutMs` rejects with `DockerTimeoutError`; streams are exempt.
 
 #### Container Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `ping` | `() => Promise<boolean>` | Check Docker daemon connectivity |
-| `listContainers` | `(all?: boolean) => Promise<ContainerInfo[]>` | List containers (default: all including stopped) |
+| `pingDetailed` | `() => Promise<PingResult>` | Like `ping()`, keeping the error (pair with `explainDockerUnreachable`) |
+| `listContainers` | `(all?: boolean, signal?: AbortSignal) => Promise<ContainerInfo[]>` | List containers (default: all including stopped) |
+| `listResources` | `(opts?: ListResourcesOptions) => Promise<ResourceListing>` | Containers, images, volumes and networks from one container listing; each list settles independently |
 | `startContainer` | `(id: string) => Promise<void>` | Start a container |
 | `stopContainer` | `(id: string) => Promise<void>` | Stop a container |
 | `restartContainer` | `(id: string) => Promise<void>` | Restart a container |
+| `pauseContainer` / `unpauseContainer` | `(id: string) => Promise<void>` | Pause / unpause a container |
 | `removeContainer` | `(id: string, force?: boolean) => Promise<void>` | Remove a container |
+| `pruneContainers` | `() => Promise<{ containersDeleted: string[]; spaceReclaimed: number }>` | Remove all stopped containers |
 | `inspectContainer` | `(id: string) => Promise<ContainerInspectInfo>` | Get full container details |
+| `getContainerDetails` | `(id: string) => Promise<ContainerDetails>` | One inspect call: env, restart policy/count, mounts, exit code, OOM, error, health log |
 | `getContainerEnv` | `(id: string) => Promise<string[]>` | Get container environment variables |
+| `sampleStats` | `(id: string) => Promise<ContainerStats>` | One-shot stats reading |
 | `getContainerChanges` | `(id: string) => Promise<FilesystemChange[]>` | Get filesystem changes vs base image |
 | `streamLogs` | `(id: string, opts?: LogStreamOptions, signal?: AbortSignal) => AsyncIterable<LogEntry>` | Stream container logs |
 | `streamStats` | `(id: string, signal?: AbortSignal) => AsyncIterable<ContainerStats>` | Stream live container stats |
@@ -79,10 +88,11 @@ const client = new DockerClient({ host: '192.168.1.100', port: 2375 });
 | `removeNetwork` | `(id: string) => Promise<void>` | Remove a network |
 | `pruneNetworks` | `() => Promise<{ networksDeleted: string[] }>` | Remove unused networks |
 
-#### Events
+#### System & Events
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
+| `diskUsage` | `() => Promise<DiskUsage>` | `docker system df`: images, containers, volumes, build cache |
 | `streamEvents` | `(filters?: Record<string, string[]>, signal?: AbortSignal) => AsyncIterable<DockerEvent>` | Stream Docker daemon events |
 
 Abort signals cancel both pending requests and active streams. Decoders preserve JSON records and UTF-8 characters across transport chunks, and live logs distinguish TTY output from multiplexed stdout/stderr.
@@ -116,7 +126,25 @@ await compose.restart('my-project', 'web');
 
 Lifecycle methods also accept `ComposeCommandOptions` (`{ cwd?: string; configFiles?: string[] }`) in place of the optional string `cwd`. Use `resolveComposeOptions(project, fallbackDirectory)` to resolve the recorded files, preserve override order, and reject missing paths before an action. Pass each result to `throwIfComposeFailed(result, operation)` to surface command failures.
 
-`compose.streamLogs(project, service?, tail = 100, signal?)` returns an `AsyncIterable<LogEntry>`. It preserves split UTF-8 and final unterminated lines, throws on command failure, and terminates its subprocess on cancellation. See the [Compose API reference](https://cesarandreslopez.github.io/sidekick-docker/api/compose-detector/) for examples.
+`new ComposeClient(extraEnv?, { queryTimeoutMs?, actionTimeoutMs? })` targets the same endpoint as the API client via `extraEnv` (see `dockerCliEnv`) and kills hung commands (defaults: 30s for queries, 15 min for lifecycle actions). Commands run through `runProcess(cmd, args, { cwd?, env?, timeoutMs?, signal? })`, which decodes output safely and resolves with exit code `124` on timeout.
+
+`compose.streamLogs(project, service?, tail = 100, signal?, since?)` returns an `AsyncIterable<LogEntry>`. It preserves split UTF-8 and final unterminated lines, throws on command failure, and terminates its subprocess on cancellation. See the [Compose API reference](https://cesarandreslopez.github.io/sidekick-docker/api/compose-detector/) for examples.
+
+`CachedComposeFileReader` wraps `ComposeFileReader` (`docker compose config`) so the config is re-read only when a compose file changes: `new CachedComposeFileReader(new ComposeFileReader(cliEnv)).read(cwd, { force? })`.
+
+### DockerStateStore
+
+Domain state for one endpoint — the refresh and Docker-event policy both dashboards share. Passive: you feed it events and call `refresh()`.
+
+```typescript
+import { DockerStateStore } from 'sidekick-docker-shared';
+
+const store = new DockerStateStore({ client, cwd: process.cwd(), onChange: () => render(store.getSnapshot()) });
+await store.refresh();
+new EventWatcher(client, { onEvent: e => store.processEvent(e) }).start();
+```
+
+Event-driven refreshes are debounced (500ms), no-op events (healthcheck `exec_*`, …) are ignored, events during a refresh are replayed over its result, and a pass is abandoned after 20s. `classifyEvent`/`applyEffect` expose the event policy as pure functions.
 
 ### EventWatcher
 
@@ -133,6 +161,23 @@ const watcher = new EventWatcher(client, {
 watcher.start();
 // later:
 watcher.stop();
+```
+
+### FollowStream & LogResumeCursor
+
+One followed stream (logs, stats) with the shared reconnect policy: a source whose target is stopped ends (`ended`/`empty`) instead of reconnecting; otherwise it reconnects with exponential backoff, and `resume()` restarts it when the target runs again. `LogResumeCursor` turns the last seen timestamp into a `since` for reconnects and drops replayed entries.
+
+```typescript
+import { FollowStream, LogResumeCursor } from 'sidekick-docker-shared';
+
+const cursor = new LogResumeCursor();
+const stream = new FollowStream<LogEntry>({
+  open: (signal, { reconnect }) => client.streamLogs(id, { follow: true, ...(reconnect ? { since: cursor.sinceSeconds() } : { tail: 100 }) }, signal),
+  accept: e => !cursor.isReplay(e),
+  onItem: e => { cursor.observe(e); show(e); },
+  isTargetRunning: () => store.isContainerRunning(id),
+});
+stream.start();
 ```
 
 ### StatsCollector
@@ -164,6 +209,8 @@ formatCpu(45.23);            // "45.23%"
 stateIcon('running');        // colored icon character
 ```
 
+The same module holds the UI rules both dashboards follow, so they cannot drift: `canStart`/`canStop`, `pruneCandidateCount`/`pruneConfirmMessage`, `removeContainerConfirmMessage`, `sortDirectionLabel` ("A→Z", "highest first"…), `publishedPortUrls`/`browserHostForEndpoint`, `actionText`, and the Config-tab helpers `summarizeHealth`, `summarizeRestartPolicy`, `formatMount`. It is browser-safe and also exported as `sidekick-docker-shared/formatters`.
+
 ## Types
 
 All types are exported from the package root.
@@ -172,6 +219,7 @@ All types are exported from the package root.
 import type {
   ContainerInfo,
   ContainerStats,
+  ContainerDetails,
   FilesystemChange,
   LogEntry,
   PortBinding,

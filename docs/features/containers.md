@@ -55,7 +55,16 @@ Environment variables set in the container, displayed as key-value pairs.
 
 ### Config
 
-Container configuration details — ID, name, image, state, status, health status (when available), creation time, ports, and Compose project info.
+Container configuration details, grouped into sections:
+
+- **Identity** — ID, name, image
+- **Status** — state, status, health badge, creation time; for an exited or dead container, the **exit code** with `OOM killed` and any daemon error; for a container with a healthcheck, the **failing streak** and the last probe's exit code and output (usually the actual reason it is unhealthy)
+- **Network** — published ports
+- **Runtime** — restart policy (e.g. `on-failure (max 5)`) and how many times the container has restarted
+- **Mounts** — each volume or bind mount as `source → destination (type, ro)`
+- **Compose** — project and service, for Compose-managed containers
+
+The Env and Config tabs come from a single `docker inspect` call, refreshed when the container starts, dies or changes health.
 
 ### Labels
 
@@ -90,29 +99,37 @@ Press `o` to open the sort overlay. Sort containers by:
 - **Block I/O** — highest total disk bytes first
 - **PIDs** — highest process count first
 
-Use `j`/`k` to navigate, `Enter` to apply, `R` to reverse sort direction. You can also press `R` globally to toggle reverse sort.
+Use `j`/`k` to navigate, `Enter` to apply, `R` to reverse sort direction. You can also press `R` globally to toggle reverse sort. The sort menu and the toast describe the current order in words — "A→Z" / "Z→A" for names, "running first" / "stopped first" for state, "highest first" / "lowest first" for stats.
 
 ## Actions
 
-Press `x` to open the context menu:
+Press `x` to open the context menu, or press an action's key directly. Only actions that apply to the container's current state are offered:
 
 | Key | Action | Description |
 |-----|--------|-------------|
-| `s` | Start | Start a stopped container |
-| `S` | Stop | Stop a running container |
-| `r` | Restart | Restart a container |
+| `s` | Start | Start an exited or created container (a paused one needs Unpause) |
+| `S` | Stop | Stop a running, paused or restarting container |
+| `r` | Restart | Restart a running container |
 | `p` | Pause | Pause a running container |
 | `u` | Unpause | Unpause a paused container |
-| `d` | Remove | Remove a container (confirmation required) |
-| `e` | Exec | Open an interactive shell inside the container |
-| `c` | Copy Logs | Copy buffered log text to clipboard |
-| `P` | Prune | Remove all stopped containers (confirmation required) |
+| `d` | Remove | Remove a container (confirmation required; a running container is force-stopped first, and the prompt says so) |
+| `e` | Exec | Open an interactive shell inside a running container |
+| `b` | Open in Browser | Open a published TCP port in your browser |
+| `c` | Copy Logs | Copy what the Logs tab shows (respecting the log filter) to the clipboard |
+| `P` | Prune | Remove all stopped containers (confirmation names how many) |
+
+### Open in Browser
+
+`b` is offered for running containers with at least one published TCP port. It opens `http://<host>:<port>` (`https` for ports 443/8443) with the platform opener — `xdg-open`, `open`, or `rundll32` on Windows — without going through a shell. The host is `localhost` for a local socket, and the daemon's host when the endpoint is `tcp://` or `ssh://`. When several ports are published, the first is opened and the toast lists the others.
 
 ### Interactive Exec
 
-The exec action drops you into a shell session inside the container using `node-pty`, running `/bin/sh`. Press `Ctrl+]` to detach back to the dashboard, or end the shell with `Ctrl+D` / `exit`.
+The exec action opens a shell inside the container, `/bin/sh` by default. Choose another with `--shell <path>` or the `SIDEKICK_DOCKER_SHELL` environment variable (see [CLI Commands](cli-commands.md#global-options)). If the shell does not exist in the image — common for distroless and scratch images — a toast says so instead of the session silently closing.
 
-If `node-pty` is unavailable, the dashboard suspends its terminal rendering and runs `docker exec` directly. End that shell with `Ctrl+D` / `exit` to return to the same selection and view state. The `Ctrl+]` detach shortcut applies only to the embedded PTY session.
+How the session runs depends on whether the optional `node-pty` native module can be loaded:
+
+- **Without `node-pty`** (the default for `npm install -g sidekick-docker`, which does not ship it) — the dashboard suspends its rendering and hands the terminal to `docker exec -it`. End the shell with `Ctrl+D` / `exit` to return to the same selection and view state.
+- **With `node-pty`** (e.g. a source checkout, where it is a dev dependency) — the shell runs embedded in a dashboard overlay. Press `Ctrl+]` to detach back to the dashboard, or end the shell with `Ctrl+D` / `exit`.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/shell_bash_into_container_cli.gif" alt="Interactive Exec Demo" width="800">

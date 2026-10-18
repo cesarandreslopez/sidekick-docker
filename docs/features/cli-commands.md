@@ -1,6 +1,6 @@
 # CLI Commands
 
-In addition to the interactive dashboard, Sidekick Docker provides non-interactive CLI commands for scripting and quick lookups.
+In addition to the interactive dashboard, Sidekick Docker provides eight non-interactive subcommands for scripting and quick lookups: `ps`, `logs`, `images`, `volumes`, `networks`, `stats`, `df` and `inspect`.
 
 ## `sidekick-docker` (no arguments)
 
@@ -104,9 +104,10 @@ sidekick-docker df --format json
 
 ## `sidekick-docker inspect`
 
-Prints the raw inspect payload for a container as JSON — mounts, restart
-policy, resource limits and health history, none of which the curated detail
-tabs show. Accepts a name, a full ID, or an ID prefix.
+Prints the raw inspect payload for a container as JSON — everything the
+dashboard's Config tab summarises (mounts, restart policy, health history, exit
+status) plus what it leaves out, such as resource limits. Accepts a name, a full
+ID, or an ID prefix.
 
 ```bash
 sidekick-docker inspect web
@@ -122,5 +123,16 @@ Exits non-zero when no container matches.
 | `--socket <endpoint>` | Docker endpoint: socket path, `unix://` or `tcp://host[:port]` URL (see [Docker Socket](../configuration/docker-socket.md)) |
 | `--no-color` | Disable colored output (the `NO_COLOR` env var also disables it; `FORCE_COLOR` forces it on) |
 | `--verbose` | Show full error details |
+| `--shell <path>` | Shell for Exec in the dashboard (default: `$SIDEKICK_DOCKER_SHELL`, else `/bin/sh`) |
 | `--version` | Show version |
 | `--help` | Show help |
+
+`NO_COLOR` and `--no-color` turn the interactive dashboard monochrome as well as the command output.
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `DOCKER_HOST` | Docker endpoint used when `--socket` is not given (`unix://`, `tcp://`, `ssh://`) |
+| `SIDEKICK_DOCKER_SHELL` | Shell for dashboard Exec when `--shell` is not given (default `/bin/sh`) |
+| `NO_COLOR` / `FORCE_COLOR` | Disable / force colored output |

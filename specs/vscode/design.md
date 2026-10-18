@@ -22,9 +22,9 @@ The extension and webview exchange typed `postMessage()` payloads defined in `ty
 |-----------|----------------|
 | `providers/DockerDashboardProvider.ts` | Webview lifecycle, initialization generation, message routing, and service view state |
 | `providers/dashboardHtml.ts` | Dashboard HTML, CSS, CSP, and script loading |
-| `services/DockerService.ts` | Resource state, refresh coalescing, details, view-driven streams, and Compose actions |
-| `services/StreamSession.ts` | Abort signal and generation ownership for each stream |
-| `services/ContainerWatcherService.ts` | Container tree polling, events, connection recovery, and disposal |
+| `services/DockerService.ts` | Wraps the shared `DockerStateStore`; details, view-driven streams, and Compose actions |
+| `services/LogSlot.ts` | One selection-driven log stream (on the shared `FollowStream`) with its ring buffer |
+| `services/ContainerWatcherService.ts` | Container tree: containers-only `DockerStateStore`, events, connection recovery, and disposal |
 | `webview/dashboard.ts` | DOM rendering, selection reconciliation, and host messages |
 | `webview/state.ts` | View state, persisted settings, resource caches, and load/stream statuses |
 | `webview/keyboard.ts`, `webview/overlays.ts` | Shortcut routing, modal focus, menus, and filters |

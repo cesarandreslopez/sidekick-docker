@@ -44,7 +44,9 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 - **Filesystem inspector** — view all filesystem changes inside containers (added/changed/deleted files)
 - **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions
 - **Compose support** — detect projects from container labels, show running/total replicas, and preserve recorded override files for lifecycle actions
-- **Interactive exec** — drop into a running container shell without leaving the dashboard
+- **Interactive exec** — drop into a running container shell without leaving the dashboard (`--shell` / `SIDEKICK_DOCKER_SHELL` pick the shell)
+- **Open in browser** — `b` opens a running container's published port
+- **Container details** — failing health checks with the last probe's output, exit code and OOM kills, restart policy and count, mounts
 - **Filter & search** — `/` to filter any resource list by name
 - **Confirmation modals** — destructive actions (remove, prune) always ask first
 - **Mouse support** — click to select, scroll to navigate, right-click for the actions menu
@@ -53,8 +55,8 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 - **Prune everything** — reclaim space from stopped containers, dangling images, unused volumes and networks, with the reclaimed total reported back
 - **Flexible endpoints** — `--socket` accepts a socket path, `unix://` URL, or `tcp://host:port` for remote daemons
 - **SSH connections** — connect with `DOCKER_HOST=ssh://user@host`; the CLI and extension include the SSH transport
-- **Refresh recovery** — keep the last successful resource data when part of a refresh fails; the VS Code dashboard also offers Retry controls for detail loads and streams
-- **VS Code extension** — the same dashboard, embedded as a webview panel
+- **Refresh recovery** — keep the last successful resource data when part of a refresh fails, and refresh on demand with `Ctrl+R`; the VS Code dashboard also offers Retry controls for detail loads and streams, and says *why* Docker is unreachable
+- **VS Code extension** — the same dashboard, embedded as a webview panel, plus a Containers tree with Compose Up/Restart/Down on project groups
 
 ## Quick Start
 
