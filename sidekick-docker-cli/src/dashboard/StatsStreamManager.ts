@@ -1,12 +1,13 @@
 import type { DockerClient, ContainerStats } from 'sidekick-docker-shared';
 import { StatsCollector } from 'sidekick-docker-shared';
 import { BaseStreamManager } from './BaseStreamManager';
+import type { StreamManagerOptions } from './BaseStreamManager';
 
 /**
  * Manages stats streaming for the currently selected container.
  * Only streams stats for one container at a time (expensive operation).
  * Feeds data into StatsCollector for history/charting.
- * Auto-reconnects when a stream ends (e.g. container restart).
+ * Reconnects while the container runs; ends when it stops.
  */
 export class StatsStreamManager extends BaseStreamManager<string | null, ContainerStats> {
   private client: DockerClient;
@@ -14,8 +15,8 @@ export class StatsStreamManager extends BaseStreamManager<string | null, Contain
 
   protected readonly streamLabel = 'stats';
 
-  constructor(client: DockerClient, collector: StatsCollector, onChange: () => void) {
-    super(onChange);
+  constructor(client: DockerClient, collector: StatsCollector, onChange: () => void, options: StreamManagerOptions<string | null> = {}) {
+    super(onChange, options);
     this.client = client;
     this.collector = collector;
   }

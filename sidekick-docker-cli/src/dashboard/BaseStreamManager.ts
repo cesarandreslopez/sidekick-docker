@@ -1,25 +1,34 @@
-import { ReconnectScheduler } from 'sidekick-docker-shared';
+import { FollowStream } from 'sidekick-docker-shared';
+import type { FollowStreamState } from 'sidekick-docker-shared';
 import { debugLog } from '../utils/debug';
+
+export interface StreamManagerOptions<TId> {
+  /**
+   * Whether the selected target is running (`undefined` = unknown). Lets a
+   * stream of a stopped container end instead of replaying its tail forever.
+   */
+  isTargetRunning?: (id: TId) => boolean | undefined;
+}
 
 /**
  * Abstract base for selection-driven stream managers.
  * Handles the common lifecycle: select → stream → reconnect → stop/dispose.
+ * Reconnect policy (when to retry, backoff, ending for stopped targets) lives
+ * in the shared FollowStream, so the TUI and VS Code behave the same.
  *
  * @typeParam TId   - identifier type for the selected item (e.g. string | null)
  * @typeParam TItem - type of items yielded by the stream
  */
 export abstract class BaseStreamManager<TId, TItem> {
   protected currentId: TId;
-  protected aborted = false;
-  protected streamPromise: Promise<void> | null = null;
-  protected reconnect = new ReconnectScheduler();
   protected onChange: () => void;
 
-  private streamController: AbortController | null = null;
-  private streamGeneration = 0;
+  private stream: FollowStream<TItem> | null = null;
+  private readonly isTargetRunning?: (id: TId) => boolean | undefined;
 
-  constructor(onChange: () => void) {
+  constructor(onChange: () => void, options: StreamManagerOptions<TId> = {}) {
     this.onChange = onChange;
+    this.isTargetRunning = options.isTargetRunning;
     this.currentId = this.emptyId();
   }
 
@@ -33,48 +42,43 @@ export abstract class BaseStreamManager<TId, TItem> {
 
     if (!this.isValidId(id)) return;
 
-    this.aborted = false;
-    this.reconnect.reset();
-    this.streamController = new AbortController();
-    this.streamGeneration++;
-    this.onBeforeStream();
-    this.streamPromise = this.runStream(id, this.streamController.signal, this.streamGeneration);
-  }
-
-  private async runStream(id: TId, signal: AbortSignal, generation: number): Promise<void> {
-    try {
-      for await (const item of this.createStream(id, signal)) {
-        if (signal.aborted || this.aborted || !this.isSameId(id, this.currentId)) break;
+    const stream = new FollowStream<TItem>({
+      open: (signal, attempt) => {
+        this.onBeforeStream();
+        return this.createStream(id, signal, attempt);
+      },
+      accept: item => this.acceptItem?.(item) ?? true,
+      onItem: (item) => {
         this.processItem(id, item);
         this.onChange();
-      }
-      this.reconnect.reset();
-    } catch (err) {
-      if (signal.aborted) return;
-      debugLog(`${this.streamLabel} stream error:`, err);
-    }
+      },
+      isTargetRunning: this.isTargetRunning ? () => this.isTargetRunning?.(id) : undefined,
+      onError: err => debugLog(`${this.streamLabel} stream error:`, err),
+      onState: (state) => {
+        if (state === 'error') debugLog(`${this.streamLabel} stream: gave up reconnecting for ${this.idLabel(id)}`);
+      },
+    });
+    this.stream = stream;
+    stream.start();
+  }
 
-    if (!signal.aborted && !this.aborted && this.isSameId(id, this.currentId) && generation === this.streamGeneration) {
-      const scheduled = this.reconnect.schedule(() => {
-        if (!this.aborted && this.isSameId(id, this.currentId) && generation === this.streamGeneration) {
-          this.streamController = new AbortController();
-          this.onBeforeStream();
-          this.streamPromise = this.runStream(id, this.streamController.signal, generation);
-        }
-      });
-      if (!scheduled) {
-        debugLog(`${this.streamLabel} stream: gave up reconnecting for ${this.idLabel(id)}`);
-      }
-    }
+  /**
+   * The selected target may have changed state (e.g. a stopped container
+   * started again): resume a finished stream if it is now running.
+   */
+  targetStateChanged(): void {
+    this.stream?.resume();
+  }
+
+  /** Lifecycle of the current stream, or null when nothing is selected. */
+  getStreamState(): FollowStreamState | null {
+    return this.stream?.state ?? null;
   }
 
   stop(): void {
-    this.aborted = true;
+    this.stream?.stop();
+    this.stream = null;
     this.currentId = this.emptyId();
-    this.streamController?.abort();
-    this.streamController = null;
-    this.streamPromise = null;
-    this.reconnect.clear();
     this.onStop();
   }
 
@@ -99,8 +103,8 @@ export abstract class BaseStreamManager<TId, TItem> {
   /** Human-readable label for a given identifier (for log messages). */
   protected abstract idLabel(id: TId): string;
 
-  /** Create the async iterable that produces stream items. */
-  protected abstract createStream(id: TId, signal: AbortSignal): AsyncIterable<TItem>;
+  /** Create the async iterable that produces stream items. `reconnect` is true after the first attempt. */
+  protected abstract createStream(id: TId, signal: AbortSignal, attempt: { reconnect: boolean }): AsyncIterable<TItem>;
 
   /** Process a single item from the stream. */
   protected abstract processItem(id: TId, item: TItem): void;
@@ -109,6 +113,9 @@ export abstract class BaseStreamManager<TId, TItem> {
   protected abstract onClear(): void;
 
   // ── Optional hooks ──
+
+  /** Return false to drop an item replayed by a reconnect. Unset accepts everything. */
+  protected acceptItem?(item: TItem): boolean;
 
   /** Called before streaming starts (including reconnects). */
   protected onBeforeStream(): void {}

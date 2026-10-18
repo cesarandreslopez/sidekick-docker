@@ -68,7 +68,13 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     }, 200);
   }
 
-  // Stream managers for logs and stats
+  // Stream managers for logs and stats. They consult the state so a stream of
+  // a stopped container ends instead of reconnecting, and resume on start.
+  const containerTarget = { isTargetRunning: (id: string | null) => (id ? state.isContainerRunning(id) : undefined) };
+  const composeTarget = {
+    isTargetRunning: (id: { project: string | null; service: string | null }) =>
+      (id.project ? state.isComposeTargetRunning(id.project, id.service) : undefined),
+  };
   const logManager = new LogStreamManager(client, () => {
     if (logFlushTimer) return;
     logFlushTimer = setTimeout(() => {
@@ -77,7 +83,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       logSeverityCounts = logManager.getSeverityCounts();
       scheduleRender();
     }, 100);
-  });
+  }, containerTarget);
 
   const flushLogsNow = () => {
     if (logFlushTimer) {
@@ -101,7 +107,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       secondaryLogSeverityCounts = secondaryLogManager.getSeverityCounts();
       scheduleRender();
     }, 100);
-  });
+  }, containerTarget);
 
   const flushSecondaryLogsNow = () => {
     if (secondaryLogFlushTimer) {
@@ -117,7 +123,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   const statsManager = new StatsStreamManager(client, state.getStatsCollector(), () => {
     scheduleRender();
-  });
+  }, containerTarget);
 
   // Fills in stats for every row when the list itself needs them (sorting by a
   // stats field). statsManager alone only ever covers the selected container.
@@ -137,7 +143,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       }
       scheduleRender();
     }, 100);
-  });
+  }, composeTarget);
 
   const flushComposeLogsNow = () => {
     if (composeLogFlushTimer) {
@@ -158,7 +164,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       state.setSecondaryComposeLogs(secondaryComposeLogManager.getLogs());
       scheduleRender();
     }, 100);
-  });
+  }, composeTarget);
 
   const flushSecondaryComposeLogsNow = () => {
     if (secondaryComposeLogFlushTimer) {
@@ -354,7 +360,12 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     }),
   );
 
-  stateChanged = scheduleRender;
+  const streamManagers = [logManager, secondaryLogManager, statsManager, composeLogManager, secondaryComposeLogManager];
+  stateChanged = () => {
+    // A container that just started gets its finished stream back.
+    for (const m of streamManagers) m.targetStateChanged();
+    scheduleRender();
+  };
 
   // Wire exec handler: ContainersPanel calls through the trigger ref
   const containersPanel = panels[0] as ContainersPanel;

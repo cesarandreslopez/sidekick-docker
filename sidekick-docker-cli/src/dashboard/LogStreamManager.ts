@@ -1,13 +1,15 @@
 import type { DockerClient } from 'sidekick-docker-shared';
 import type { LogEntry, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
-import { LogAnalytics, LogSeverityTimeSeries, LogTemplateEngine, MAX_LOG_LINES } from 'sidekick-docker-shared';
+import { LogAnalytics, LogResumeCursor, LogSeverityTimeSeries, LogTemplateEngine, MAX_LOG_LINES } from 'sidekick-docker-shared';
 import { BaseStreamManager } from './BaseStreamManager';
+import type { StreamManagerOptions } from './BaseStreamManager';
 
 /**
  * Manages log streaming for the currently selected container.
  * Maintains a ring buffer of log entries and starts/stops streaming
  * as the selection changes. Tracks severity counts, time-series, and patterns.
- * Auto-reconnects when a stream ends (e.g. container restart).
+ * Reconnects resume from the last timestamp seen, so a restart does not
+ * append the tail a second time; a stopped container's stream just ends.
  */
 export class LogStreamManager extends BaseStreamManager<string | null, LogEntry> {
   private client: DockerClient;
@@ -15,11 +17,12 @@ export class LogStreamManager extends BaseStreamManager<string | null, LogEntry>
   private analytics = new LogAnalytics();
   private timeSeries = new LogSeverityTimeSeries();
   private templateEngine = new LogTemplateEngine();
+  private cursor = new LogResumeCursor();
 
   protected readonly streamLabel = 'log';
 
-  constructor(client: DockerClient, onChange: () => void) {
-    super(onChange);
+  constructor(client: DockerClient, onChange: () => void, options: StreamManagerOptions<string | null> = {}) {
+    super(onChange, options);
     this.client = client;
   }
 
@@ -28,11 +31,17 @@ export class LogStreamManager extends BaseStreamManager<string | null, LogEntry>
   protected isValidId(id: string | null): boolean { return id !== null; }
   protected idLabel(id: string | null): string { return id ?? '(none)'; }
 
-  protected createStream(id: string | null, signal: AbortSignal): AsyncIterable<LogEntry> {
-    return this.client.streamLogs(id!, { follow: true, tail: 100 }, signal);
+  protected createStream(id: string | null, signal: AbortSignal, attempt: { reconnect: boolean }): AsyncIterable<LogEntry> {
+    const since = attempt.reconnect ? this.cursor.sinceSeconds() : undefined;
+    return this.client.streamLogs(id!, since === undefined ? { follow: true, tail: 100 } : { follow: true, tail: MAX_LOG_LINES, since }, signal);
+  }
+
+  protected acceptItem(entry: LogEntry): boolean {
+    return !this.cursor.isReplay(entry);
   }
 
   protected processItem(_id: string | null, entry: LogEntry): void {
+    this.cursor.observe(entry);
     this.logs.push(entry);
     const severity = this.analytics.push(entry.message);
     this.timeSeries.push(severity);
@@ -44,6 +53,7 @@ export class LogStreamManager extends BaseStreamManager<string | null, LogEntry>
 
   protected onClear(): void {
     this.logs = [];
+    this.cursor.reset();
     this.analytics.reset();
     this.timeSeries.reset();
     this.templateEngine.reset();

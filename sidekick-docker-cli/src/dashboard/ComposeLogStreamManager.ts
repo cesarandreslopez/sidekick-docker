@@ -1,9 +1,10 @@
 import type { ComposeClient } from 'sidekick-docker-shared';
 import type { LogEntry } from 'sidekick-docker-shared';
-import { MAX_LOG_LINES } from 'sidekick-docker-shared';
+import { LogResumeCursor, MAX_LOG_LINES } from 'sidekick-docker-shared';
 import { BaseStreamManager } from './BaseStreamManager';
+import type { StreamManagerOptions } from './BaseStreamManager';
 
-interface ComposeStreamId {
+export interface ComposeStreamId {
   project: string | null;
   service: string | null;
 }
@@ -11,16 +12,18 @@ interface ComposeStreamId {
 /**
  * Manages compose log streaming for the currently selected project/service.
  * Selection-driven: starts stream when selected, stops when deselected.
- * Auto-reconnects with exponential backoff when a stream ends.
+ * Reconnects resume from the last timestamp seen (`--since`); a stopped
+ * project's stream just ends.
  */
 export class ComposeLogStreamManager extends BaseStreamManager<ComposeStreamId, LogEntry> {
   private composeClient: ComposeClient;
   private logs: LogEntry[] = [];
+  private cursor = new LogResumeCursor();
 
   protected readonly streamLabel = 'compose log';
 
-  constructor(composeClient: ComposeClient, onChange: () => void) {
-    super(onChange);
+  constructor(composeClient: ComposeClient, onChange: () => void, options: StreamManagerOptions<ComposeStreamId> = {}) {
+    super(onChange, options);
     this.composeClient = composeClient;
   }
 
@@ -31,11 +34,17 @@ export class ComposeLogStreamManager extends BaseStreamManager<ComposeStreamId, 
   protected isValidId(id: ComposeStreamId): boolean { return id.project !== null; }
   protected idLabel(id: ComposeStreamId): string { return id.project ?? '(none)'; }
 
-  protected createStream(id: ComposeStreamId, signal: AbortSignal): AsyncIterable<LogEntry> {
-    return this.composeClient.streamLogs(id.project!, id.service ?? undefined, 100, signal);
+  protected createStream(id: ComposeStreamId, signal: AbortSignal, attempt: { reconnect: boolean }): AsyncIterable<LogEntry> {
+    const since = attempt.reconnect ? this.cursor.sinceIso() : undefined;
+    return this.composeClient.streamLogs(id.project!, id.service ?? undefined, since ? MAX_LOG_LINES : 100, signal, since);
+  }
+
+  protected acceptItem(entry: LogEntry): boolean {
+    return !this.cursor.isReplay(entry);
   }
 
   protected processItem(_id: ComposeStreamId, entry: LogEntry): void {
+    this.cursor.observe(entry);
     this.logs.push(entry);
     if (this.logs.length > MAX_LOG_LINES) {
       this.logs.shift();
@@ -44,6 +53,7 @@ export class ComposeLogStreamManager extends BaseStreamManager<ComposeStreamId, 
 
   protected onClear(): void {
     this.logs = [];
+    this.cursor.reset();
   }
 
   /** Select by project/service (convenience wrapper). */

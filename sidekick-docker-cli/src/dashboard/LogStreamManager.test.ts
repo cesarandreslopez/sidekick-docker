@@ -125,4 +125,43 @@ describe('LogStreamManager', () => {
     const counts = manager.getSeverityCounts();
     expect(counts.total).toBe(3);
   });
+
+  it('does not reconnect or duplicate the tail for a stopped container', async () => {
+    const tail = [makeEntry('a'), makeEntry('b')];
+    const client = {
+      streamLogs: vi.fn(() => (async function* () { yield* tail; })()),
+    } as unknown as DockerClient;
+    manager = new LogStreamManager(client, onChange, { isTargetRunning: () => false });
+    await manager.select('stopped');
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(client.streamLogs).toHaveBeenCalledTimes(1);
+    expect(manager.getLogs().map(l => l.message)).toEqual(['a', 'b']);
+    expect(manager.getStreamState()).toBe('ended');
+  });
+
+  it('resumes with since when the container starts again, without duplicates', async () => {
+    let running = false;
+    const t1 = new Date('2026-01-01T00:00:01.000Z');
+    const t2 = new Date('2026-01-01T00:00:02.000Z');
+    const streamLogs = vi.fn()
+      .mockImplementationOnce(() => (async function* () {
+        yield { timestamp: t1, stream: 'stdout', message: 'before stop' };
+      })())
+      .mockImplementationOnce(() => (async function* () {
+        // The daemon replays from `since` (same millisecond) before new output.
+        yield { timestamp: t1, stream: 'stdout', message: 'before stop' };
+        yield { timestamp: t2, stream: 'stdout', message: 'after start' };
+      })());
+    const client = { streamLogs } as unknown as DockerClient;
+    manager = new LogStreamManager(client, onChange, { isTargetRunning: () => running });
+    await manager.select('c1');
+    await vi.advanceTimersByTimeAsync(0);
+    expect(manager.getStreamState()).toBe('ended');
+
+    running = true;
+    manager.targetStateChanged();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(streamLogs).toHaveBeenLastCalledWith('c1', expect.objectContaining({ since: t1.getTime() / 1000 }), expect.anything());
+    expect(manager.getLogs().map(l => l.message)).toEqual(['before stop', 'after start']);
+  });
 });
