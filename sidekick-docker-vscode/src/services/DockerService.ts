@@ -1,11 +1,13 @@
-import { StreamSession } from './StreamSession';
+import { LogSlot } from './LogSlot';
 import {
   DockerClient,
+  DockerStateStore,
+  CachedComposeFileReader,
   ComposeClient,
   ComposeDetector,
   ComposeFileReader,
   EventWatcher,
-  ReconnectScheduler,
+  FollowStream,
   StatsCollector,
   StatsSampler,
   MAX_LOG_LINES,
@@ -27,10 +29,10 @@ import type {
   ComposeProject,
   LogEntry,
   ContainerStats,
-  ComposeFileConfig,
   ComposeExecResult,
   ComposeCommandOptions,
   SeverityCounts,
+  StoreChange,
 } from 'sidekick-docker-shared';
 
 import type {
@@ -75,6 +77,12 @@ export interface DockerServiceCallbacks {
   onDetailLoad?: (update: DetailLoadUpdate) => void;
 }
 
+/** A compose log target: a whole project, or one service of it. */
+interface ComposeKey {
+  project: string;
+  service: string | null;
+}
+
 export type DashboardPanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
 
 export interface DockerServiceOptions {
@@ -113,8 +121,8 @@ export interface DashboardViewState {
 export class DockerService {
   private client: DockerClient;
   private composeClient: ComposeClient;
-  private composeDetector = new ComposeDetector();
-  private composeFileReader: ComposeFileReader;
+  /** Domain state + refresh/event policy, shared with the TUI. */
+  private store: DockerStateStore;
   private statsCollector = new StatsCollector();
   /**
    * Fills in stats for every row when the list needs them (a stats-based sort).
@@ -123,69 +131,23 @@ export class DockerService {
   private statsSampler: StatsSampler;
   private watcher: EventWatcher | null = null;
 
-  private containers: ContainerInfo[] = [];
-  private images: ImageInfo[] = [];
-  private volumes: VolumeInfo[] = [];
-  private networks: NetworkInfo[] = [];
-  private composeProjects: ComposeProject[] = [];
-  private cachedFileConfig: ComposeFileConfig | null = null;
-  private daemonConnected = false;
-  private refreshPromise: Promise<void> | null = null;
-  private refreshQueued = false;
-  private resourceErrors: Record<string, string> = {};
-  private lastRefresh: Date | null = null;
   private detailPending = new Map<string, Promise<void>>();
   private inspectedEnv = new Map<string, string[]>();
   private inspectedChanges = new Map<string, FilesystemChange[]>();
   private inspectedLayers = new Map<string, ImageLayer[]>();
-
-  // Log streaming
-  private logContainerId: string | null = null;
-  private logAborted = false;
-  private logs: LogEntry[] = [];
   private logSeverityTimeSeries = new Map<string, LogSeverityTimeSeries>();
-  private logFlushTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // Stats streaming
-  private statsContainerId: string | null = null;
-  private statsAborted = false;
 
   /**
-   * Backoff state per stream. The CLI's stream managers get reconnection from
-   * BaseStreamManager; these loops had none, so a container restart ended the
-   * stream for good and the pane silently stopped updating until the user
-   * reselected it.
+   * Selection-driven streams. Reconnect policy (end for stopped targets,
+   * resume from the last timestamp, capped backoff) is the shared
+   * FollowStream's, the same as the TUI's.
    */
-  private logSession = new StreamSession();
-  private statsSession = new StreamSession();
-  private composeLogSession = new StreamSession();
-  private secondaryLogSession = new StreamSession();
-  private secondaryComposeLogSession = new StreamSession();
-  private logReconnect = new ReconnectScheduler();
-  private statsReconnect = new ReconnectScheduler();
-  private composeLogReconnect = new ReconnectScheduler();
-  private secondaryLogReconnect = new ReconnectScheduler();
-  private secondaryComposeLogReconnect = new ReconnectScheduler();
-
-  // Compose log streaming
-  private composeLogProject: string | null = null;
-  private composeLogService: string | null = null;
-  private composeLogAborted = false;
-  private composeLogs: LogEntry[] = [];
-  private composeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // Secondary log streaming (compare mode)
-  private secondaryLogContainerId: string | null = null;
-  private secondaryLogAborted = false;
-  private secondaryLogs: LogEntry[] = [];
-  private secondaryLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
-
-  // Secondary compose log streaming (compare mode)
-  private secondaryComposeLogProject: string | null = null;
-  private secondaryComposeLogService: string | null = null;
-  private secondaryComposeLogAborted = false;
-  private secondaryComposeLogs: LogEntry[] = [];
-  private secondaryComposeLogFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  private logSlot: LogSlot<string>;
+  private secondaryLogSlot: LogSlot<string>;
+  private composeLogSlot: LogSlot<ComposeKey>;
+  private secondaryComposeLogSlot: LogSlot<ComposeKey>;
+  private statsContainerId: string | null = null;
+  private statsStream: FollowStream<ContainerStats> | null = null;
 
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
   private debounceTimer: ReturnType<typeof setTimeout> | null = null;
@@ -211,9 +173,19 @@ export class DockerService {
   constructor(callbacks: DockerServiceCallbacks, options?: DockerServiceOptions) {
     this.client = new DockerClient(options?.clientOptions);
     this.composeClient = new ComposeClient(options?.cliEnv);
-    this.composeFileReader = new ComposeFileReader(options?.cliEnv);
     this.callbacks = callbacks;
     this.cwd = options?.cwd;
+    this.store = new DockerStateStore({
+      client: this.client,
+      cwd: options?.cwd,
+      composeReader: new CachedComposeFileReader(new ComposeFileReader(options?.cliEnv)),
+      onChange: change => this.onStoreChange(change),
+      log: (msg, err) => console.debug(msg, err ?? ''),
+    });
+    this.logSlot = this.containerLogSlot(true);
+    this.secondaryLogSlot = this.containerLogSlot(false);
+    this.composeLogSlot = this.composeSlot();
+    this.secondaryComposeLogSlot = this.composeSlot();
     this.isTrusted = options?.isTrusted ?? true;
     this.refreshIntervalMs = options?.refreshIntervalMs ?? 30_000;
     this.statsSampler = new StatsSampler({
@@ -257,11 +229,7 @@ export class DockerService {
 
     if (!visible) {
       this.stopLiveInfrastructure();
-      this.stopLogStream();
-      this.stopStatsStream();
-      this.stopComposeLogStream();
-      this.stopSecondaryLogStream();
-      this.stopSecondaryComposeLogStream();
+      this.stopAllStreams();
       this.statsSampler.setIds([]);
       return;
     }
@@ -278,10 +246,8 @@ export class DockerService {
 
     if (!this.watcher) {
       this.watcher = new EventWatcher(this.client, {
-        onEvent: (event) => {
-          this.processEvent(event);
-          this.scheduleStateUpdate();
-        },
+        // The store's onChange schedules the update, and only when the event changed something.
+        onEvent: (event) => { this.store.processEvent(event); },
         onError: (err) => console.debug('event watcher error:', err),
       });
       this.watcher.start();
@@ -306,98 +272,30 @@ export class DockerService {
   }
 
   private refresh(): Promise<void> {
-    if (this.disposed) return Promise.resolve();
-    if (this.refreshPromise) {
-      this.refreshQueued = true;
-      return this.refreshPromise;
-    }
-    this.refreshPromise = this.refreshLoop().finally(() => { this.refreshPromise = null; });
-    return this.refreshPromise;
+    return this.store.refresh();
   }
 
-  private async refreshLoop(): Promise<void> {
-    do {
-      this.refreshQueued = false;
-      const [containers, images, volumes, networks, fileConfig] = await Promise.allSettled([
-        this.client.listContainers(true), this.client.listImages(),
-        this.client.listVolumes(), this.client.listNetworks(),
-        this.cwd ? this.composeFileReader.readFromDirectory(this.cwd) : Promise.resolve(null),
-      ]);
-      if (this.disposed) return;
-      // A newer request arrived while these results were being fetched.
-      if (this.refreshQueued) continue;
-      this.resourceErrors = {};
-      const results = { containers, images, volumes, networks, services: fileConfig };
-      for (const [kind, result] of Object.entries(results)) {
-        if (result.status === 'rejected') this.resourceErrors[kind] = errorMessage(result.reason);
-      }
-      if (containers.status === 'fulfilled') this.containers = containers.value;
-      if (images.status === 'fulfilled') this.images = images.value;
-      if (volumes.status === 'fulfilled') this.volumes = volumes.value;
-      if (networks.status === 'fulfilled') this.networks = networks.value;
-      if (fileConfig.status === 'fulfilled') this.cachedFileConfig = fileConfig.value;
-      this.composeProjects = this.composeDetector.detect(this.containers, this.cachedFileConfig);
-      this.daemonConnected = [containers, images, volumes, networks].some(r => r.status === 'fulfilled');
-      if (this.daemonConnected) this.lastRefresh = new Date();
-      if (this.initialized) this.applyStreamDemand();
-      const ids = new Set(this.containers.map(c => c.id));
+  private onStoreChange(change: StoreChange): void {
+    if (this.disposed) return;
+    const snapshot = this.store.getSnapshot();
+    if (change.cause === 'refresh') {
+      const ids = new Set(snapshot.containers.map(c => c.id));
       for (const map of [this.inspectedEnv, this.inspectedChanges, this.logSeverityTimeSeries]) {
         for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
       }
-      const imageIds = new Set(this.images.map(i => i.id));
+      const imageIds = new Set(snapshot.images.map(i => i.id));
       for (const id of this.inspectedLayers.keys()) if (!imageIds.has(id)) this.inspectedLayers.delete(id);
-      this.scheduleStateUpdate();
-    } while (this.refreshQueued && !this.disposed);
-  }
-
-  private processEvent(event: { type: string; resourceType: string; resourceId: string; attributes: Record<string, string> }): void {
-    if (this.disposed) return;
-    if (this.refreshPromise) this.refreshQueued = true;
-    switch (event.resourceType) {
-      case 'container':
-        this.handleContainerEvent(event);
-        break;
-      default:
-        this.refresh().catch(e => console.debug('refresh failed:', e));
-        break;
     }
-  }
-
-  private handleContainerEvent(event: { type: string; resourceId: string; attributes: Record<string, string> }): void {
-    switch (event.type) {
-      case 'start':
-      case 'unpause': {
-        const existing = this.containers.find(c => c.id === event.resourceId);
-        if (existing) {
-          existing.state = 'running';
-          existing.status = 'Up just now';
-        }
-        this.refresh().catch(e => console.debug('refresh failed:', e));
-        break;
-      }
-      case 'stop':
-      case 'die': {
-        const existing = this.containers.find(c => c.id === event.resourceId);
-        if (existing) {
-          existing.state = 'exited';
-          existing.status = 'Exited';
-        }
-        break;
-      }
-      case 'pause': {
-        const existing = this.containers.find(c => c.id === event.resourceId);
-        if (existing) existing.state = 'paused';
-        break;
-      }
-      case 'destroy':
-        this.containers = this.containers.filter(c => c.id !== event.resourceId);
-        this.statsCollector.remove(event.resourceId);
-        break;
-      default:
-        this.refresh().catch(e => console.debug('refresh failed:', e));
-        break;
+    for (const id of change.removedContainerIds) {
+      this.statsCollector.remove(id);
+      this.inspectedEnv.delete(id);
+      this.inspectedChanges.delete(id);
     }
-    this.composeProjects = this.composeDetector.detect(this.containers, this.cachedFileConfig);
+    if (this.initialized) {
+      this.applyStreamDemand();
+      this.resumeStreams();
+    }
+    this.scheduleStateUpdate();
   }
 
   private scheduleStateUpdate(): void {
@@ -411,15 +309,16 @@ export class DockerService {
   }
 
   getStateSnapshot(): DashboardStateSnapshot {
+    const s = this.store.getSnapshot();
     return {
-      containers: this.containers.map(serializeContainer),
-      images: this.images.map(serializeImage),
-      volumes: this.volumes.map(serializeVolume),
-      networks: this.networks.map(serializeNetwork),
-      composeProjects: this.composeProjects.map(serializeComposeProject),
-      daemonConnected: this.daemonConnected,
-      resourceErrors: { ...this.resourceErrors },
-      lastRefresh: this.lastRefresh?.toISOString() ?? null,
+      containers: s.containers.map(serializeContainer),
+      images: s.images.map(serializeImage),
+      volumes: s.volumes.map(serializeVolume),
+      networks: s.networks.map(serializeNetwork),
+      composeProjects: s.composeProjects.map(serializeComposeProject),
+      daemonConnected: s.daemonConnected,
+      resourceErrors: { ...s.resourceErrors },
+      lastRefresh: s.lastRefresh?.toISOString() ?? null,
     };
   }
 
@@ -427,11 +326,7 @@ export class DockerService {
 
   private applyStreamDemand(): void {
     if (!this.initialized || this.disposed || !this.viewState.visible) {
-      this.stopLogStream();
-      this.stopStatsStream();
-      this.stopComposeLogStream();
-      this.stopSecondaryLogStream();
-      this.stopSecondaryComposeLogStream();
+      this.stopAllStreams();
       // The sampler is not a stream, so it survives the stopXStream calls. Left
       // running it polls one request per running container every 3s behind a
       // dashboard nobody is looking at.
@@ -464,59 +359,123 @@ export class DockerService {
         // Skip whichever container has a live stream: it already produces
         // richer updates (with history series), and sampling it too would both
         // duplicate the request and race the stream's own values.
-        ? this.containers
+        ? this.store.getSnapshot().containers
             .filter(c => c.state === 'running' && c.id !== this.statsContainerId)
             .map(c => c.id)
         : [],
     );
 
-    this.ensureLogStream(wantsContainerLogs ? selectedItemId : null);
+    this.logSlot.ensure(wantsContainerLogs ? selectedItemId : null);
     this.ensureStatsStream(wantsContainerStats ? selectedItemId : null);
-    this.ensureComposeLogStream(
-      wantsComposeLogs ? this.viewState.composeProjectName : null,
-      wantsComposeLogs ? this.viewState.composeServiceName : null,
-    );
-    this.ensureSecondaryLogStream(wantsSecondaryContainerLogs ? this.viewState.compareItemId : null);
-    this.ensureSecondaryComposeLogStream(
-      wantsSecondaryComposeLogs ? this.viewState.compareComposeProjectName : null,
-      wantsSecondaryComposeLogs ? this.viewState.compareComposeServiceName : null,
-    );
+    this.composeLogSlot.ensure(wantsComposeLogs && this.viewState.composeProjectName !== null
+      ? { project: this.viewState.composeProjectName, service: this.viewState.composeServiceName }
+      : null);
+    this.secondaryLogSlot.ensure(wantsSecondaryContainerLogs ? this.viewState.compareItemId : null);
+    this.secondaryComposeLogSlot.ensure(wantsSecondaryComposeLogs && this.viewState.compareComposeProjectName !== null
+      ? { project: this.viewState.compareComposeProjectName, service: this.viewState.compareComposeServiceName }
+      : null);
   }
 
-  private ensureLogStream(containerId: string | null): void {
-    if (containerId === this.logContainerId) return;
-    this.stopLogStream();
-    if (!containerId) return;
+  private stopAllStreams(): void {
+    this.logSlot.stop();
+    this.stopStatsStream();
+    this.composeLogSlot.stop();
+    this.secondaryLogSlot.stop();
+    this.secondaryComposeLogSlot.stop();
+  }
 
-    this.logContainerId = containerId;
-    this.logAborted = false;
-    this.logs = [];
-    void this.streamLogs(containerId);
+  /** Targets may have changed state: let finished streams of now-running targets reconnect. */
+  private resumeStreams(): void {
+    this.logSlot.resume();
+    this.secondaryLogSlot.resume();
+    this.composeLogSlot.resume();
+    this.secondaryComposeLogSlot.resume();
+    this.statsStream?.resume();
+  }
+
+  private containerLogSlot(primary: boolean): LogSlot<string> {
+    return new LogSlot<string>({
+      kind: 'logs',
+      same: (a, b) => a === b,
+      itemId: id => id,
+      open: (id, signal, { reconnect, cursor }) => {
+        const since = reconnect ? cursor.sinceSeconds() : undefined;
+        return this.client.streamLogs(id, since === undefined ? { follow: true, tail: 100 } : { follow: true, tail: MAX_LOG_LINES, since }, signal);
+      },
+      isRunning: id => this.store.isContainerRunning(id),
+      onEntry: primary ? (id, entry) => {
+        // Severity time-series for the Stats tab sparkline (primary stream only).
+        let series = this.logSeverityTimeSeries.get(id);
+        if (!series) { series = new LogSeverityTimeSeries(); this.logSeverityTimeSeries.set(id, series); }
+        series.push(detectSeverity(entry.message));
+      } : undefined,
+      publish: (id, entries) => {
+        if (this.disposed) return;
+        const analytics = new LogAnalytics();
+        for (const entry of entries) analytics.push(entry.message);
+        // Compare-mode logs land in the webview's logs map under the compare
+        // container's id, just like primary logs.
+        this.callbacks.onLogsChange(id, entries.map(serializeLogEntry), analytics.getCounts());
+      },
+      onState: (update) => { if (!this.disposed) this.callbacks.onStreamState?.(update); },
+    });
+  }
+
+  private composeSlot(): LogSlot<ComposeKey> {
+    return new LogSlot<ComposeKey>({
+      kind: 'composeLogs',
+      same: (a, b) => a.project === b.project && a.service === b.service,
+      itemId: k => (k.service ? `${k.project}:${k.service}` : k.project),
+      open: (k, signal, { reconnect, cursor }) => {
+        const since = reconnect ? cursor.sinceIso() : undefined;
+        return this.composeClient.streamLogs(k.project, k.service ?? undefined, since ? MAX_LOG_LINES : 100, signal, since);
+      },
+      isRunning: k => this.store.isComposeTargetRunning(k.project, k.service),
+      publish: (k, entries) => {
+        if (!this.disposed) this.callbacks.onComposeLogs(k.project, k.service, entries.map(serializeLogEntry));
+      },
+      onState: (update) => { if (!this.disposed) this.callbacks.onStreamState?.(update); },
+    });
   }
 
   private ensureStatsStream(containerId: string | null): void {
     if (containerId === this.statsContainerId) return;
     this.stopStatsStream();
-    if (!containerId) return;
+    if (!containerId || this.disposed) return;
 
     this.statsContainerId = containerId;
-    this.statsAborted = false;
-    if (!this.disposed) {
-      this.callbacks.onStatsChange({ containerId, stats: null, loading: true });
-    }
-    void this.streamStats(containerId);
+    this.callbacks.onStatsChange({ containerId, stats: null, loading: true });
+    const stream = new FollowStream<ContainerStats>({
+      open: signal => this.client.streamStats(containerId, signal),
+      onItem: (stats) => {
+        if (this.disposed) return;
+        this.statsCollector.push(containerId, stats);
+        this.callbacks.onStatsChange({
+          containerId,
+          stats: serializeStats(stats),
+          loading: false,
+          cpuHistory: this.statsCollector.getCpuSeries(containerId),
+          memoryHistory: this.statsCollector.getMemorySeries(containerId),
+          networkRxRateHistory: this.statsCollector.getNetworkRxRateSeries(containerId),
+          networkTxRateHistory: this.statsCollector.getNetworkTxRateSeries(containerId),
+          blockReadRateHistory: this.statsCollector.getBlockReadRateSeries(containerId),
+          blockWriteRateHistory: this.statsCollector.getBlockWriteRateSeries(containerId),
+          logSeveritySeries: this.logSeverityTimeSeries.get(containerId)?.getDominantSeries(),
+        });
+      },
+      isTargetRunning: () => this.store.isContainerRunning(containerId),
+      onState: (state, message) => {
+        if (!this.disposed) this.callbacks.onStreamState?.({ kind: 'stats', itemId: containerId, state, message });
+      },
+    });
+    this.statsStream = stream;
+    stream.start();
   }
 
-  private ensureComposeLogStream(projectName: string | null, serviceName: string | null): void {
-    if (projectName === this.composeLogProject && serviceName === this.composeLogService) return;
-    this.stopComposeLogStream();
-    if (!projectName) return;
-
-    this.composeLogProject = projectName;
-    this.composeLogService = serviceName;
-    this.composeLogAborted = false;
-    this.composeLogs = [];
-    void this.streamComposeLogs(projectName, serviceName);
+  private stopStatsStream(): void {
+    this.statsStream?.stop();
+    this.statsStream = null;
+    this.statsContainerId = null;
   }
 
   async selectContainer(containerId: string | null): Promise<void> {
@@ -559,431 +518,16 @@ export class DockerService {
   }
 
   retryStreams(): void {
-    this.stopLogStream();
-    this.stopStatsStream();
-    this.stopComposeLogStream();
-    this.stopSecondaryLogStream();
-    this.stopSecondaryComposeLogStream();
+    this.stopAllStreams();
     this.applyStreamDemand();
-  }
-
-  /**
-   * Restart a stream that ended while its target is still selected.
-   *
-   * A stream ends for two very different reasons: the user moved away (in
-   * which case `stillWanted` is false and we must not resurrect it), or the
-   * container restarted / the daemon hiccuped (in which case the pane should
-   * recover on its own). Backoff is capped, so a container that never comes
-   * back stops being retried instead of spinning.
-   */
-  private reconnectStream(
-    scheduler: ReconnectScheduler,
-    stillWanted: () => boolean,
-    restart: () => void,
-    exhausted: () => void,
-  ): void {
-    if (this.disposed || !stillWanted()) {
-      scheduler.clear();
-      return;
-    }
-    const scheduled = scheduler.schedule(() => {
-      if (this.disposed || !stillWanted()) return;
-      restart();
-    });
-    if (!scheduled) exhausted();
-  }
-
-  private async streamLogs(containerId: string): Promise<void> {
-    const session = this.logSession.start();
-    const active = () => !this.disposed && this.logSession.isCurrent(session);
-    const itemId = containerId;
-    const status = (state: StreamStateUpdate['state'], message?: string) => {
-      if (active()) this.callbacks.onStreamState?.({ kind: 'logs', itemId, state, message });
-    };
-    status('loading');
-    let received = false;
-    // Ensure severity tracking exists for this container
-    if (!this.logSeverityTimeSeries.has(containerId)) {
-      this.logSeverityTimeSeries.set(containerId, new LogSeverityTimeSeries());
-    }
-    const timeSeries = this.logSeverityTimeSeries.get(containerId)!;
-
-    try {
-      for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 }, session.signal)) {
-        if (!active()) return;
-        if (!received) { received = true; this.logReconnect.reset(); status('live'); }
-        this.logs.push(entry);
-        if (this.logs.length > MAX_LOG_LINES) this.logs.shift();
-
-        // Track severity for time-series sparkline
-        const severity = detectSeverity(entry.message);
-        timeSeries.push(severity);
-        this.scheduleLogFlush(containerId);
-      }
-      if (!active()) return;
-      this.flushLogs(containerId);
-      // Only productive streams reset backoff; empty responses must not retry forever.
-      if (received) this.logReconnect.reset();
-      status(received ? 'ended' : 'empty');
-    } catch (error) {
-      if (!active()) return;
-      status('reconnecting', errorMessage(error));
-    }
-    if (!active()) return;
-    this.reconnectStream(
-      this.logReconnect,
-      () => active() && !this.logAborted && this.logContainerId === containerId,
-      () => { void this.streamLogs(containerId); },
-      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
-    );
-  }
-
-  private async streamStats(containerId: string): Promise<void> {
-    const session = this.statsSession.start();
-    const active = () => !this.disposed && this.statsSession.isCurrent(session);
-    const itemId = containerId;
-    const status = (state: StreamStateUpdate['state'], message?: string) => {
-      if (active()) this.callbacks.onStreamState?.({ kind: 'stats', itemId, state, message });
-    };
-    status('loading');
-    let received = false;
-    try {
-      for await (const stats of this.client.streamStats(containerId, session.signal)) {
-        if (!active()) return;
-        if (!received) { received = true; this.statsReconnect.reset(); status('live'); }
-        this.statsCollector.push(containerId, stats);
-        if (!this.disposed) {
-          const cpuHistory = this.statsCollector.getCpuSeries(containerId);
-          const memoryHistory = this.statsCollector.getMemorySeries(containerId);
-          const networkRxRateHistory = this.statsCollector.getNetworkRxRateSeries(containerId);
-          const networkTxRateHistory = this.statsCollector.getNetworkTxRateSeries(containerId);
-          const blockReadRateHistory = this.statsCollector.getBlockReadRateSeries(containerId);
-          const blockWriteRateHistory = this.statsCollector.getBlockWriteRateSeries(containerId);
-          const logSeveritySeries = this.logSeverityTimeSeries.get(containerId)?.getDominantSeries();
-          this.callbacks.onStatsChange({
-            containerId,
-            stats: serializeStats(stats),
-            loading: false,
-            cpuHistory,
-            memoryHistory,
-            networkRxRateHistory,
-            networkTxRateHistory,
-            blockReadRateHistory,
-            blockWriteRateHistory,
-            logSeveritySeries,
-          });
-        }
-      }
-      if (!active()) return;
-      if (received) this.statsReconnect.reset();
-      status(received ? 'ended' : 'empty');
-    } catch (error) {
-      if (!active()) return;
-      status('reconnecting', errorMessage(error));
-    }
-    if (!active()) return;
-    this.reconnectStream(
-      this.statsReconnect,
-      () => active() && !this.statsAborted && this.statsContainerId === containerId,
-      () => { void this.streamStats(containerId); },
-      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
-    );
-  }
-
-  private stopLogStream(): void {
-    this.logSession.stop();
-    this.logReconnect.clear();
-    this.logReconnect.reset();
-    if (this.logContainerId) {
-      this.flushLogs(this.logContainerId);
-    }
-    this.logAborted = true;
-    this.logContainerId = null;
-    this.logs = [];
-    if (this.logFlushTimer) {
-      clearTimeout(this.logFlushTimer);
-      this.logFlushTimer = null;
-    }
-  }
-
-  private stopStatsStream(): void {
-    this.statsSession.stop();
-    this.statsReconnect.clear();
-    this.statsReconnect.reset();
-    this.statsAborted = true;
-    this.statsContainerId = null;
   }
 
   async selectImage(imageId: string | null): Promise<void> {
     if (imageId) await this.loadDetail('layers', imageId);
   }
 
-  // ─── Compose log streaming ────────────────────────────────────────
-
   async selectComposeService(projectName: string, serviceName: string | null): Promise<void> {
-    this.ensureComposeLogStream(projectName, serviceName);
-  }
-
-  private async streamComposeLogs(projectName: string, serviceName: string | null): Promise<void> {
-    const session = this.composeLogSession.start();
-    const active = () => !this.disposed && this.composeLogSession.isCurrent(session);
-    const itemId = serviceName ? `${projectName}:${serviceName}` : projectName;
-    const status = (state: StreamStateUpdate['state'], message?: string) => {
-      if (active()) this.callbacks.onStreamState?.({ kind: 'composeLogs', itemId, state, message });
-    };
-    status('loading');
-    let received = false;
-    try {
-      for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined, 100, session.signal)) {
-        if (!active()) return;
-        if (!received) { received = true; this.composeLogReconnect.reset(); status('live'); }
-        this.composeLogs.push(entry);
-        if (this.composeLogs.length > MAX_LOG_LINES) this.composeLogs.shift();
-        this.scheduleComposeLogFlush(projectName, serviceName);
-      }
-      if (!active()) return;
-      this.flushComposeLogs(projectName, serviceName);
-      if (!active()) return;
-      if (received) this.composeLogReconnect.reset();
-      status(received ? 'ended' : 'empty');
-    } catch (error) {
-      if (!active()) return;
-      status('reconnecting', errorMessage(error));
-    }
-    if (!active()) return;
-    this.reconnectStream(
-      this.composeLogReconnect,
-      () => active() && !this.composeLogAborted
-        && this.composeLogProject === projectName
-        && this.composeLogService === serviceName,
-      () => { void this.streamComposeLogs(projectName, serviceName); },
-      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
-    );
-  }
-
-  private stopComposeLogStream(): void {
-    this.composeLogSession.stop();
-    this.composeLogReconnect.clear();
-    this.composeLogReconnect.reset();
-    if (this.composeLogProject) {
-      this.flushComposeLogs(this.composeLogProject, this.composeLogService);
-    }
-    this.composeLogAborted = true;
-    this.composeLogProject = null;
-    this.composeLogService = null;
-    this.composeLogs = [];
-    if (this.composeLogFlushTimer) {
-      clearTimeout(this.composeLogFlushTimer);
-      this.composeLogFlushTimer = null;
-    }
-  }
-
-  // ─── Secondary log streaming (compare mode) ──────────────────────
-
-  private ensureSecondaryLogStream(containerId: string | null): void {
-    if (containerId === this.secondaryLogContainerId) return;
-    this.stopSecondaryLogStream();
-    if (!containerId) return;
-
-    this.secondaryLogContainerId = containerId;
-    this.secondaryLogAborted = false;
-    this.secondaryLogs = [];
-    void this.streamSecondaryLogs(containerId);
-  }
-
-  private async streamSecondaryLogs(containerId: string): Promise<void> {
-    const session = this.secondaryLogSession.start();
-    const active = () => !this.disposed && this.secondaryLogSession.isCurrent(session);
-    const itemId = containerId;
-    const status = (state: StreamStateUpdate['state'], message?: string) => {
-      if (active()) this.callbacks.onStreamState?.({ kind: 'logs', itemId, state, message });
-    };
-    status('loading');
-    let received = false;
-    try {
-      for await (const entry of this.client.streamLogs(containerId, { follow: true, tail: 100 }, session.signal)) {
-        if (!active()) return;
-        if (!received) { received = true; this.secondaryLogReconnect.reset(); status('live'); }
-        this.secondaryLogs.push(entry);
-        if (this.secondaryLogs.length > MAX_LOG_LINES) this.secondaryLogs.shift();
-        this.scheduleSecondaryLogFlush(containerId);
-      }
-      if (!active()) return;
-      this.flushSecondaryLogs(containerId);
-      if (!active()) return;
-      if (received) this.secondaryLogReconnect.reset();
-      status(received ? 'ended' : 'empty');
-    } catch (error) {
-      if (!active()) return;
-      status('reconnecting', errorMessage(error));
-    }
-    if (!active()) return;
-    this.reconnectStream(
-      this.secondaryLogReconnect,
-      () => active() && !this.secondaryLogAborted && this.secondaryLogContainerId === containerId,
-      () => { void this.streamSecondaryLogs(containerId); },
-      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
-    );
-  }
-
-  private stopSecondaryLogStream(): void {
-    this.secondaryLogSession.stop();
-    this.secondaryLogReconnect.clear();
-    this.secondaryLogReconnect.reset();
-    if (this.secondaryLogContainerId) {
-      this.flushSecondaryLogs(this.secondaryLogContainerId);
-    }
-    this.secondaryLogAborted = true;
-    this.secondaryLogContainerId = null;
-    this.secondaryLogs = [];
-    if (this.secondaryLogFlushTimer) {
-      clearTimeout(this.secondaryLogFlushTimer);
-      this.secondaryLogFlushTimer = null;
-    }
-  }
-
-  private scheduleSecondaryLogFlush(containerId: string): void {
-    if (this.secondaryLogFlushTimer || this.disposed) return;
-    this.secondaryLogFlushTimer = setTimeout(() => {
-      this.secondaryLogFlushTimer = null;
-      this.flushSecondaryLogs(containerId);
-    }, 100);
-  }
-
-  private flushSecondaryLogs(containerId: string): void {
-    if (this.disposed || this.secondaryLogContainerId !== containerId) return;
-    const analytics = new LogAnalytics();
-    for (const entry of this.secondaryLogs) {
-      analytics.push(entry.message);
-    }
-    // Reuse the same onLogsChange callback — secondary logs land in the webview's
-    // logs map under the compare container's ID, just like primary logs.
-    this.callbacks.onLogsChange(
-      containerId,
-      this.secondaryLogs.map(serializeLogEntry),
-      analytics.getCounts(),
-    );
-  }
-
-  private ensureSecondaryComposeLogStream(projectName: string | null, serviceName: string | null): void {
-    if (projectName === this.secondaryComposeLogProject && serviceName === this.secondaryComposeLogService) return;
-    this.stopSecondaryComposeLogStream();
-    if (!projectName) return;
-
-    this.secondaryComposeLogProject = projectName;
-    this.secondaryComposeLogService = serviceName;
-    this.secondaryComposeLogAborted = false;
-    this.secondaryComposeLogs = [];
-    void this.streamSecondaryComposeLogs(projectName, serviceName);
-  }
-
-  private async streamSecondaryComposeLogs(projectName: string, serviceName: string | null): Promise<void> {
-    const session = this.secondaryComposeLogSession.start();
-    const active = () => !this.disposed && this.secondaryComposeLogSession.isCurrent(session);
-    const itemId = serviceName ? `${projectName}:${serviceName}` : projectName;
-    const status = (state: StreamStateUpdate['state'], message?: string) => {
-      if (active()) this.callbacks.onStreamState?.({ kind: 'composeLogs', itemId, state, message });
-    };
-    status('loading');
-    let received = false;
-    try {
-      for await (const entry of this.composeClient.streamLogs(projectName, serviceName ?? undefined, 100, session.signal)) {
-        if (!active()) return;
-        if (!received) { received = true; this.secondaryComposeLogReconnect.reset(); status('live'); }
-        this.secondaryComposeLogs.push(entry);
-        if (this.secondaryComposeLogs.length > MAX_LOG_LINES) this.secondaryComposeLogs.shift();
-        this.scheduleSecondaryComposeLogFlush(projectName, serviceName);
-      }
-      if (!active()) return;
-      this.flushSecondaryComposeLogs(projectName, serviceName);
-      if (!active()) return;
-      if (received) this.secondaryComposeLogReconnect.reset();
-      status(received ? 'ended' : 'empty');
-    } catch (error) {
-      if (!active()) return;
-      status('reconnecting', errorMessage(error));
-    }
-    if (!active()) return;
-    this.reconnectStream(
-      this.secondaryComposeLogReconnect,
-      () => active() && !this.secondaryComposeLogAborted
-        && this.secondaryComposeLogProject === projectName
-        && this.secondaryComposeLogService === serviceName,
-      () => { void this.streamSecondaryComposeLogs(projectName, serviceName); },
-      () => status('error', 'Stream could not reconnect. Retry to connect again.'),
-    );
-  }
-
-  private stopSecondaryComposeLogStream(): void {
-    this.secondaryComposeLogSession.stop();
-    this.secondaryComposeLogReconnect.clear();
-    this.secondaryComposeLogReconnect.reset();
-    if (this.secondaryComposeLogProject) {
-      this.flushSecondaryComposeLogs(this.secondaryComposeLogProject, this.secondaryComposeLogService);
-    }
-    this.secondaryComposeLogAborted = true;
-    this.secondaryComposeLogProject = null;
-    this.secondaryComposeLogService = null;
-    this.secondaryComposeLogs = [];
-    if (this.secondaryComposeLogFlushTimer) {
-      clearTimeout(this.secondaryComposeLogFlushTimer);
-      this.secondaryComposeLogFlushTimer = null;
-    }
-  }
-
-  private scheduleSecondaryComposeLogFlush(projectName: string, serviceName: string | null): void {
-    if (this.secondaryComposeLogFlushTimer || this.disposed) return;
-    this.secondaryComposeLogFlushTimer = setTimeout(() => {
-      this.secondaryComposeLogFlushTimer = null;
-      this.flushSecondaryComposeLogs(projectName, serviceName);
-    }, 100);
-  }
-
-  private flushSecondaryComposeLogs(projectName: string, serviceName: string | null): void {
-    if (this.disposed || this.secondaryComposeLogProject !== projectName || this.secondaryComposeLogService !== serviceName) return;
-    this.callbacks.onComposeLogs(
-      projectName,
-      serviceName,
-      this.secondaryComposeLogs.map(serializeLogEntry),
-    );
-  }
-
-  private scheduleLogFlush(containerId: string): void {
-    if (this.logFlushTimer || this.disposed) return;
-    this.logFlushTimer = setTimeout(() => {
-      this.logFlushTimer = null;
-      this.flushLogs(containerId);
-    }, 100);
-  }
-
-  private flushLogs(containerId: string): void {
-    if (this.disposed || this.logContainerId !== containerId) return;
-    const analytics = new LogAnalytics();
-    for (const entry of this.logs) {
-      analytics.push(entry.message);
-    }
-    this.callbacks.onLogsChange(
-      containerId,
-      this.logs.map(serializeLogEntry),
-      analytics.getCounts(),
-    );
-  }
-
-  private scheduleComposeLogFlush(projectName: string, serviceName: string | null): void {
-    if (this.composeLogFlushTimer || this.disposed) return;
-    this.composeLogFlushTimer = setTimeout(() => {
-      this.composeLogFlushTimer = null;
-      this.flushComposeLogs(projectName, serviceName);
-    }, 100);
-  }
-
-  private flushComposeLogs(projectName: string, serviceName: string | null): void {
-    if (this.disposed || this.composeLogProject !== projectName || this.composeLogService !== serviceName) return;
-    this.callbacks.onComposeLogs(
-      projectName,
-      serviceName,
-      this.composeLogs.map(serializeLogEntry),
-    );
+    this.composeLogSlot.ensure({ project: projectName, service: serviceName });
   }
 
   // ─── Actions ─────────────────────────────────────────────────────
@@ -991,43 +535,36 @@ export class DockerService {
   async startContainer(id: string): Promise<void> {
     await this.client.startContainer(id);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   async stopContainer(id: string): Promise<void> {
     await this.client.stopContainer(id);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   async restartContainer(id: string): Promise<void> {
     await this.client.restartContainer(id);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   async pauseContainer(id: string): Promise<void> {
     await this.client.pauseContainer(id);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   async unpauseContainer(id: string): Promise<void> {
     await this.client.unpauseContainer(id);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   async removeContainer(id: string): Promise<void> {
     await this.client.removeContainer(id, true);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   async removeImage(id: string): Promise<void> {
     await this.client.removeImage(id);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   /** Returns the outcome detail so the toast can report reclaimed space. */
@@ -1038,7 +575,6 @@ export class DockerService {
   async pruneContainers(): Promise<string> {
     const { containersDeleted, spaceReclaimed } = await this.client.pruneContainers();
     await this.refresh();
-    this.scheduleStateUpdate();
     const n = containersDeleted.length;
     return `Pruned ${n} container${n === 1 ? '' : 's'} \u2014 ${formatBytes(spaceReclaimed)} reclaimed`;
   }
@@ -1046,33 +582,28 @@ export class DockerService {
   async pruneImages(): Promise<string> {
     const { spaceReclaimed } = await this.client.pruneImages();
     await this.refresh();
-    this.scheduleStateUpdate();
     return `Pruned images — ${formatBytes(spaceReclaimed)} reclaimed`;
   }
 
   async removeVolume(name: string): Promise<void> {
     await this.client.removeVolume(name);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   async pruneVolumes(): Promise<string> {
     const { spaceReclaimed } = await this.client.pruneVolumes();
     await this.refresh();
-    this.scheduleStateUpdate();
     return `Pruned volumes — ${formatBytes(spaceReclaimed)} reclaimed`;
   }
 
   async removeNetwork(id: string): Promise<void> {
     await this.client.removeNetwork(id);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   async pruneNetworks(): Promise<string> {
     const { networksDeleted } = await this.client.pruneNetworks();
     await this.refresh();
-    this.scheduleStateUpdate();
     const n = networksDeleted.length;
     return `Pruned ${n} network${n === 1 ? '' : 's'}`;
   }
@@ -1086,7 +617,7 @@ export class DockerService {
    * inspect one of the project's containers to recover it.
    */
   private async composeCwd(projectName: string): Promise<ComposeCommandOptions> {
-    const project = this.composeProjects.find(p => p.name === projectName);
+    const project = this.store.getSnapshot().composeProjects.find(p => p.name === projectName);
     let workingDir = project?.workingDir;
     let configFile = project?.configFile;
     let configFiles = project?.configFiles;
@@ -1114,7 +645,6 @@ export class DockerService {
   private async runCompose(action: string, exec: Promise<ComposeExecResult>): Promise<void> {
     throwIfComposeFailed(await exec, action);
     await this.refresh();
-    this.scheduleStateUpdate();
   }
 
   /**
@@ -1150,7 +680,7 @@ export class DockerService {
   }
 
   getContainerName(containerId: string): string | undefined {
-    return this.containers.find(c => c.id === containerId)?.name;
+    return this.store.getSnapshot().containers.find(c => c.id === containerId)?.name;
   }
 
   /** Human-readable name for an item, used in action feedback (progress/success/error). */
@@ -1159,13 +689,13 @@ export class DockerService {
       case 'containers':
         return this.getContainerName(itemId) ?? shortId(itemId);
       case 'images': {
-        const image = this.images.find(i => i.id === itemId);
+        const image = this.store.getSnapshot().images.find(i => i.id === itemId);
         return image?.repoTags[0] ?? shortId(itemId);
       }
       case 'volumes':
         return itemId;
       case 'networks':
-        return this.networks.find(n => n.id === itemId)?.name ?? shortId(itemId);
+        return this.store.getSnapshot().networks.find(n => n.id === itemId)?.name ?? shortId(itemId);
       case 'services': {
         // itemId format: "project:projectName" or "service:projectName:serviceName"
         const parts = itemId.split(':');
@@ -1178,19 +708,16 @@ export class DockerService {
     }
   }
 
+  /** Explicit user refresh: also re-read the compose file even if it looks unchanged. */
   async forceRefresh(): Promise<void> {
-    await this.refresh();
-    this.scheduleStateUpdate();
+    await this.store.refresh({ reloadCompose: true });
   }
 
   dispose(): void {
     this.disposed = true;
-    this.stopLogStream();
-    this.stopStatsStream();
+    this.stopAllStreams();
     this.statsSampler.dispose();
-    this.stopComposeLogStream();
-    this.stopSecondaryLogStream();
-    this.stopSecondaryComposeLogStream();
+    this.store.dispose();
     if (this.debounceTimer) clearTimeout(this.debounceTimer);
     this.stopLiveInfrastructure();
     this.client.dispose();

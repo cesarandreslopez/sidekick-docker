@@ -3,7 +3,10 @@ import { DockerService } from './DockerService';
 import type { DockerServiceCallbacks } from './DockerService';
 import type { LogEntry, ContainerInfo } from 'sidekick-docker-shared';
 
-const mocks = vi.hoisted(() => ({ containers: vi.fn(), images: vi.fn(), logs: vi.fn(), stats: vi.fn(), composeLogs: vi.fn(), env: vi.fn(), changes: vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  containers: vi.fn(), images: vi.fn(), logs: vi.fn(), stats: vi.fn(), composeLogs: vi.fn(), env: vi.fn(), changes: vi.fn(),
+  watcher: null as null | { onEvent: (e: unknown) => void },
+}));
 vi.mock('sidekick-docker-shared', async importOriginal => {
   const actual = await importOriginal<typeof import('sidekick-docker-shared')>();
   return { ...actual,
@@ -13,6 +16,10 @@ vi.mock('sidekick-docker-shared', async importOriginal => {
       listImages = mocks.images;
       listVolumes = async () => [];
       listNetworks = async () => [];
+      listResources = async () => {
+        const [containers, images, volumes, networks] = await Promise.allSettled([mocks.containers(), mocks.images(), Promise.resolve([]), Promise.resolve([])]);
+        return { containers, images, volumes, networks };
+      };
       streamLogs = mocks.logs;
       streamStats = mocks.stats;
       getContainerEnv = mocks.env;
@@ -21,7 +28,11 @@ vi.mock('sidekick-docker-shared', async importOriginal => {
     },
     ComposeClient: class { streamLogs = mocks.composeLogs; },
     ComposeFileReader: class { readFromDirectory = async () => null; },
-    EventWatcher: class { start() {} stop() {} },
+    EventWatcher: class {
+      constructor(_client: unknown, callbacks: { onEvent: (e: unknown) => void }) { mocks.watcher = callbacks; }
+      start() {}
+      stop() {}
+    },
   };
 });
 
@@ -106,11 +117,11 @@ describe('DockerService lifecycle', () => {
     const first = deferred<ContainerInfo[]>();
     mocks.containers.mockReturnValueOnce(first.promise).mockResolvedValue([container('new')]);
     mocks.images.mockRejectedValue(new Error('images denied'));
-    const refresh = service.forceRefresh();
-    void service.forceRefresh(); void service.forceRefresh();
+    const refreshes = [service.forceRefresh(), service.forceRefresh(), service.forceRefresh()];
     expect(mocks.containers).toHaveBeenCalledTimes(1);
     first.resolve([container('old')]);
-    await refresh;
+    await Promise.all(refreshes);
+    // One pass in flight plus exactly one shared follow-up pass.
     expect(mocks.containers).toHaveBeenCalledTimes(2);
     expect(service.getStateSnapshot()).toMatchObject({ containers: [{ id: 'new' }], daemonConnected: true, resourceErrors: { images: 'images denied' } });
     await tick();
@@ -138,5 +149,39 @@ describe('DockerService lifecycle', () => {
     expect(callbacks.onStateChange).not.toHaveBeenCalled();
     expect(callbacks.onEnvLoaded).not.toHaveBeenCalled();
     expect(callbacks.onDetailLoad).not.toHaveBeenCalled();
+  });
+
+  it('ends a stopped container\'s log stream after its backlog instead of replaying it', async () => {
+    mocks.containers.mockResolvedValue([{ ...container('A'), state: 'exited', status: 'Exited (0)' }]);
+    mocks.logs.mockImplementation(async function* () { yield log('last words'); });
+    await service.initialize();
+    service.setViewState({ selectedItemId: 'A' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.logs).toHaveBeenCalledTimes(1);
+    expect(callbacks.onStreamState).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'logs', itemId: 'A', state: 'ended' }));
+    expect(vi.mocked(callbacks.onLogsChange).mock.calls.at(-1)?.[1].map(l => l.message)).toEqual(['last words']);
+  });
+
+  it('ignores healthcheck exec events and debounces image events', async () => {
+    mocks.containers.mockResolvedValue([container('A')]);
+    await service.initialize();
+    await tick();
+    vi.mocked(callbacks.onStateChange).mockClear();
+    mocks.containers.mockClear();
+    const event = (type: string, resourceType = 'container') => ({ type, resourceType, resourceId: 'A', timestamp: new Date(), attributes: {} });
+    for (let i = 0; i < 20; i++) {
+      mocks.watcher?.onEvent(event('exec_create: /bin/sh -c true'));
+      mocks.watcher?.onEvent(event('exec_die'));
+    }
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(callbacks.onStateChange).not.toHaveBeenCalled();
+    expect(mocks.containers).not.toHaveBeenCalled();
+
+    mocks.watcher?.onEvent(event('pull', 'image'));
+    mocks.watcher?.onEvent(event('tag', 'image'));
+    await vi.advanceTimersByTimeAsync(499);
+    expect(mocks.containers).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(mocks.containers).toHaveBeenCalledTimes(1);
   });
 });
