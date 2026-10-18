@@ -2,6 +2,7 @@ import type { WebviewMessage } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
 import type { WebviewState, ToastSeverity } from './state';
 import { SORT_OPTIONS } from './state';
+import { sortDirectionLabel } from 'sidekick-docker-shared/formatters';
 
 /** Callbacks/state the global keydown handler needs from the dashboard. */
 export interface KeyboardContext {
@@ -203,7 +204,7 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
       e.preventDefault();
       state.sortReversed = !state.sortReversed;
       ctx.post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
-      ctx.addToast(`Sort: ${state.sortReversed ? 'descending' : 'ascending'}`, 'info');
+      ctx.addToast(`Sort: ${state.sortField}, ${sortDirectionLabel(state.sortField, state.sortReversed)}`, 'info');
       ctx.renderSortOverlay();
       ctx.renderAll();
       return;
@@ -354,7 +355,7 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     e.preventDefault();
     state.sortReversed = !state.sortReversed;
     ctx.post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
-    ctx.addToast(`Sort: ${state.sortReversed ? 'descending' : 'ascending'}`, 'info');
+    ctx.addToast(`Sort: ${state.sortField}, ${sortDirectionLabel(state.sortField, state.sortReversed)}`, 'info');
     ctx.renderAll();
     return;
   }

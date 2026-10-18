@@ -181,7 +181,9 @@ function containerSortCompare(a: PanelItem, b: PanelItem, field: SortField): num
   const sa = state.stats.get(a.id);
   const sb = state.stats.get(b.id);
   switch (field) {
-    case 'name': return a.label.localeCompare(b.label);
+    // Full names: labels are truncated to 22 characters, so names sharing a
+    // long prefix compared equal.
+    case 'name': return containerName(a).localeCompare(containerName(b));
     case 'cpu': return (sb?.stats?.cpuPercent ?? 0) - (sa?.stats?.cpuPercent ?? 0);
     case 'mem': return (sb?.stats?.memoryPercent ?? 0) - (sa?.stats?.memoryPercent ?? 0);
     case 'net': return ((sb?.stats?.networkRx ?? 0) + (sb?.stats?.networkTx ?? 0)) - ((sa?.stats?.networkRx ?? 0) + (sa?.stats?.networkTx ?? 0));
@@ -189,6 +191,10 @@ function containerSortCompare(a: PanelItem, b: PanelItem, field: SortField): num
     case 'pids': return (sb?.stats?.pids ?? 0) - (sa?.stats?.pids ?? 0);
     default: return a.sortKey - b.sortKey;
   }
+}
+
+function containerName(item: PanelItem): string {
+  return state.snapshot?.containers.find(c => c.id === item.id)?.name ?? item.label;
 }
 
 function getSelectedItem(items: PanelItem[]): PanelItem | undefined {

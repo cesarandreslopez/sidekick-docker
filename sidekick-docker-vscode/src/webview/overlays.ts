@@ -4,6 +4,7 @@ import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/type
 import type { WebviewState } from './state';
 import { SORT_OPTIONS } from './state';
 import { escapeHtml } from './formatters';
+import { sortDirectionLabel } from 'sidekick-docker-shared/formatters';
 
 export const GLOBAL_KEYBINDINGS = [
   { key: '1-5', label: 'Switch panel' },
@@ -276,7 +277,7 @@ export function renderSortOverlay(): void {
     const opt = SORT_OPTIONS[i];
     const selected = i === state.sortMenuIndex ? ' selected' : '';
     const current = opt.field === state.sortField;
-    const indicator = current ? (state.sortReversed ? ' \u25B2' : ' \u25BC') : '';
+    const indicator = current ? ` \u00B7 ${sortDirectionLabel(opt.field, state.sortReversed)}` : '';
     const currentClass = current ? ' current' : '';
     html += `<button type="button" class="sort-item${selected}${currentClass}" data-idx="${i}">${escapeHtml(opt.label)}${indicator}</button>`;
   }
