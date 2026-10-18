@@ -78,6 +78,7 @@ function makeCtx(overrides: Partial<KeyContext> = {}): KeyContext {
     sideScroll: { selectNext: vi.fn(), selectPrev: vi.fn(), selectFirst: vi.fn(), selectLast: vi.fn(), setSelected: vi.fn() },
     addToast: vi.fn().mockReturnValue(1),
     exit: vi.fn(),
+    refresh: vi.fn(),
     secondaryDetailLineCount: 0,
     ...overrides,
   };
@@ -121,6 +122,7 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
       { input: '', key: bareKey({ pageDown: true }), id: 'page-scroll' },
       { input: '', key: bareKey({ pageUp: true }), id: 'page-scroll' },
       { input: 'd', key: bareKey({ ctrl: true }), id: 'half-page-scroll' },
+      { input: 'r', key: bareKey({ ctrl: true }), id: 'refresh' },
       { input: 'u', key: bareKey({ ctrl: true }), id: 'half-page-scroll' },
       { input: '', key: bareKey({ escape: true }), id: 'escape' },
     ];
@@ -207,5 +209,13 @@ describe('buildContextHint', () => {
     const networks = makePanel('networks');
     const hint = buildContextHint(makeCtx({ panel: networks, detailTabs: networks.detailTabs }));
     expect(hint).toBe('');
+  });
+
+  it('Ctrl+R refreshes while a bare r still reaches the Restart action', () => {
+    const ctx = makeCtx();
+    const spec = GLOBAL_BINDINGS.find(b => b.match('r', bareKey({ ctrl: true })));
+    spec?.run(ctx, 'r', bareKey({ ctrl: true }));
+    expect(ctx.refresh).toHaveBeenCalledTimes(1);
+    expect(GLOBAL_BINDINGS.some(b => b.match('r', bareKey()))).toBe(false);
   });
 });

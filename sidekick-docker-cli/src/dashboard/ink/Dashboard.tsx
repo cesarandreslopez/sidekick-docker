@@ -199,6 +199,8 @@ interface DashboardProps {
   onExecFallback?: (containerId: string) => Promise<void>;
   /** Endpoint overrides for the spawned `docker exec` process (see `dockerCliEnv`). */
   dockerEnv?: Record<string, string>;
+  /** Re-fetch everything now; resolves with the resources that could not be refreshed. */
+  onRefresh?: () => Promise<string[]>;
 }
 
 export interface DashboardViewState {
@@ -209,7 +211,7 @@ export interface DashboardViewState {
   compareItemId: string | null;
 }
 
-export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv }: DashboardProps): React.ReactElement {
+export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { columns, rows } = useTerminalSize();
   const { exit, suspendTerminal } = useApp();
@@ -548,10 +550,23 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
 
   // Full context for key handlers — adds dispatch/addToast/exit, which close
   // over refs and must therefore never reach a render-time call.
+  const refresh = useCallback(() => {
+    if (!onRefresh) return;
+    const id = addToast('Refreshing…', 'info', undefined, { progress: true });
+    onRefresh().then((failed) => {
+      removeToast(id);
+      if (failed.length) addToast(`Refreshed — ${failed.join(', ')} unavailable`, 'warning');
+      else addToast('Refreshed', 'success', 1500);
+    }, (err: unknown) => {
+      removeToast(id);
+      addToast(`Refresh failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
+    });
+  }, [onRefresh, addToast, removeToast]);
+
   const keyCtx: KeyContext = {
     ...keyQueryCtx,
     dispatch, panels, clampedSelection, currentItems, detailLines,
-    detailViewportHeight: scrollViewportHeight, sideScroll, addToast, exit,
+    detailViewportHeight: scrollViewportHeight, sideScroll, addToast, exit, refresh,
   };
 
   // Keyboard input (extracted hook)

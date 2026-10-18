@@ -37,6 +37,10 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   const state = new DockerState(client, cwd, () => stateChanged(), { cliEnv });
   await state.refresh();
 
+  // Ctrl+R: an explicit refresh also re-reads the compose file.
+  const onRefresh = () => state.refresh({ reloadCompose: true })
+    .then(() => Object.keys(state.getMetrics().resourceErrors ?? {}));
+
   // Action callback — refresh state after any mutation
   const onAction = () => {
     state.refresh().then(() => scheduleRender()).catch((e: unknown) => { debugLog('refresh failed:', e); });
@@ -63,6 +67,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           execTriggerRef,
           onExecFallback,
           dockerEnv: cliEnv,
+          onRefresh,
         }),
       );
     }, 200);
@@ -349,6 +354,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       execTriggerRef,
       onExecFallback,
       dockerEnv: cliEnv,
+      onRefresh,
     }),
   );
 

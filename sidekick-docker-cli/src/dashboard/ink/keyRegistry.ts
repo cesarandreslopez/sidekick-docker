@@ -41,6 +41,8 @@ export interface KeyContext extends KeyQueryContext {
   };
   addToast: (message: string, severity: ToastSeverity, duration?: number) => number;
   exit: () => void;
+  /** Re-fetch everything now (Ctrl+R); feedback is the caller's toast. */
+  refresh: () => void;
 }
 
 export type KeyCategory = 'Navigation' | 'View' | 'Filters & Sort' | 'System';
@@ -120,6 +122,15 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     label: 'Version info',
     category: 'System',
     run: (ctx) => ctx.dispatch({ type: 'SET_OVERLAY', overlay: 'version' }),
+  },
+  {
+    id: 'refresh',
+    keys: ['Ctrl+R'],
+    // Ctrl+R, not F5: Ink reports F5 with no key flag at all.
+    match: (input, key) => key.ctrl && input === 'r',
+    label: 'Refresh now',
+    category: 'System',
+    run: (ctx) => ctx.refresh(),
   },
   {
     id: 'panel-switch',
