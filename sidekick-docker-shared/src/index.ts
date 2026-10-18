@@ -42,6 +42,9 @@ export type { LogTemplate, TemplateDiagnostics } from './log/LogTemplateEngine';
 // Events
 export { EventWatcher } from './events/EventWatcher';
 export type { EventWatcherCallbacks } from './events/EventWatcher';
+export { FollowStream } from './events/FollowStream';
+export type { FollowStreamState, FollowStreamOptions } from './events/FollowStream';
+export { LogResumeCursor } from './events/LogResumeCursor';
 
 // Formatters
 export {
