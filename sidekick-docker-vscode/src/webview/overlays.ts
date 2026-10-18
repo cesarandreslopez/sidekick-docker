@@ -3,7 +3,7 @@ declare const __VERSION__: string;
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
 import type { WebviewState } from './state';
 import { SORT_OPTIONS } from './state';
-import { escapeHtml } from './formatters';
+import { escapeHtml, escapeAttr } from './formatters';
 import { sortDirectionLabel } from 'sidekick-docker-shared/formatters';
 
 export const GLOBAL_KEYBINDINGS = [
@@ -238,11 +238,13 @@ export function showContextMenu(items: PanelItem[], anchor?: { x: number; y: num
   $contextMenu.style.left = `${x}px`;
   $contextMenu.style.top = `${y}px`;
   $contextMenu.classList.add('visible');
+  $contextMenu.focus();
 }
 
 export function hideContextMenu(): void {
   deps.state.contextMenuVisible = false;
   $contextMenu.classList.remove('visible');
+  if (document.activeElement === $contextMenu) document.getElementById('side-list')?.focus();
 }
 
 export function renderContextMenu(actions: ActionDefinition[]): void {
@@ -250,9 +252,12 @@ export function renderContextMenu(actions: ActionDefinition[]): void {
   for (let i = 0; i < actions.length; i++) {
     const a = actions[i];
     const selected = i === deps.state.contextMenuIndex ? ' selected' : '';
-    html += `<div class="menu-item${selected}" role="menuitem" data-idx="${i}" data-action="${a.actionType}">${a.label}<span class="key">${a.key}</span></div>`;
+    html += `<div class="menu-item${selected}" role="menuitem" id="menu-item-${i}" data-idx="${i}" data-action="${escapeAttr(a.actionType)}">${escapeHtml(a.label)}<span class="key" aria-hidden="true">${escapeHtml(a.key)}</span></div>`;
   }
   $contextMenu.innerHTML = html;
+  // The menu is driven from the keyboard handler (j/k/Enter); tell assistive
+  // tech which item that is.
+  $contextMenu.setAttribute('aria-activedescendant', `menu-item-${deps.state.contextMenuIndex}`);
 
   $contextMenu.querySelectorAll('.menu-item').forEach(el => {
     el.addEventListener('click', () => {

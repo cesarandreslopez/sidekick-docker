@@ -232,3 +232,50 @@ export function renderSeverityBadges(counts: { error: number; warn: number; info
   if (counts.debug > 0) badges.push(`<span class="sev-badge debug">D:${counts.debug}</span>`);
   return badges.join('');
 }
+
+/**
+ * Screen-reader name for a side-list row. State used to be carried only by
+ * the icon's colour and glyph, so "web" read the same running or stopped.
+ */
+export function optionAccessibleName(item: { label: string; group?: string; badge?: string; health?: string }, pinned = false): string {
+  return [
+    item.label,
+    item.group?.toLowerCase(),
+    item.badge,
+    item.health ? `health ${item.health}` : '',
+    pinned ? 'pinned for comparison' : '',
+  ].filter(Boolean).join(', ');
+}
+
+/** Index of the tab an arrow/Home/End key moves to (wrapping), or null for other keys. */
+export function rovingTabIndex(key: string, current: number, count: number): number | null {
+  if (count <= 0) return null;
+  switch (key) {
+    case 'ArrowRight': return (current + 1) % count;
+    case 'ArrowLeft': return (current - 1 + count) % count;
+    case 'Home': return 0;
+    case 'End': return count - 1;
+    default: return null;
+  }
+}
+
+/**
+ * Status-bar hint text: the selected item's action keys, then (containers)
+ * the all/running toggle and the sort. Worded like the TUI — `a:` names the
+ * *current* view, the sort says its direction in words.
+ */
+export function buildStatusHints(opts: {
+  actions: readonly { key: string; label: string }[];
+  panelId: string;
+  showAllContainers: boolean;
+  sortLabel: string;
+  sortDirection: string;
+}): string {
+  const parts = opts.actions.map(a => `${a.key}:${a.label}`);
+  if (opts.panelId === 'containers') {
+    parts.push(opts.showAllContainers ? 'a:All' : 'a:Running');
+    parts.push(`\u2195${opts.sortLabel} \u00B7 ${opts.sortDirection}`);
+  }
+  return parts.join('  ');
+}
+

@@ -12,7 +12,7 @@ function findContainer(id: string, snapshot: DashboardStateSnapshot): Serialized
 
 function renderSingleLogPane(containerId: string, state: WebviewState, logRoot: string): string {
   const entries = state.logs.get(containerId);
-  if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
+  if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
 
   const firstKey = `${entries[0]?.timestamp ?? ''}:${entries[0]?.stream ?? ''}:${entries[0]?.message ?? ''}`;
   let html = `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeAttr(containerId)}" data-rendered-count="${entries.length}" data-first-key="${escapeAttr(firstKey)}">`;
@@ -217,7 +217,7 @@ export const containersPanel: PanelDefinition = {
         if (!c) return '';
         const keys = Object.keys(c.labels).sort();
         if (keys.length === 0) {
-          return '<div class="empty-state"><div class="empty-icon">\u{1F3F7}</div><div class="empty-title">No labels</div><div class="empty-subtitle">This container has no labels set</div></div>';
+          return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F3F7}</div><div class="empty-title">No labels</div><div class="empty-subtitle">This container has no labels set</div></div>';
         }
         return renderKvGrid(keys.map((k): [string, string] => [k, escapeHtml(c.labels[k])]));
       },
@@ -227,7 +227,7 @@ export const containersPanel: PanelDefinition = {
       render: (item: PanelItem, state: WebviewState): string => {
         const changes = state.containerChanges.get(item.id);
         if (!changes) return 'Loading filesystem changes...';
-        if (changes.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4C2}</div><div class="empty-title">No filesystem changes</div><div class="empty-subtitle">No changes detected in the container\'s filesystem</div></div>';
+        if (changes.length === 0) return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4C2}</div><div class="empty-title">No filesystem changes</div><div class="empty-subtitle">No changes detected in the container\'s filesystem</div></div>';
 
         let html = `<div style="font-size:12px;color:var(--vscode-descriptionForeground);margin-bottom:6px;">Filesystem Changes (${changes.length} files)</div>`;
         for (const c of changes) {
@@ -243,7 +243,7 @@ export const containersPanel: PanelDefinition = {
       render: (item: PanelItem, state: WebviewState): string => {
         const entries = state.logs.get(item.id);
         if (!entries || entries.length === 0) {
-          return '<div class="empty-state"><div class="empty-icon">\u{1F50D}</div><div class="empty-title">No patterns yet</div><div class="empty-subtitle">Patterns will appear as logs stream in</div></div>';
+          return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F50D}</div><div class="empty-title">No patterns yet</div><div class="empty-subtitle">Patterns will appear as logs stream in</div></div>';
         }
 
         // Compute templates from current log entries

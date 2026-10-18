@@ -14,7 +14,8 @@ import { servicesPanel } from './panels/services';
 import { imagesPanel } from './panels/images';
 import { volumesPanel } from './panels/volumes';
 import { networksPanel } from './panels/networks';
-import { colorizeLogEntry, escapeHtml, escapeAttr, renderSeverityBadges } from './formatters';
+import { colorizeLogEntry, escapeHtml, escapeAttr, renderSeverityBadges, optionAccessibleName, rovingTabIndex, buildStatusHints } from './formatters';
+import { sortDirectionLabel } from 'sidekick-docker-shared/formatters';
 import {
   initOverlays,
   showConfirm,
@@ -282,7 +283,7 @@ function addToast(message: string, severity: ToastSeverity): void {
 
 // ─── Empty state helpers ──────────────────────────────────────────────
 function renderEmptyState(emoji: string, title: string, subtitle: string): string {
-  return `<div class="empty-state"><div class="empty-icon">${emoji}</div><div class="empty-title">${escapeHtml(title)}</div><div class="empty-subtitle">${escapeHtml(subtitle)}</div></div>`;
+  return `<div class="empty-state"><div class="empty-icon" aria-hidden="true">${emoji}</div><div class="empty-title">${escapeHtml(title)}</div><div class="empty-subtitle">${escapeHtml(subtitle)}</div></div>`;
 }
 
 function renderEmptyStateSide(panelId: string): string {
@@ -294,7 +295,7 @@ function renderEmptyStateSide(panelId: string): string {
     networks: { emoji: '\u{1F310}', title: 'No networks', subtitle: 'Networks will appear when created' },
   };
   const s = emptyStates[panelId] ?? { emoji: '\u{1F4AD}', title: 'Nothing here', subtitle: '' };
-  return `<div class="empty-state-side"><div class="empty-icon">${s.emoji}</div><div class="empty-title">${escapeHtml(s.title)}</div><div class="empty-subtitle">${escapeHtml(s.subtitle)}</div></div>`;
+  return `<div class="empty-state-side"><div class="empty-icon" aria-hidden="true">${s.emoji}</div><div class="empty-title">${escapeHtml(s.title)}</div><div class="empty-subtitle">${escapeHtml(s.subtitle)}</div></div>`;
 }
 
 // ─── Rendering ───────────────────────────────────────────────────────
@@ -348,7 +349,7 @@ function renderTabBar(): void {
   for (let i = 0; i < panels.length; i++) {
     const p = panels[i];
     const active = i === state.activePanelIndex;
-    html += `<div class="tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="0" data-panel="${i}"><span class="shortcut">${p.shortcutKey}</span>${p.title}</div>`;
+    html += `<div class="tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="${active ? 0 : -1}" data-panel="${i}"><span class="shortcut">${p.shortcutKey}</span>${p.title}</div>`;
   }
   html += `<div class="phrase">${escapeHtml(state.phrase)}</div>`;
   if (!replaceContent($tabBar, html)) return;
@@ -389,7 +390,7 @@ function renderSideList(items: PanelItem[]): void {
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     if (item.group !== undefined && item.group !== lastGroup) {
-      html += `<div class="side-group-header">${escapeHtml(item.group)}</div>`;
+      html += `<div class="side-group-header" role="presentation">${escapeHtml(item.group)}</div>`;
       lastGroup = item.group;
     }
     const isSelected = item.id === state.selectedItemId;
@@ -407,7 +408,7 @@ function renderSideList(items: PanelItem[]): void {
       ? `<button type="button" class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeAttr(item.label)} for comparison" aria-pressed="${isPinned}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}" tabindex="${isSelected ? 0 : -1}">\u{1F4CC}</button>`
       : '';
     const actionsBtnHtml = `<button type="button" class="row-actions-btn" data-menu-id="${escapeAttr(item.id)}" aria-label="Actions for ${escapeAttr(item.label)}" title="Actions" tabindex="${isSelected ? 0 : -1}">\u22EF</button>`;
-    html += `<div class="side-item${isSelected ? ' selected' : ''}${pinClass}" role="option" id="${rowId}" aria-selected="${isSelected}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${healthHtml}${pinBtnHtml}${actionsBtnHtml}${badgeHtml}</div>`;
+    html += `<div class="side-item${isSelected ? ' selected' : ''}${pinClass}" role="option" id="${rowId}" aria-selected="${isSelected}" aria-label="${escapeAttr(optionAccessibleName(item, isPinned))}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${healthHtml}${pinBtnHtml}${actionsBtnHtml}${badgeHtml}</div>`;
   }
   if (!replaceContent($sideList, html)) return;
   if (selectedRowId) {
@@ -455,7 +456,7 @@ function renderDetailTabBar(): void {
   for (let i = 0; i < panel.detailTabs.length; i++) {
     const t = panel.detailTabs[i];
     const active = i === state.detailTabIndex;
-    html += `<div class="detail-tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="0" data-tab="${i}">${t.label}</div>`;
+    html += `<div class="detail-tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="${active ? 0 : -1}" data-tab="${i}">${t.label}</div>`;
   }
   if (!replaceContent($detailTabBar, html)) return;
 
@@ -554,20 +555,13 @@ function renderStatusBar(items: PanelItem[]): void {
 
   // Build contextual hints from panel actions + global features
   const item = getSelectedItem(items);
-  const hintParts: string[] = [];
-
-  if (item && snapshot) {
-    const actions = getPanel().getActions(item, snapshot);
-    hintParts.push(...actions.map(a => `${a.key}:${a.label}`));
-  }
-
-  // Panel-specific hints
-  if (getPanel().id === 'containers') {
-    hintParts.push(`a:${state.showAllContainers ? 'Running only' : 'Show all'}`);
-    const sortLabel = SORT_OPTIONS.find(o => o.field === state.sortField)?.label ?? state.sortField;
-    hintParts.push(`\u2195${sortLabel}${state.sortReversed ? '\u25B2' : '\u25BC'}`);
-  }
-  const hints = hintParts.join('  ');
+  const hints = buildStatusHints({
+    actions: item && snapshot ? getPanel().getActions(item, snapshot) : [],
+    panelId: getPanel().id,
+    showAllContainers: state.showAllContainers,
+    sortLabel: SORT_OPTIONS.find(o => o.field === state.sortField)?.label ?? state.sortField,
+    sortDirection: sortDirectionLabel(state.sortField, state.sortReversed),
+  });
 
   // Trailing global hints are clickable chips (mouse path for overlays)
   const chipsHtml = '<button type="button" class="hint-chip" data-hint-action="filter">/ filter</button>'
@@ -582,7 +576,7 @@ function renderStatusBar(items: PanelItem[]): void {
     connText = 'connecting\u2026';
   } else if (state.connState === 'connected') {
     connDot = '<span class="dot connected" aria-hidden="true"></span>';
-    connText = `${runningCount}/${totalCount}`;
+    connText = `${runningCount}/${totalCount} running`;
   } else {
     connDot = '<span class="dot disconnected" aria-hidden="true"></span>';
     connText = 'disconnected';
@@ -951,16 +945,21 @@ document.addEventListener('focusin', (e) => {
   document.getElementById('detail-pane')!.classList.toggle('focused', state.focusTarget === 'detail');
 });
 
-// ARIA tab activation: Enter/Space on a focused role=tab element
+// ARIA tabs: Enter/Space activates the focused tab; arrows/Home/End move
+// between tabs (roving tabindex — only the active tab is in the Tab order).
 function activateTabOnKey(e: KeyboardEvent, datasetKey: 'panel' | 'tab', activate: (idx: number) => void): void {
-  if (e.key !== 'Enter' && e.key !== ' ') return;
   const tab = (e.target as HTMLElement).closest('[role="tab"]') as HTMLElement | null;
   if (!tab) return;
   const raw = tab.dataset[datasetKey];
   if (raw === undefined) return;
+  const bar = tab.parentElement;
+  const count = bar ? bar.querySelectorAll('[role="tab"]').length : 0;
+  const next = e.key === 'Enter' || e.key === ' ' ? parseInt(raw, 10) : rovingTabIndex(e.key, parseInt(raw, 10), count);
+  if (next === null) return;
   e.preventDefault();
   e.stopPropagation();
-  activate(parseInt(raw, 10));
+  activate(next);
+  (bar?.querySelector(`[data-${datasetKey}="${next}"]`) as HTMLElement | null)?.focus();
 }
 $tabBar.addEventListener('keydown', (e: KeyboardEvent) => activateTabOnKey(e, 'panel', switchPanel));
 $detailTabBar.addEventListener('keydown', (e: KeyboardEvent) => activateTabOnKey(e, 'tab', setDetailTab));

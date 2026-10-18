@@ -35,7 +35,7 @@ export const imagesPanel: PanelDefinition = {
       render: (item: PanelItem, state: WebviewState): string => {
         const layers = state.imageLayers.get(item.id);
         if (!layers) return 'Loading layers...';
-        if (layers.length === 0) return '<div class="empty-state"><div class="empty-icon">\u{1F4E6}</div><div class="empty-title">No layer history</div><div class="empty-subtitle">No layer history available for this image</div></div>';
+        if (layers.length === 0) return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4E6}</div><div class="empty-title">No layer history</div><div class="empty-subtitle">No layer history available for this image</div></div>';
 
         const total = layers.reduce((sum, l) => sum + l.size, 0);
         let html = `<div style="font-size:12px;color:var(--vscode-descriptionForeground);margin-bottom:6px;">${layers.length} layers, ${escapeHtml(formatBytes(total))} total</div>`;

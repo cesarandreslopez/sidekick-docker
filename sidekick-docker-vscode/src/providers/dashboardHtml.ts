@@ -162,6 +162,19 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       color: var(--vscode-list-activeSelectionForeground);
       border-left-color: var(--vscode-focusBorder, #2B4C7E);
     }
+    /* Unfocused list: the theme's inactive selection, as native VS Code lists do. */
+    #side-list:not(.focused) .side-item.selected {
+      background: var(--vscode-list-inactiveSelectionBackground, var(--vscode-list-activeSelectionBackground));
+      color: var(--vscode-list-inactiveSelectionForeground, var(--vscode-list-activeSelectionForeground));
+    }
+    /* High-contrast themes draw selection as an outline, not a fill. */
+    #side-list .side-item.selected,
+    #tab-bar .tab.active,
+    #detail-tab-bar .detail-tab.active,
+    #context-menu .menu-item.selected {
+      outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
+      outline-offset: -1px;
+    }
     #side-list .side-item.selected .side-badge {
       color: var(--vscode-list-activeSelectionForeground);
       opacity: 0.7;
@@ -1159,7 +1172,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     <span class="label">Filter:</span>
     <input type="text" id="filter-input" placeholder="Type to filter..." />
   </div>
-  <div id="context-menu"></div>
+  <div id="context-menu" role="menu" aria-label="Actions" tabindex="-1"></div>
   <div id="sort-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Sort options"></div>
   <div id="help-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Keyboard help"></div>
   <div id="version-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Version info"></div>
