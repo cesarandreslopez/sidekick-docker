@@ -74,3 +74,12 @@ export function buildContainerGroups(containers: ContainerInfo[]): ContainerGrou
 
   return groups;
 }
+
+/**
+ * Tree contextValue for a compose project group, so its menu can offer Down
+ * and Restart only where something is running (Up is always offered).
+ */
+export function composeGroupContextValue(project: ComposeProjectGroup): 'compose-project-group-running' | 'compose-project-group-stopped' {
+  return project.containers.some(c => c.state === 'running') ? 'compose-project-group-running' : 'compose-project-group-stopped';
+}
+

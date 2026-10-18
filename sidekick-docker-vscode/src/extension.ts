@@ -6,6 +6,8 @@ import { ContainerWatcherService } from './services/ContainerWatcherService';
 import { getSettings, onSettingsChanged } from './settings';
 import type { SidekickSettings } from './settings';
 import type { ContainerInfo } from 'sidekick-docker-shared';
+import { canStart, describeDockerEndpoint, removeContainerConfirmMessage } from 'sidekick-docker-shared';
+import type { ComposeProjectGroupItem } from './providers/ContainerTreeProvider';
 
 let dashboardProvider: DockerDashboardProvider | undefined;
 let watcherService: ContainerWatcherService | undefined;
@@ -55,16 +57,20 @@ function createWatcherService(settings: SidekickSettings): ContainerWatcherServi
       updateBadge(containers);
       updateStatusBar(containers, connected);
     },
-    onConnectionChanged: (connected) => {
+    onConnectionChanged: (connected, reason) => {
+      void vscode.commands.executeCommand('setContext', 'sidekickDocker.connecting', false);
+      // viewsWelcome text is static; the tree's message can say *why*.
+      if (treeView) treeView.message = connected ? undefined : reason;
       if (!connected) {
         treeProvider!.update([], false);
         updateBadge([]);
-        updateStatusBar([], false);
+        updateStatusBar([], false, reason);
       }
     },
   }, {
     clientOptions: settings.clientOptions,
     refreshIntervalMs: settings.refreshIntervalMs,
+    endpoint: settings.socketPath,
   });
 }
 
@@ -106,14 +112,16 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(treeView);
 
   // ── Status bar ──────────────────────────────────────────────────
-  statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+  statusBarItem = vscode.window.createStatusBarItem('sidekick-docker.status', vscode.StatusBarAlignment.Right, 100);
+  statusBarItem.name = 'Sidekick Docker';
   statusBarItem.command = 'sidekick-docker.openDashboard';
-  statusBarItem.tooltip = 'Sidekick Docker - Click to open dashboard';
   updateStatusBar([], false);
   if (settings.statusBarVisible) statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 
   // ── Container watcher ───────────────────────────────────────────
+  // Until the first connect settles, show "Connecting…" rather than "No containers found".
+  void vscode.commands.executeCommand('setContext', 'sidekickDocker.connecting', true);
   watcherService = createWatcherService(settings);
   watcherService.start();
   context.subscriptions.push({ dispose: () => watcherService?.dispose() });
@@ -208,7 +216,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!(item instanceof ContainerTreeItem)) return;
       const name = item.container.name;
       const choice = await vscode.window.showWarningMessage(
-        `Remove container "${name}"?`,
+        removeContainerConfirmMessage(item.container),
         { modal: true },
         'Remove',
       );
@@ -255,7 +263,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // ── Quick pick commands ─────────────────────────────────────
     vscode.commands.registerCommand('sidekick-docker.quickStart', async () => {
       const containers = watcherService?.getContainers() ?? [];
-      const stopped = containers.filter(c => c.state !== 'running');
+      // Not paused ones: Docker rejects start for those.
+      const stopped = containers.filter(c => canStart(c.state));
       if (stopped.length === 0) {
         vscode.window.showInformationMessage('No stopped containers to start.');
         return;
@@ -266,6 +275,19 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       if (!picked) return;
       await runContainerCommand('start', picked.label, client => client.startContainer(picked.containerId));
+    }),
+
+    // ── Compose project groups (tree context menu) ──────────────
+    vscode.commands.registerCommand('sidekick-docker.composeUp', (item?: ComposeProjectGroupItem) => runComposeCommand('up', item)),
+    vscode.commands.registerCommand('sidekick-docker.composeRestart', (item?: ComposeProjectGroupItem) => runComposeCommand('restart', item)),
+    vscode.commands.registerCommand('sidekick-docker.composeDown', async (item?: ComposeProjectGroupItem) => {
+      if (!item?.project) return;
+      const choice = await vscode.window.showWarningMessage(
+        `Take compose project "${item.project.projectName}" down? Its containers and networks are removed (volumes are kept).`,
+        { modal: true },
+        'Down',
+      );
+      if (choice === 'Down') await runComposeCommand('down', item);
     }),
 
     vscode.commands.registerCommand('sidekick-docker.quickStop', async () => {
@@ -306,17 +328,58 @@ function updateBadge(containers: ContainerInfo[]): void {
   treeView.badge = running > 0 ? { value: running, tooltip: `${running} running container${running !== 1 ? 's' : ''}` } : undefined;
 }
 
-function updateStatusBar(containers: ContainerInfo[], connected: boolean): void {
+function updateStatusBar(containers: ContainerInfo[], connected: boolean, reason?: string): void {
   if (!statusBarItem) return;
+  const endpoint = describeDockerEndpoint(getSettings().socketPath);
   if (!connected) {
     statusBarItem.text = '$(warning) Docker offline';
     statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    statusBarItem.tooltip = new vscode.MarkdownString(`**Docker offline** — ${endpoint}\n\n${reason ?? 'The daemon is not reachable.'}\n\nClick to open the dashboard.`);
+    statusBarItem.accessibilityInformation = { label: `Sidekick Docker: Docker offline. ${reason ?? ''}`.trim(), role: 'button' };
     return;
   }
   const running = containers.filter(c => c.state === 'running').length;
+  const unhealthy = containers.filter(c => c.healthStatus === 'unhealthy').length;
   const total = containers.length;
-  statusBarItem.text = `$(package) ${running}/${total}`;
+  statusBarItem.text = `$(package) ${running}/${total}${unhealthy ? ` $(warning) ${unhealthy}` : ''}`;
   statusBarItem.backgroundColor = undefined;
+  const summary = `${running} of ${total} containers running${unhealthy ? `, ${unhealthy} unhealthy` : ''}`;
+  statusBarItem.tooltip = new vscode.MarkdownString(`**Sidekick Docker** — ${summary}\n\nEndpoint: ${endpoint}\n\nClick to open the dashboard.`);
+  statusBarItem.accessibilityInformation = { label: `Sidekick Docker: ${summary}`, role: 'button' };
+}
+
+/**
+ * Run `docker compose up|down|restart` for a tree compose group. The project's
+ * location comes from the labels Docker recorded on its containers, falling
+ * back to the first workspace folder. Refused in an untrusted workspace: it
+ * would execute the workspace's compose file (the menu is hidden there too).
+ */
+async function runComposeCommand(action: 'up' | 'down' | 'restart', item?: ComposeProjectGroupItem): Promise<void> {
+  if (!item?.project) return;
+  const name = item.project.projectName;
+  if (!vscode.workspace.isTrusted) {
+    vscode.window.showWarningMessage(`Compose is disabled in an untrusted workspace — trust the folder to ${action} ${name}.`);
+    return;
+  }
+  const shared = await import('sidekick-docker-shared');
+  try {
+    const settings = getSettings();
+    const source = shared.ComposeDetector.projectSourceFromLabels(item.project.containers[0]?.labels);
+    const options = shared.resolveComposeOptions(source, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
+    const compose = new shared.ComposeClient(settings.cliEnv);
+    const meta = ACTION_META[action];
+    await runDockerAction(meta, name, async () => {
+      const run = action === 'up' ? compose.up(name, options)
+        : action === 'down' ? compose.down(name, options)
+        : compose.restart(name, undefined, options);
+      shared.throwIfComposeFailed(await run, action);
+    });
+    vscode.window.showInformationMessage(meta.successMessage(name));
+  } catch (err: unknown) {
+    vscode.window.showErrorMessage(`Compose ${action} ${name} failed: ${shared.errorMessage(err)}`);
+  } finally {
+    await watcherService?.forceRefresh();
+  }
 }
 
 export function deactivate(): void {

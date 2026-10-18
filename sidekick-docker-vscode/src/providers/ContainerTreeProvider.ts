@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { buildContainerGroups } from './containerGroups';
+import { buildContainerGroups, composeGroupContextValue } from './containerGroups';
 import type { ContainerGroup, ComposeProjectGroup } from './containerGroups';
 
 type TreeElement = ContainerGroupItem | ComposeProjectGroupItem | ContainerTreeItem;
@@ -27,7 +27,8 @@ export class ComposeProjectGroupItem extends vscode.TreeItem {
     this.id = project.id;
     this.description = String(project.containers.length);
     this.iconPath = new vscode.ThemeIcon('layers');
-    this.contextValue = 'compose-project-group';
+    this.contextValue = composeGroupContextValue(project);
+    this.tooltip = `Compose project ${project.projectName} — right-click for Up, Down, Restart`;
   }
 }
 

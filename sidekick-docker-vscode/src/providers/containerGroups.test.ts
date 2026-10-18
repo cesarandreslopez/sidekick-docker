@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { buildContainerGroups } from './containerGroups';
+import { buildContainerGroups, composeGroupContextValue } from './containerGroups';
 
 function makeContainer(overrides: Partial<ContainerInfo> & { id: string }): ContainerInfo {
   return {
@@ -81,3 +81,13 @@ describe('buildContainerGroups', () => {
     expect(groups[0].composeProjects).toEqual([]);
   });
 });
+
+describe('composeGroupContextValue', () => {
+  it('distinguishes a project with running containers from a stopped one', () => {
+    const running = { id: 'g/p', projectName: 'shop', containers: [makeContainer({ id: 'a' }), makeContainer({ id: 'b', state: 'exited' })] };
+    const stopped = { id: 'g/q', projectName: 'old', containers: [makeContainer({ id: 'c', state: 'exited' })] };
+    expect(composeGroupContextValue(running)).toBe('compose-project-group-running');
+    expect(composeGroupContextValue(stopped)).toBe('compose-project-group-stopped');
+  });
+});
+

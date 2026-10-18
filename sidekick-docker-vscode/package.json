@@ -144,17 +144,40 @@
         "title": "Show Container Logs...",
         "category": "Sidekick Docker",
         "icon": "$(output)"
+      },
+      {
+        "command": "sidekick-docker.composeUp",
+        "title": "Compose Up",
+        "category": "Sidekick Docker",
+        "icon": "$(play)"
+      },
+      {
+        "command": "sidekick-docker.composeRestart",
+        "title": "Compose Restart",
+        "category": "Sidekick Docker",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "sidekick-docker.composeDown",
+        "title": "Compose Down",
+        "category": "Sidekick Docker",
+        "icon": "$(debug-stop)"
       }
     ],
     "viewsWelcome": [
       {
         "view": "sidekick-docker.containers",
-        "when": "sidekickDocker.daemonDown",
+        "when": "sidekickDocker.connecting",
+        "contents": "Connecting to Docker…"
+      },
+      {
+        "view": "sidekick-docker.containers",
+        "when": "sidekickDocker.daemonDown && !sidekickDocker.connecting",
         "contents": "Docker daemon is not reachable.\n[Retry Connection](command:sidekick-docker.refreshContainers)\nIf Docker listens on a custom socket or tcp:// endpoint, check the sidekick-docker.socketPath setting."
       },
       {
         "view": "sidekick-docker.containers",
-        "when": "!sidekickDocker.daemonDown",
+        "when": "!sidekickDocker.daemonDown && !sidekickDocker.connecting",
         "contents": "No containers found.\n[Open Dashboard](command:sidekick-docker.openDashboard)"
       }
     ],
@@ -225,6 +248,18 @@
         },
         {
           "command": "sidekick-docker.openContainerInDashboard",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.composeUp",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.composeRestart",
+          "when": "false"
+        },
+        {
+          "command": "sidekick-docker.composeDown",
           "when": "false"
         }
       ],
@@ -305,6 +340,21 @@
           "command": "sidekick-docker.showContainerLogs",
           "when": "view == sidekick-docker.containers && viewItem =~ /^container-/",
           "group": "2_open@3"
+        },
+        {
+          "command": "sidekick-docker.composeUp",
+          "when": "view == sidekick-docker.containers && isWorkspaceTrusted && viewItem =~ /^compose-project-group/",
+          "group": "1_lifecycle@1"
+        },
+        {
+          "command": "sidekick-docker.composeRestart",
+          "when": "view == sidekick-docker.containers && isWorkspaceTrusted && viewItem == compose-project-group-running",
+          "group": "1_lifecycle@2"
+        },
+        {
+          "command": "sidekick-docker.composeDown",
+          "when": "view == sidekick-docker.containers && isWorkspaceTrusted && viewItem == compose-project-group-running",
+          "group": "3_danger@1"
         }
       ]
     }

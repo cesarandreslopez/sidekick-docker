@@ -14,6 +14,13 @@ vi.mock('sidekick-docker-shared', async importOriginal => ({
   ...await importOriginal<typeof import('sidekick-docker-shared')>(),
   DockerClient: class {
     ping = pingMock;
+    pingDetailed = async () => {
+      try {
+        return (await pingMock()) ? { ok: true } : { ok: false, error: Object.assign(new Error('refused'), { code: 'ECONNREFUSED' }) };
+      } catch (error) {
+        return { ok: false, error };
+      }
+    };
     listContainers = listContainersMock;
     listResources = async () => {
       try {
@@ -91,7 +98,7 @@ describe('ContainerWatcherService', () => {
 
     await service.start();
 
-    expect(callbacks.onConnectionChanged).toHaveBeenCalledWith(false);
+    expect(callbacks.onConnectionChanged).toHaveBeenCalledWith(false, expect.any(String));
     expect(service.isConnected()).toBe(false);
   });
 
@@ -102,7 +109,7 @@ describe('ContainerWatcherService', () => {
 
     await service.start();
 
-    expect(callbacks.onConnectionChanged).toHaveBeenCalledWith(false);
+    expect(callbacks.onConnectionChanged).toHaveBeenCalledWith(false, expect.any(String));
     expect(service.isConnected()).toBe(false);
   });
 
@@ -115,7 +122,7 @@ describe('ContainerWatcherService', () => {
     await service.start();
 
     expect(callbacks.onConnectionChanged).toHaveBeenCalledTimes(1);
-    expect(callbacks.onConnectionChanged).toHaveBeenCalledWith(true);
+    expect(callbacks.onConnectionChanged).toHaveBeenCalledWith(true, undefined);
   });
 
   it('threads the real connection state through onContainersChanged', async () => {
@@ -133,7 +140,7 @@ describe('ContainerWatcherService', () => {
     listContainersMock.mockRejectedValue(new Error('socket hang up'));
     await service.forceRefresh();
     expect(callbacks.onContainersChanged).toHaveBeenLastCalledWith([], false);
-    expect(callbacks.onConnectionChanged).toHaveBeenLastCalledWith(false);
+    expect(callbacks.onConnectionChanged).toHaveBeenLastCalledWith(false, 'socket hang up');
 
     // Retrying while Docker is still down must stay disconnected.
     await service.forceRefresh();
@@ -157,4 +164,14 @@ describe('ContainerWatcherService', () => {
     // The pass committed (new name) and the mid-flight die was replayed over it.
     expect(callbacks.onContainersChanged).toHaveBeenLastCalledWith([expect.objectContaining({ name: 'renamed', state: 'exited' })], true);
   });
+
+  it('says why it is disconnected', async () => {
+    pingMock.mockResolvedValue(false);
+    const callbacks = createCallbacks();
+    service = new ContainerWatcherService(callbacks, { endpoint: 'tcp://10.0.0.9:2375' });
+    await service.start();
+    expect(callbacks.onConnectionChanged).toHaveBeenCalledWith(false, 'Connection refused at tcp://10.0.0.9:2375. Is the Docker daemon running?');
+    expect(service.getDisconnectReason()).toMatch(/Connection refused/);
+  });
 });
+
