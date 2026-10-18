@@ -21,7 +21,7 @@ export function ToastStack({ toasts, width }: ToastStackProps): React.ReactEleme
   return (
     <Box position="absolute" marginTop={1} width={width} flexDirection="column" alignItems="flex-end">
       {visible.map(toast => (
-        <ToastNotification key={toast.id} toast={toast} />
+        <ToastNotification key={toast.id} toast={toast} maxWidth={Math.min(80, Math.max(20, width - 4))} />
       ))}
     </Box>
   );

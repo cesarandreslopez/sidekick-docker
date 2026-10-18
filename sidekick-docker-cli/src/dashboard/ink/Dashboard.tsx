@@ -34,6 +34,7 @@ import type { KeyContext, KeyQueryContext } from './keyRegistry';
 import { maxScrollOffset } from './windowLines';
 import { appendExecOutput, ExecOutputBuffer } from './execOutput';
 import { buildHelpSections, layoutHelp } from './helpLayout';
+import { toastDuration } from './toastLayout';
 import { DEFAULT_EXEC_SHELL, describeExecExit } from '../execShell';
 
 
@@ -44,7 +45,6 @@ const SIDE_PANEL_WIDTH_WIDE = 42;
 const MIN_SCREEN_WIDTH = 60;
 const MIN_SCREEN_HEIGHT = 15;
 const RESERVED_UI_ROWS = 5;
-const TOAST_DURATIONS = { error: 6000, warning: 3000, info: 2500, success: 2000 } as const;
 const MAX_QUEUED_TOASTS = 5;
 const PHRASE_ROTATE_MS = 7000;
 
@@ -273,7 +273,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     dispatch({ type: 'ADD_TOAST', toast: { id, message, severity, progress } });
     if (!progress) {
       // Progress toasts persist until the action settles (removed explicitly).
-      const dur = duration ?? TOAST_DURATIONS[severity];
+      const dur = toastDuration(severity, message, duration);
       setTimeout(() => dispatch({ type: 'REMOVE_TOAST', id }), dur);
     }
     return id;
