@@ -1,3 +1,4 @@
+const { chmodSync } = require('fs');
 const { build } = require('esbuild');
 const pkg = require('./package.json');
 
@@ -25,6 +26,10 @@ build({
   banner: {
     js: [
       '#!/usr/bin/env node',
+      // chalk (and so Ink's chrome) honours FORCE_COLOR and --no-color but not
+      // NO_COLOR. Map it before any bundled module initialises, so NO_COLOR
+      // turns the whole TUI monochrome, not just the formatters.ts output.
+      "if (process.env.NO_COLOR && !process.env.FORCE_COLOR) process.env.FORCE_COLOR = '0';",
       // Polyfill CommonJS globals for bundled CJS deps in ESM output
       'import { createRequire as __createRequire } from "module";',
       'const require = __createRequire(import.meta.url);',
@@ -41,4 +46,8 @@ build({
   jsxImportSource: 'react',
   sourcemap: false,
   minify: false,
-}).catch(() => process.exit(1));
+})
+  // The shebang banner is only useful if the file is executable.
+  .then(() => chmodSync('dist/sidekick-docker.mjs', 0o755))
+  // esbuild already printed its own errors (BuildFailure.errors); print anything else.
+  .catch((err) => { if (!err?.errors) console.error(err); process.exit(1); });

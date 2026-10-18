@@ -46,4 +46,5 @@ async function main() {
   }
 }
 
-main().catch(() => process.exit(1));
+// esbuild already printed its own errors (BuildFailure.errors); print anything else.
+main().catch((err) => { if (!err?.errors) console.error(err); process.exit(1); });
