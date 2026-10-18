@@ -74,4 +74,32 @@ describe('EventWatcher', () => {
     expect(errors.length).toBeGreaterThanOrEqual(1);
     expect(errors[0].message).toBe('connection lost');
   });
+
+  it('runs a single loop after a quick stop() then start()', async () => {
+    let opened = 0;
+    const pending: (() => void)[] = [];
+    const client = {
+      streamEvents: vi.fn(async function* () {
+        opened++;
+        // Ignores its abort signal, like a response already in flight.
+        await new Promise<void>(r => pending.push(r));
+        yield { type: 'start', resourceType: 'container', resourceId: 'x', timestamp: new Date(), attributes: {} } as DockerEvent;
+      }),
+    } as unknown as DockerClient;
+    const received: DockerEvent[] = [];
+    const watcher = new EventWatcher(client, { onEvent: e => received.push(e) });
+
+    watcher.start();
+    await Promise.resolve();
+    watcher.stop();
+    watcher.start();
+    await Promise.resolve();
+    // Release both streams: only the current loop may deliver its event.
+    pending.splice(0).forEach(r => r());
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(opened).toBe(2);
+    expect(received).toHaveLength(1);
+    watcher.stop();
+    pending.splice(0).forEach(r => r());
+  });
 });
