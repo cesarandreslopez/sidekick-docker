@@ -64,7 +64,17 @@ export {
   CONTAINER_ID_LENGTH,
   shortId,
   formatTimestampTime,
+  canStart,
+  canStop,
+  pruneCandidateCount,
+  pruneConfirmMessage,
+  removeContainerConfirmMessage,
+  sortDirectionLabel,
+  publishedPortUrls,
+  browserHostForEndpoint,
+  actionText,
 } from './formatters';
+export type { PruneKind, ContainerSortField, ActionType } from './formatters';
 
 // Reconnect
 export { ReconnectScheduler, INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY, MAX_RECONNECT_ATTEMPTS } from './events/reconnect';
