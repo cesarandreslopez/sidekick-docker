@@ -343,11 +343,20 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     ? 'disconnected'
     : metrics.lastRefresh == null ? 'loading' : 'ready';
 
+  // Merge log filter UI state into metrics. Panels receive this everywhere —
+  // getItems as well as tab renders — so actions such as Copy Logs see the
+  // same filter the Logs tab shows (they used to see an always-empty one).
+  const enrichedMetrics = React.useMemo(() => ({
+    ...metrics,
+    logFilterString: state.logFilterString,
+    logFilterMode: state.logFilterMode,
+  }), [metrics, state.logFilterString, state.logFilterMode]);
+
   // Items for the active panel: filtered + sorted, memoized so UI-only renders
   // (toasts, scroll, phrase) don't refilter/resort. metrics identity changes on
   // every data refresh, which is exactly when recomputation is needed.
   const { currentItems, totalItemCount } = React.useMemo(() => {
-    const allItems = panel.getItems(metrics);
+    const allItems = panel.getItems(enrichedMetrics);
     const total = allItems.length;
     let items = allItems;
     // Show all / running-only toggle (containers panel)
@@ -407,7 +416,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       items.sort((a, b) => dir * (a.sortKey - b.sortKey));
     }
     return { currentItems: items, totalItemCount: total };
-  }, [panel, metrics, state.showAllContainers, state.filterString, state.sortField, state.sortReversed]);
+  }, [panel, metrics, enrichedMetrics, state.showAllContainers, state.filterString, state.sortField, state.sortReversed]);
   const clampedSelection = Math.min(state.selectedItemIndex, Math.max(0, currentItems.length - 1));
 
   if (clampedSelection !== state.selectedItemIndex && currentItems.length > 0) {
@@ -448,13 +457,6 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel.id, selectedItem?.id, tabIdx, state.sortField, compareItemId]);
-
-  // Merge log filter UI state into metrics for panel render functions
-  const enrichedMetrics = {
-    ...metrics,
-    logFilterString: state.logFilterString,
-    logFilterMode: state.logFilterMode,
-  };
 
   let detailLines: string[] = [];
   if (selectedItem && detailTabs.length > 0 && tabIdx >= 0) {
@@ -528,8 +530,8 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       const meaningful = metrics.composeProjects.reduce((sum, proj) => sum + proj.services.length, 0);
       return { total: meaningful };
     }
-    return { total: p.getItems(metrics).length };
-  }), [panels, metrics, runningCount]);
+    return { total: p.getItems(enrichedMetrics).length };
+  }), [panels, metrics, enrichedMetrics, runningCount]);
 
   // Mouse input (extracted hook)
   const handleMouse = useMouseHandler({

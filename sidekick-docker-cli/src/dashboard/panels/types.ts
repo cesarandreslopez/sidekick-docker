@@ -1,4 +1,6 @@
 import type { DockerDashboardMetrics } from '../DockerState';
+import type { FilterMode, LogEntry } from 'sidekick-docker-shared';
+import { filterLine } from 'sidekick-docker-shared';
 import { ansi } from '../../formatters';
 
 /** An item displayed in the side panel list. */
@@ -54,6 +56,37 @@ export function detailFetchError(what: string, reason: string): string {
   // Through `ansi`, not raw escapes: those bypass the NO_COLOR/--no-color gate
   // in formatters.ts and leave this message colored when everything else is not.
   return `${ansi.red(`Could not load ${what}.`)}\n\n${reason}\n\n${ansi.gray('Reselect the item to retry.')}`;
+}
+
+/** The lines the Logs tab currently shows: every message, or only those matching the log filter. */
+export function collectLogText(logs: readonly LogEntry[], query: string, mode: FilterMode): { text: string; count: number } {
+  const lines = (query ? logs.filter(l => filterLine(l.message, query, mode).matched) : logs).map(l => l.message);
+  return { text: lines.join('\n'), count: lines.length };
+}
+
+/**
+ * The shared "Copy Logs" action: copies what the Logs tab shows (respecting
+ * the log filter) from whichever buffer `getLogs` picks.
+ */
+export function copyLogsAction(
+  getMetrics: () => DockerDashboardMetrics | null,
+  getLogs: (metrics: DockerDashboardMetrics) => readonly LogEntry[],
+  copy: () => ((text: string) => boolean) | undefined,
+): PanelAction {
+  return {
+    key: 'c',
+    label: 'Copy Logs',
+    handler: () => {
+      const metrics = getMetrics();
+      const onCopy = copy();
+      if (!metrics || !onCopy) return;
+      const { text, count } = collectLogText(getLogs(metrics), metrics.logFilterString, metrics.logFilterMode);
+      if (!onCopy(text)) {
+        throw new Error('no clipboard tool found (install xclip, xsel, or wl-copy)');
+      }
+      return `Copied ${count} line${count === 1 ? '' : 's'}`;
+    },
+  };
 }
 
 /** Safely extract typed data from a PanelItem. Throws if data is null/undefined. */

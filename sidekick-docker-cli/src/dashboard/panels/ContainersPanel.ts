@@ -1,8 +1,8 @@
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { DockerClient, filterLine, shortId } from 'sidekick-docker-shared';
+import { DockerClient, shortId } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
-import { panelData, detailFetchError } from './types';
+import { panelData, detailFetchError, copyLogsAction } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
 
@@ -297,28 +297,7 @@ export class ContainersPanel implements SidePanel {
           });
         },
       },
-      {
-        key: 'c',
-        label: 'Copy Logs',
-        handler: () => {
-          if (!this.lastMetrics || !this.onCopyLogs) return;
-          const logs = this.lastMetrics.selectedContainerLogs;
-          const query = this.lastMetrics.logFilterString;
-          const mode = this.lastMetrics.logFilterMode;
-          let lines: string[];
-          if (query) {
-            lines = logs
-              .filter(l => filterLine(l.message, query, mode).matched)
-              .map(l => l.message);
-          } else {
-            lines = logs.map(l => l.message);
-          }
-          if (!this.onCopyLogs(lines.join('\n'))) {
-            throw new Error('no clipboard tool found (install xclip, xsel, or wl-copy)');
-          }
-          return `Copied ${lines.length} line${lines.length === 1 ? '' : 's'}`;
-        },
-      },
+      copyLogsAction(() => this.lastMetrics, m => m.selectedContainerLogs, () => this.onCopyLogs),
     ];
   }
 
