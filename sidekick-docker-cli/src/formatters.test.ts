@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LogEntry } from 'sidekick-docker-shared';
-import { formatBytes, formatCpu, formatPorts, stateIcon, truncate, stripCursorEscapes, colorizeEnvLine, colorizeBool, colorizeId, colorizePercent, colorizeLogEntry, renderLogLines, sectionHeader, ansi, setColorEnabled, isColorEnabled, formatFileChange, formatLogTemplate } from './formatters';
+import { formatBytes, formatCpu, formatPorts, stateIcon, truncate, stripCursorEscapes, colorizeEnvLine, colorizeBool, colorizeId, colorizePercent, colorizeLogEntry, renderLogLines, sectionHeader, ansi, setColorEnabled, isColorEnabled, formatFileChange, formatLogTemplate, compactUptime } from './formatters';
 
 // Vitest runs non-TTY, so detectColor() disables color at import; the
 // color-asserting tests below need it forced on.
@@ -213,6 +213,15 @@ describe('Files and Patterns rows', () => {
     setColorEnabled(false);
     expect(formatFileChange({ kind: 'deleted', path: '/tmp/y' })).toBe(' D  /tmp/y');
     expect(formatLogTemplate({ count: 3, pattern: 'GET <*> 200' })).toBe('    3  GET <*> 200');
+  });
+});
+
+describe('compactUptime wording', () => {
+  it('reads Docker\'s "About a minute" and "Less than a second"', () => {
+    expect(compactUptime('Up About a minute (healthy)')).toBe('1m');
+    expect(compactUptime('Up About an hour')).toBe('1h');
+    expect(compactUptime('Up Less than a second')).toBe('0s');
+    expect(compactUptime('Up 54 seconds (healthy)')).toBe('54s');
   });
 });
 

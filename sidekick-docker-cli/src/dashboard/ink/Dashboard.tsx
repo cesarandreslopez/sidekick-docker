@@ -494,11 +494,19 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const isCompareActive = compareItemId != null && shouldAutoScroll;
   const scrollViewportHeight = isCompareActive ? Math.max(1, detailViewportHeight - 1) : detailViewportHeight;
 
+  // Follow the tail — including back *up* when the content shrinks. Switching
+  // items renders one frame with the previous item's (long) log before the new
+  // buffer arrives; following only when the content was taller than the
+  // viewport left the offset at the old bottom, and a short log rendered as
+  // "▲ (67 more)" above an empty pane.
+  const followOffset = maxScrollOffset(detailLines.length, scrollViewportHeight);
   useEffect(() => {
-    if (shouldAutoScroll && state.logFollow && detailLines.length > scrollViewportHeight) {
-      dispatch({ type: 'SCROLL_DETAIL', offset: maxScrollOffset(detailLines.length, scrollViewportHeight) });
+    if (shouldAutoScroll && state.logFollow && state.detailScrollOffset !== followOffset) {
+      dispatch({ type: 'SCROLL_DETAIL', offset: followOffset });
     }
-  }, [shouldAutoScroll, state.logFollow, detailLines.length, scrollViewportHeight]);
+  }, [shouldAutoScroll, state.logFollow, state.detailScrollOffset, followOffset]);
+  // Never render past the end, whatever the stored offset.
+  const detailOffset = Math.min(state.detailScrollOffset, followOffset);
   const secondaryDetailLines = React.useMemo(() => {
     if (!isCompareActive) return [];
     if (panel.id === 'containers') {
@@ -647,7 +655,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                 <CompareDetailPane
                   primaryLines={detailLines}
                   secondaryLines={secondaryDetailLines}
-                  primaryScrollOffset={state.detailScrollOffset}
+                  primaryScrollOffset={detailOffset}
                   secondaryScrollOffset={state.secondaryDetailScrollOffset}
                   viewportHeight={scrollViewportHeight}
                   totalWidth={columns - sideWidth}
@@ -658,7 +666,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
               ) : (
                 <DetailPane
                   lines={detailLines}
-                  scrollOffset={state.detailScrollOffset}
+                  scrollOffset={detailOffset}
                   viewportHeight={detailViewportHeight}
                   focused={state.focusTarget === 'detail'}
                 />

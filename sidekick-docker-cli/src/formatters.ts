@@ -55,11 +55,13 @@ export function compactUptime(status: string): string {
   // Docker status examples: "Up 2 hours", "Up 5 days", "Up 3 minutes", "Exited (0) 2 hours ago"
   if (/^exited|^dead|^created|^removing/i.test(status)) return 'Exited';
 
-  // Extract time components from "Up X (unit)" patterns
-  const match = status.match(/up\s+(?:about\s+)?(\d+)\s+(second|minute|hour|day|week|month|year)s?/i);
+  if (/^up\s+less than a second/i.test(status)) return '0s';
+  // Extract time components from "Up X (unit)" patterns. Docker words the
+  // first minute/hour as "About a minute" / "About an hour".
+  const match = status.match(/up\s+(?:about\s+)?(\d+|an?)\s+(second|minute|hour|day|week|month|year)s?/i);
   if (!match) return '';
 
-  const val = parseInt(match[1], 10);
+  const val = /^an?$/i.test(match[1]) ? 1 : parseInt(match[1], 10);
   const unit = match[2].toLowerCase();
 
   switch (unit) {
