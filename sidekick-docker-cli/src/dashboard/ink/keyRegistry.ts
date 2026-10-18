@@ -2,6 +2,7 @@ import type { Key } from 'ink';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from '../panels/types';
 import type { Action, DashboardUIState, ToastSeverity } from './dashboardTypes';
 import { maxScrollOffset } from './windowLines';
+import { sortDirectionLabel } from 'sidekick-docker-shared';
 
 /**
  * The read-only slice of dashboard state that availability predicates, hints,
@@ -216,7 +217,8 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     isAvailable: (ctx) => ctx.panel.id === 'containers',
     run: (ctx) => {
       ctx.dispatch({ type: 'TOGGLE_SORT_REVERSE' });
-      ctx.addToast(`Sort: ${ctx.state.sortReversed ? 'ascending' : 'descending'}`, 'info');
+      // state is pre-toggle here, so the new direction is the opposite one.
+      ctx.addToast(`Sort: ${ctx.state.sortField}, ${sortDirectionLabel(ctx.state.sortField, !ctx.state.sortReversed)}`, 'info');
     },
   },
   {

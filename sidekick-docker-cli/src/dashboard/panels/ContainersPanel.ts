@@ -1,5 +1,5 @@
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { DockerClient, shortId } from 'sidekick-docker-shared';
+import { DockerClient, shortId, canStart, canStop, pruneCandidateCount, pruneConfirmMessage, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
 import { panelData, detailFetchError, copyLogsAction } from './types';
@@ -207,25 +207,27 @@ export class ContainersPanel implements SidePanel {
         label: 'Start',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          return this.client.startContainer(c.id).then(() => { this.onAction(); });
+          return this.client.startContainer(c.id).then(() => { this.onAction(); return actionText('start', c.name).success; });
         },
-        condition: (item) => panelData<ContainerInfo>(item).state !== 'running',
+        // Not for paused containers: Docker rejects start; they need unpause.
+        condition: (item) => canStart(panelData<ContainerInfo>(item).state),
       },
       {
         key: 'S',
         label: 'Stop',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          return this.client.stopContainer(c.id).then(() => { this.onAction(); });
+          return this.client.stopContainer(c.id).then(() => { this.onAction(); return actionText('stop', c.name).success; });
         },
-        condition: (item) => panelData<ContainerInfo>(item).state === 'running',
+        // Paused and restarting containers can be stopped too.
+        condition: (item) => canStop(panelData<ContainerInfo>(item).state),
       },
       {
         key: 'r',
         label: 'Restart',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          return this.client.restartContainer(c.id).then(() => { this.onAction(); });
+          return this.client.restartContainer(c.id).then(() => { this.onAction(); return actionText('restart', c.name).success; });
         },
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
@@ -234,7 +236,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Pause',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          return this.client.pauseContainer(c.id).then(() => { this.onAction(); });
+          return this.client.pauseContainer(c.id).then(() => { this.onAction(); return actionText('pause', c.name).success; });
         },
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
@@ -243,7 +245,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Unpause',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          return this.client.unpauseContainer(c.id).then(() => { this.onAction(); });
+          return this.client.unpauseContainer(c.id).then(() => { this.onAction(); return actionText('unpause', c.name).success; });
         },
         condition: (item) => panelData<ContainerInfo>(item).state === 'paused',
       },
@@ -251,11 +253,11 @@ export class ContainersPanel implements SidePanel {
         key: 'd',
         label: 'Remove',
         confirm: true,
-        confirmMessage: (item) => `Remove container "${panelData<ContainerInfo>(item).name}"?`,
+        confirmMessage: (item) => removeContainerConfirmMessage(panelData<ContainerInfo>(item)),
         confirmSeverity: 'high',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
-          return this.client.removeContainer(c.id, true).then(() => { this.onAction(); });
+          return this.client.removeContainer(c.id, true).then(() => { this.onAction(); return actionText('remove', c.name).success; });
         },
       },
       {
@@ -273,12 +275,7 @@ export class ContainersPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: () => {
-          const n = this.lastMetrics?.containers.filter(c => c.state === 'exited' || c.state === 'created' || c.state === 'dead').length ?? 0;
-          return n > 0
-            ? `Remove ${n} stopped container${n === 1 ? '' : 's'}?`
-            : 'Remove all stopped containers?';
-        },
+        confirmMessage: () => pruneConfirmMessage('containers', pruneCandidateCount('containers', this.lastMetrics?.containers ?? [])),
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneContainers().then((r) => {

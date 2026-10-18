@@ -95,7 +95,7 @@ export type Action =
  * keyboard, and the click targets.
  */
 export const SORT_OPTIONS: { field: SortField; label: string }[] = [
-  { field: 'state', label: 'State (running first)' },
+  { field: 'state', label: 'State' },
   { field: 'name', label: 'Name' },
   { field: 'cpu', label: 'CPU %' },
   { field: 'mem', label: 'Memory %' },

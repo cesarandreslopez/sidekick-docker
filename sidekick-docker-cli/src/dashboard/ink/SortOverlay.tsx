@@ -4,6 +4,7 @@ import type { SortField } from './dashboardTypes';
 import { SORT_OPTIONS } from './dashboardTypes';
 import { SORT_OVERLAY_ORIGIN, SORT_OVERLAY_WIDTH } from './overlayHitTest';
 import { ACCENT } from '../../theme';
+import { sortDirectionLabel } from 'sidekick-docker-shared';
 
 
 interface SortOverlayProps {
@@ -30,7 +31,8 @@ export function SortOverlay({ selectedIndex, currentField, reversed, maxWidth }:
       {SORT_OPTIONS.map((opt, i) => {
         const isSelected = i === selectedIndex;
         const isCurrent = opt.field === currentField;
-        const indicator = isCurrent ? (reversed ? ' \u25B2' : ' \u25BC') : '';
+        // Words, not ▲/▼: "ascending" means A→Z for names but lowest-first for stats.
+        const indicator = isCurrent ? ` \u00B7 ${sortDirectionLabel(opt.field, reversed)}` : '';
         return (
           <Box key={opt.field}>
             <Text

@@ -1,5 +1,5 @@
 import type { NetworkInfo } from 'sidekick-docker-shared';
-import { DockerClient } from 'sidekick-docker-shared';
+import { DockerClient, pruneCandidateCount, pruneConfirmMessage } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -109,10 +109,7 @@ export class NetworksPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: () => {
-          const n = this.lastMetrics?.networks.filter(net => !net.isDefault && net.containers.length === 0).length ?? 0;
-          return n > 0 ? `Prune ${n} unused network${n === 1 ? '' : 's'}?` : 'Prune all unused networks?';
-        },
+        confirmMessage: () => pruneConfirmMessage('networks', pruneCandidateCount('networks', this.lastMetrics?.networks ?? [])),
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneNetworks().then((r) => {

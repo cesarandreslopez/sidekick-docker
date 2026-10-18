@@ -1,5 +1,5 @@
 import type { ImageInfo } from 'sidekick-docker-shared';
-import { DockerClient, shortId } from 'sidekick-docker-shared';
+import { DockerClient, shortId, pruneCandidateCount, pruneConfirmMessage } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
 import { panelData, detailFetchError } from './types';
@@ -108,10 +108,7 @@ export class ImagesPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: () => {
-          const n = this.lastMetrics?.images.filter(i => i.isDangling).length ?? 0;
-          return n > 0 ? `Prune ${n} dangling image${n === 1 ? '' : 's'}?` : 'Prune all dangling images?';
-        },
+        confirmMessage: () => pruneConfirmMessage('images', pruneCandidateCount('images', this.lastMetrics?.images ?? [])),
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneImages().then((r) => {
