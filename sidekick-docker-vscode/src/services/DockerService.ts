@@ -22,6 +22,7 @@ import {
 import { LogAnalytics, LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/log';
 import type {
   ContainerInfo,
+  ContainerDetails,
   DockerClientOptions,
   ImageInfo,
   ImageLayer,
@@ -48,6 +49,7 @@ import type {
   SerializedContainerStats,
   SerializedFilesystemChange,
   SerializedImageLayer,
+  SerializedContainerDetails,
   StreamStateUpdate,
   DetailKind,
   DetailLoadUpdate,
@@ -71,12 +73,15 @@ export interface DockerServiceCallbacks {
   onLogsChange: (containerId: string, entries: SerializedLogEntry[], severityCounts: SeverityCounts) => void;
   onStatsChange: (data: StatsChangeData) => void;
   onComposeLogs: (projectName: string, serviceName: string | null, entries: SerializedLogEntry[]) => void;
-  onEnvLoaded: (containerId: string, env: string[]) => void;
+  onDetailsLoaded: (containerId: string, details: SerializedContainerDetails) => void;
   onChangesLoaded: (containerId: string, changes: SerializedFilesystemChange[]) => void;
   onLayersLoaded: (imageId: string, layers: SerializedImageLayer[]) => void;
   onStreamState?: (update: StreamStateUpdate) => void;
   onDetailLoad?: (update: DetailLoadUpdate) => void;
 }
+
+/** Container events after which cached inspect details are out of date. */
+const DETAIL_STALE_EVENTS = /^(start|restart|die|oom|health_status)\b/;
 
 /** A compose log target: a whole project, or one service of it. */
 interface ComposeKey {
@@ -143,7 +148,7 @@ export class DockerService {
   private watcher: EventWatcher | null = null;
 
   private detailPending = new Map<string, Promise<void>>();
-  private inspectedEnv = new Map<string, string[]>();
+  private inspectedDetails = new Map<string, ContainerDetails>();
   private inspectedChanges = new Map<string, FilesystemChange[]>();
   private inspectedLayers = new Map<string, ImageLayer[]>();
   private logSeverityTimeSeries = new Map<string, LogSeverityTimeSeries>();
@@ -265,7 +270,10 @@ export class DockerService {
     if (!this.watcher) {
       this.watcher = new EventWatcher(this.client, {
         // The store's onChange schedules the update, and only when the event changed something.
-        onEvent: (event) => { this.store.processEvent(event); },
+        onEvent: (event) => {
+          this.invalidateDetails(event);
+          this.store.processEvent(event);
+        },
         onError: (err) => console.debug('event watcher error:', err),
       });
       this.watcher.start();
@@ -293,12 +301,26 @@ export class DockerService {
     return this.store.refresh();
   }
 
+  /**
+   * A health or lifecycle event makes a container's inspect details (health
+   * log, exit code, restart count) stale: drop them, and re-load at once if
+   * that container's Env or Config tab is on screen.
+   */
+  private invalidateDetails(event: { type: string; resourceType: string; resourceId: string }): void {
+    if (event.resourceType !== 'container' || !DETAIL_STALE_EVENTS.test(event.type)) return;
+    this.inspectedDetails.delete(event.resourceId);
+    const v = this.viewState;
+    if (v.activePanelId === 'containers' && v.selectedItemId === event.resourceId && (v.detailTabIndex === 2 || v.detailTabIndex === 3)) {
+      void this.loadDetail('inspect', event.resourceId, true);
+    }
+  }
+
   private onStoreChange(change: StoreChange): void {
     if (this.disposed) return;
     const snapshot = this.store.getSnapshot();
     if (change.cause === 'refresh') {
       const ids = new Set(snapshot.containers.map(c => c.id));
-      for (const map of [this.inspectedEnv, this.inspectedChanges, this.logSeverityTimeSeries]) {
+      for (const map of [this.inspectedDetails, this.inspectedChanges, this.logSeverityTimeSeries]) {
         for (const id of map.keys()) if (!ids.has(id)) map.delete(id);
       }
       const imageIds = new Set(snapshot.images.map(i => i.id));
@@ -306,7 +328,7 @@ export class DockerService {
     }
     for (const id of change.removedContainerIds) {
       this.statsCollector.remove(id);
-      this.inspectedEnv.delete(id);
+      this.inspectedDetails.delete(id);
       this.inspectedChanges.delete(id);
     }
     if (this.initialized) {
@@ -498,7 +520,7 @@ export class DockerService {
 
   async selectContainer(containerId: string | null): Promise<void> {
     if (!containerId || this.disposed) return;
-    await Promise.all([this.loadDetail('env', containerId), this.loadDetail('changes', containerId)]);
+    await Promise.all([this.loadDetail('inspect', containerId), this.loadDetail('changes', containerId)]);
   }
 
   async loadDetail(kind: DetailKind, itemId: string, retry = false): Promise<void> {
@@ -509,11 +531,11 @@ export class DockerService {
     const run = async () => {
       this.callbacks.onDetailLoad?.({ kind, itemId, state: 'loading' });
       try {
-        if (kind === 'env') {
-          const value = (!retry && this.inspectedEnv.get(itemId)) || await this.client.getContainerEnv(itemId);
+        if (kind === 'inspect') {
+          const value = (!retry && this.inspectedDetails.get(itemId)) || await this.client.getContainerDetails(itemId);
           if (this.disposed) return;
-          this.inspectedEnv.set(itemId, value);
-          this.callbacks.onEnvLoaded(itemId, value);
+          this.inspectedDetails.set(itemId, value);
+          this.callbacks.onDetailsLoaded(itemId, serializeDetails(value));
         } else if (kind === 'changes') {
           const value = (!retry && this.inspectedChanges.get(itemId)) || await this.client.getContainerChanges(itemId);
           if (this.disposed) return;
@@ -772,6 +794,14 @@ function serializeLogEntry(e: LogEntry): SerializedLogEntry {
 
 function serializeFilesystemChange(c: FilesystemChange): SerializedFilesystemChange {
   return { path: c.path, kind: c.kind };
+}
+
+function serializeDetails(d: ContainerDetails): SerializedContainerDetails {
+  return {
+    ...d,
+    mounts: d.mounts.map(m => ({ ...m })),
+    health: d.health ? { ...d.health, log: d.health.log.map(l => ({ ...l, start: l.start?.toISOString() ?? null })) } : null,
+  };
 }
 
 function serializeImageLayer(l: ImageLayer): SerializedImageLayer {

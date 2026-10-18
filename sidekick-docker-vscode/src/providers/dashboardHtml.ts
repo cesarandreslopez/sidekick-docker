@@ -625,6 +625,9 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .kv-value {
       word-break: break-all;
     }
+    .kv-value .muted {
+      color: var(--vscode-descriptionForeground);
+    }
 
     /* ─── Env grid ─────────────────────────────────────────────── */
     .env-grid {

@@ -1,3 +1,4 @@
+import { summarizeHealth, summarizeRestartPolicy, formatMount } from 'sidekick-docker-shared/formatters';
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
@@ -162,7 +163,7 @@ export const containersPanel: PanelDefinition = {
     {
       label: 'Env',
       render: (item: PanelItem, state: WebviewState): string => {
-        const env = state.envVars.get(item.id);
+        const env = state.containerDetails.get(item.id)?.env;
         if (!env) return 'Loading environment variables...';
         if (env.length === 0) return 'No environment variables set.';
         return renderEnvGrid(env);
@@ -186,6 +187,21 @@ export const containersPanel: PanelDefinition = {
         ];
         if (c.composeProject) {
           pairs.push(['Compose', escapeHtml(`${c.composeProject}/${c.composeService}`)]);
+        }
+        // Inspect-only rows: why it is unhealthy, why it exited, restart policy, mounts.
+        const d = state.containerDetails.get(item.id);
+        if (d) {
+          if (c.state === 'exited' || c.state === 'dead') {
+            const why = [d.oomKilled ? 'OOM killed' : '', d.error].filter(Boolean).join(' · ');
+            pairs.push(['Exit', escapeHtml(`${d.exitCode}${why ? ` — ${why}` : ''}`)]);
+          }
+          const health = summarizeHealth(d.health);
+          if (health[0]) pairs.push(['Checks', escapeHtml(health[0])]);
+          if (health[1]) pairs.push(['', `<span class="muted">${escapeHtml(health[1])}</span>`]);
+          pairs.push(['Restart', escapeHtml(summarizeRestartPolicy(d.restartPolicy, d.restartCount))]);
+          pairs.push(['Mounts', d.mounts.length ? d.mounts.map(m => escapeHtml(formatMount(m))).join('<br>') : '<span class="muted">none</span>']);
+        } else {
+          pairs.push(['Mounts', '<span class="muted">Loading…</span>']);
         }
         return renderKvGrid(pairs);
       },

@@ -6,6 +6,7 @@ import type {
   SerializedContainerStats,
   SerializedFilesystemChange,
   SerializedImageLayer,
+  SerializedContainerDetails,
 } from '../types/messages';
 import type { SeverityCounts, FilterMode } from 'sidekick-docker-shared/log';
 
@@ -69,7 +70,8 @@ export interface WebviewState {
   connReason: string | null;
   logs: Map<string, SerializedLogEntry[]>;
   stats: Map<string, ContainerStatsEntry>;
-  envVars: Map<string, string[]>;
+  /** Inspect details per container (env, restart policy, mounts, health, exit). */
+  containerDetails: Map<string, SerializedContainerDetails>;
   containerChanges: Map<string, SerializedFilesystemChange[]>;
   imageLayers: Map<string, SerializedImageLayer[]>;
   composeLogs: Map<string, SerializedLogEntry[]>;
@@ -125,7 +127,7 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
     detailLoads: new Map(),
     streamStates: new Map(),
     stats: new Map(),
-    envVars: new Map(),
+    containerDetails: new Map(),
     containerChanges: new Map(),
     imageLayers: new Map(),
     composeLogs: new Map(),

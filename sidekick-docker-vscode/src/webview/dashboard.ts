@@ -486,7 +486,7 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
   }
 
   let html = tab.render(item, state);
-  const kind = panel.id === 'containers' ? ({ Env: 'env', Files: 'changes' } as const)[tab.label as 'Env' | 'Files']
+  const kind = panel.id === 'containers' ? ({ Env: 'inspect', Files: 'changes' } as const)[tab.label as 'Env' | 'Files']
     : panel.id === 'images' && tab.label === 'Layers' ? 'layers' : undefined;
   const load = kind ? state.detailLoads.get(`${kind}:${item.id}`) : undefined;
   if (load?.state === 'error') {
@@ -1012,7 +1012,7 @@ $detailContent.addEventListener('click', (e: Event) => {
   const target = e.target instanceof HTMLElement ? e.target.closest<HTMLElement>('button') : null;
   if (target?.hasAttribute('data-retry-detail')) {
     const kind = target.dataset.retryDetail;
-    if ((kind === 'env' || kind === 'changes' || kind === 'layers') && target.dataset.itemId) {
+    if ((kind === 'inspect' || kind === 'changes' || kind === 'layers') && target.dataset.itemId) {
       post({ type: 'retryDetail', kind, itemId: target.dataset.itemId });
     }
     return;
@@ -1116,10 +1116,10 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
       break;
     }
-    case 'updateEnv': {
-      state.envVars.set(msg.containerId, msg.env);
-      if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Env')) {
-        renderDetailContent(getFilteredItems());
+    case 'updateInspect': {
+      state.containerDetails.set(msg.containerId, msg.details);
+      if (state.selectedItemId === msg.containerId && (isViewingTab('containers', 'Env') || isViewingTab('containers', 'Config'))) {
+        renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true });
       }
       break;
     }

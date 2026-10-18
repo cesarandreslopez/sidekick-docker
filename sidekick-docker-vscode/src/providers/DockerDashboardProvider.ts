@@ -273,8 +273,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
       onComposeLogs: (projectName, serviceName, entries) => {
         post({ type: 'updateComposeLogs', projectName, serviceName, entries });
       },
-      onEnvLoaded: (containerId, env) => {
-        post({ type: 'updateEnv', containerId, env });
+      onDetailsLoaded: (containerId, details) => {
+        post({ type: 'updateInspect', containerId, details });
       },
       onChangesLoaded: (containerId, changes) => {
         post({ type: 'updateChanges', containerId, changes });

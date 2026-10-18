@@ -8,7 +8,7 @@ import type { WebviewMessage } from './messages';
  */
 export const WebviewMessageSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('webviewReady') }),
-  z.object({ type: z.literal('retryDetail'), kind: z.enum(['env', 'changes', 'layers']), itemId: z.string().min(1) }),
+  z.object({ type: z.literal('retryDetail'), kind: z.enum(['inspect', 'changes', 'layers']), itemId: z.string().min(1) }),
   z.object({ type: z.literal('retryStreams') }),
   z.object({ type: z.literal('switchPanel'), panelIndex: z.number() }),
   z.object({ type: z.literal('selectItem'), panelId: z.enum(['containers', 'services', 'images', 'volumes', 'networks']), itemId: z.string().nullable() }),

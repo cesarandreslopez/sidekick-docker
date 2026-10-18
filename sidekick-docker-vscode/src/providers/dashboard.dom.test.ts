@@ -136,12 +136,12 @@ describe('dashboard DOM', () => {
 
   it('renders actionable detail and stream errors', () => {
     element('[data-tab="2"]').click();
-    receive({ type: 'detailLoad', update: { kind: 'env', itemId: 'alpha', state: 'error', message: 'Access denied' } });
+    receive({ type: 'detailLoad', update: { kind: 'inspect', itemId: 'alpha', state: 'error', message: 'Access denied' } });
     expect(element('#detail-content').textContent).toContain('Access denied');
     element('[data-retry-detail]').click();
-    expect(sent.at(-1)).toEqual({ type: 'retryDetail', kind: 'env', itemId: 'alpha' });
-    receive({ type: 'updateEnv', containerId: 'alpha', env: ['FOO=bar'] });
-    receive({ type: 'detailLoad', update: { kind: 'env', itemId: 'alpha', state: 'ready' } });
+    expect(sent.at(-1)).toEqual({ type: 'retryDetail', kind: 'inspect', itemId: 'alpha' });
+    receive({ type: 'updateInspect', containerId: 'alpha', details: { env: ['FOO=bar'], restartPolicy: { name: 'always', maximumRetryCount: 0 }, restartCount: 0, mounts: [], exitCode: 0, oomKilled: false, error: '', health: null } });
+    receive({ type: 'detailLoad', update: { kind: 'inspect', itemId: 'alpha', state: 'ready' } });
     expect(element('#detail-content').textContent).toContain('FOO');
     element('[data-tab="0"]').click();
     receive({ type: 'streamState', update: { kind: 'logs', itemId: 'alpha', state: 'error', message: 'Disconnected' } });

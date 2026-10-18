@@ -1,7 +1,7 @@
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest';
 import { DockerService } from './DockerService';
 import type { DockerServiceCallbacks } from './DockerService';
-import type { LogEntry, ContainerInfo } from 'sidekick-docker-shared';
+import type { LogEntry, ContainerInfo, ContainerDetails } from 'sidekick-docker-shared';
 
 const mocks = vi.hoisted(() => ({
   containers: vi.fn(), images: vi.fn(), logs: vi.fn(), stats: vi.fn(), composeLogs: vi.fn(), env: vi.fn(), changes: vi.fn(),
@@ -23,7 +23,7 @@ vi.mock('sidekick-docker-shared', async importOriginal => {
       };
       streamLogs = mocks.logs;
       streamStats = mocks.stats;
-      getContainerEnv = mocks.env;
+      getContainerDetails = mocks.env;
       getContainerChanges = mocks.changes;
       dispose() {}
     },
@@ -42,6 +42,9 @@ function deferred<T>() {
   const promise = new Promise<T>(r => { resolve = r; });
   return { promise, resolve };
 }
+function details(env: string[]): ContainerDetails {
+  return { env, restartPolicy: { name: 'no', maximumRetryCount: 0 }, restartCount: 0, mounts: [], exitCode: 0, oomKilled: false, error: '', health: null };
+}
 function log(message: string): LogEntry { return { message, stream: 'stdout', timestamp: null }; }
 function container(id: string): ContainerInfo { return { id, name: id, state: 'running', status: 'Up', image: 'test', ports: [], created: new Date() }; }
 const tick = async () => { await vi.advanceTimersByTimeAsync(110); };
@@ -52,12 +55,12 @@ beforeEach(() => {
   vi.resetAllMocks();
   mocks.containers.mockResolvedValue([]);
   mocks.images.mockResolvedValue([]);
-  mocks.env.mockResolvedValue([]);
+  mocks.env.mockResolvedValue(details([]));
   mocks.changes.mockResolvedValue([]);
   mocks.stats.mockImplementation(async function* () {});
   mocks.logs.mockImplementation(async function* () {});
   mocks.composeLogs.mockImplementation(async function* () {});
-  callbacks = { onStateChange: vi.fn(), onLogsChange: vi.fn(), onStatsChange: vi.fn(), onComposeLogs: vi.fn(), onEnvLoaded: vi.fn(), onChangesLoaded: vi.fn(), onLayersLoaded: vi.fn(), onStreamState: vi.fn(), onDetailLoad: vi.fn() };
+  callbacks = { onStateChange: vi.fn(), onLogsChange: vi.fn(), onStatsChange: vi.fn(), onComposeLogs: vi.fn(), onDetailsLoaded: vi.fn(), onChangesLoaded: vi.fn(), onLayersLoaded: vi.fn(), onStreamState: vi.fn(), onDetailLoad: vi.fn() };
   service = new DockerService(callbacks);
 });
 afterEach(() => { service.dispose(); vi.useRealTimers(); });
@@ -130,25 +133,25 @@ describe('DockerService lifecycle', () => {
   });
 
   it('surfaces detail failures and permits a successful retry', async () => {
-    mocks.env.mockRejectedValueOnce(new Error('env denied')).mockResolvedValueOnce(['OK=yes']);
-    await service.loadDetail('env', 'A');
-    expect(callbacks.onDetailLoad).toHaveBeenLastCalledWith({ kind: 'env', itemId: 'A', state: 'error', message: 'env denied' });
-    await service.loadDetail('env', 'A', true);
-    expect(callbacks.onEnvLoaded).toHaveBeenLastCalledWith('A', ['OK=yes']);
-    expect(callbacks.onDetailLoad).toHaveBeenLastCalledWith({ kind: 'env', itemId: 'A', state: 'ready' });
+    mocks.env.mockRejectedValueOnce(new Error('env denied')).mockResolvedValueOnce(details(['OK=yes']));
+    await service.loadDetail('inspect', 'A');
+    expect(callbacks.onDetailLoad).toHaveBeenLastCalledWith({ kind: 'inspect', itemId: 'A', state: 'error', message: 'env denied' });
+    await service.loadDetail('inspect', 'A', true);
+    expect(callbacks.onDetailsLoaded).toHaveBeenLastCalledWith('A', expect.objectContaining({ env: ['OK=yes'] }));
+    expect(callbacks.onDetailLoad).toHaveBeenLastCalledWith({ kind: 'inspect', itemId: 'A', state: 'ready' });
   });
 
   it('does not publish pending refresh or detail completions after disposal', async () => {
     const list = deferred<ContainerInfo[]>();
-    const env = deferred<string[]>();
+    const env = deferred<ContainerDetails>();
     mocks.containers.mockReturnValue(list.promise); mocks.env.mockReturnValue(env.promise);
-    const pending = Promise.all([service.forceRefresh(), service.loadDetail('env', 'A')]);
+    const pending = Promise.all([service.forceRefresh(), service.loadDetail('inspect', 'A')]);
     service.dispose();
     vi.mocked(callbacks.onDetailLoad!).mockClear();
-    list.resolve([container('late')]); env.resolve(['LATE=yes']);
+    list.resolve([container('late')]); env.resolve(details(['LATE=yes']));
     await pending; await tick();
     expect(callbacks.onStateChange).not.toHaveBeenCalled();
-    expect(callbacks.onEnvLoaded).not.toHaveBeenCalled();
+    expect(callbacks.onDetailsLoaded).not.toHaveBeenCalled();
     expect(callbacks.onDetailLoad).not.toHaveBeenCalled();
   });
 

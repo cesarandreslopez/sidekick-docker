@@ -111,6 +111,18 @@ export interface SerializedFilesystemChange {
   kind: 'added' | 'changed' | 'deleted';
 }
 
+/** ContainerDetails with dates as ISO strings (see shared types/container.ts). */
+export interface SerializedContainerDetails {
+  env: string[];
+  restartPolicy: { name: string; maximumRetryCount: number };
+  restartCount: number;
+  mounts: { type: string; name?: string; source: string; destination: string; readOnly: boolean }[];
+  exitCode: number;
+  oomKilled: boolean;
+  error: string;
+  health: { status: string; failingStreak: number; log: { start: string | null; exitCode: number; output: string }[] } | null;
+}
+
 export interface SerializedImageLayer {
   id: string;
   created: string;
@@ -133,7 +145,8 @@ export interface DashboardStateSnapshot {
 
 // ─── Extension → Webview ────────────────────────────────────────────
 
-export type DetailKind = 'env' | 'changes' | 'layers';
+/** `inspect`: env, restart policy, mounts, health, exit status — one inspect call. */
+export type DetailKind = 'inspect' | 'changes' | 'layers';
 export type PanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
 export interface DetailLoadUpdate {
   kind: DetailKind;
@@ -154,7 +167,7 @@ export type ExtensionMessage =
   | { type: 'updateState'; snapshot: DashboardStateSnapshot }
   | { type: 'updateLogs'; containerId: string; entries: SerializedLogEntry[]; severityCounts?: SerializedSeverityCounts }
   | { type: 'updateStats'; containerId: string; stats: SerializedContainerStats | null; loading: boolean; cpuHistory?: number[]; memoryHistory?: number[]; networkRxRateHistory?: number[]; networkTxRateHistory?: number[]; blockReadRateHistory?: number[]; blockWriteRateHistory?: number[]; logSeveritySeries?: { severity: string; total: number }[] }
-  | { type: 'updateEnv'; containerId: string; env: string[] }
+  | { type: 'updateInspect'; containerId: string; details: SerializedContainerDetails }
   | { type: 'phraseBank'; phrases: string[] }
   | { type: 'toast'; message: string; severity: 'error' | 'warning' | 'info' | 'success' }
   | { type: 'focusContainer'; containerId: string }
