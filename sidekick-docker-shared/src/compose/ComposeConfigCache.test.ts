@@ -23,7 +23,7 @@ function fakeReader(results: ComposeReadResult[] = [{ config: CONFIG, transient:
 describe('composeFileSignature', () => {
   it('is null when no compose file exists in cwd or any parent', async () => {
     const fs = fakeFs({});
-    expect(await composeFileSignature(ROOT, { stat: fs.stat, env: {} })).toBeNull();
+    expect(await composeFileSignature(ROOT, { stat: fs.stat, env: {}, readText: () => Promise.resolve(null) })).toBeNull();
   });
 
   it('finds a compose file in a parent directory and includes its override and .env', async () => {
@@ -33,6 +33,13 @@ describe('composeFileSignature', () => {
     expect(sig).toContain(join(parent, 'compose.yaml'));
     expect(sig).toContain(join(parent, 'compose.override.yaml'));
     expect(sig).toContain(join(parent, '.env'));
+  });
+
+  it('honours COMPOSE_FILE set in the project .env', async () => {
+    const fs = fakeFs({ [join(ROOT, 'stack.yml')]: 1 });
+    const readText = (p: string) => Promise.resolve(p === join(ROOT, '.env') ? 'FOO=1\nCOMPOSE_FILE="stack.yml"\n' : null);
+    const sig = await composeFileSignature(ROOT, { stat: fs.stat, env: {}, readText });
+    expect(sig).toContain(join(ROOT, 'stack.yml'));
   });
 
   it('honours COMPOSE_FILE instead of searching', async () => {
@@ -55,7 +62,7 @@ describe('CachedComposeFileReader', () => {
     const fs = fakeFs(files);
     const r = fakeReader(results);
     let now = 0;
-    const cache = new CachedComposeFileReader(r.reader, { stat: fs.stat, env: {}, now: () => now, maxAgeMs: 1000 });
+    const cache = new CachedComposeFileReader(r.reader, { stat: fs.stat, env: {}, readText: () => Promise.resolve(null), now: () => now, maxAgeMs: 1000 });
     return { fs, r, cache, tick: (ms: number) => { now += ms; } };
   };
 
@@ -102,4 +109,23 @@ describe('CachedComposeFileReader', () => {
     expect(await cache.read(ROOT)).toEqual({ projectName: 'app2', services: [] });
     expect(r.read).toHaveBeenCalledTimes(3);
   });
+
+  it('does not join an in-flight read whose pass was aborted', async () => {
+    const fs = fakeFs({ [join(ROOT, 'compose.yaml')]: 1 });
+    let release!: (r: ComposeReadResult) => void;
+    const read = vi.fn()
+      .mockImplementationOnce(() => new Promise<ComposeReadResult>(r => { release = r; }))
+      .mockResolvedValueOnce({ config: CONFIG, transient: false });
+    const cache = new CachedComposeFileReader({ read } as unknown as ComposeFileReader, { stat: fs.stat, env: {}, readText: () => Promise.resolve(null) });
+    const abort = new AbortController();
+    const first = cache.read(ROOT, { signal: abort.signal });
+    await Promise.resolve();
+    abort.abort();
+    const second = await cache.read(ROOT);
+    expect(second).toEqual(CONFIG);
+    expect(read).toHaveBeenCalledTimes(2);
+    release({ config: null, transient: true });
+    await first;
+  });
 });
+

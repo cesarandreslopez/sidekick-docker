@@ -1,4 +1,4 @@
-import { stat as fsStat } from 'fs/promises';
+import { readFile, stat as fsStat } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import type { ComposeFileConfig, ComposeFileReader } from './ComposeFileReader';
 
@@ -8,6 +8,21 @@ export interface ComposeConfigSource {
 }
 
 type StatFn = (path: string) => Promise<{ mtimeMs: number; size: number } | null>;
+type ReadTextFn = (path: string) => Promise<string | null>;
+
+const defaultReadText: ReadTextFn = async (path) => {
+  try {
+    return await readFile(path, 'utf8');
+  } catch {
+    return null;
+  }
+};
+
+/** COMPOSE_FILE as set in a project's `.env` (compose reads it from there too). */
+function composeFileFromDotEnv(text: string | null): string | undefined {
+  const m = text?.match(/^\s*COMPOSE_FILE\s*=\s*(.*?)\s*$/m);
+  return m?.[1]?.replace(/^(['"])(.*)\1$/, '$2') || undefined;
+}
 
 /** File names `docker compose` looks for, in its own precedence order. */
 const COMPOSE_FILES = ['compose.yaml', 'compose.yml', 'docker-compose.yaml', 'docker-compose.yml'];
@@ -34,10 +49,14 @@ const defaultStat: StatFn = async (path) => {
  */
 export async function composeFileSignature(
   cwd: string,
-  deps: { stat?: StatFn; env?: Record<string, string | undefined> } = {},
+  deps: { stat?: StatFn; env?: Record<string, string | undefined>; readText?: ReadTextFn } = {},
 ): Promise<string | null> {
   const stat = deps.stat ?? defaultStat;
-  const env = deps.env ?? process.env;
+  const processEnv = deps.env ?? process.env;
+  // The process environment wins over .env, as in compose itself.
+  const dotEnvComposeFile = processEnv.COMPOSE_FILE ? undefined
+    : composeFileFromDotEnv(await (deps.readText ?? defaultReadText)(join(cwd, '.env')));
+  const env = dotEnvComposeFile ? { ...processEnv, COMPOSE_FILE: dotEnvComposeFile } : processEnv;
   const parts = ENV_KEYS.map(k => `${k}=${env[k] ?? ''}`);
   const statPart = async (path: string) => {
     const s = await stat(path);
@@ -78,6 +97,7 @@ export interface CachedComposeFileReaderOptions {
   maxAgeMs?: number;
   stat?: StatFn;
   env?: Record<string, string | undefined>;
+  readText?: ReadTextFn;
   now?: () => number;
 }
 
@@ -95,7 +115,7 @@ export class CachedComposeFileReader implements ComposeConfigSource {
   private readonly maxAgeMs: number;
   private readonly now: () => number;
   private cached: { cwd: string; signature: string; at: number; config: ComposeFileConfig | null } | null = null;
-  private inflight: { key: string; promise: Promise<ComposeFileConfig | null> } | null = null;
+  private inflight: { key: string; promise: Promise<ComposeFileConfig | null>; signal?: AbortSignal } | null = null;
 
   constructor(private readonly reader: ComposeFileReader, private readonly options: CachedComposeFileReaderOptions = {}) {
     this.maxAgeMs = options.maxAgeMs ?? 5 * 60_000;
@@ -103,7 +123,7 @@ export class CachedComposeFileReader implements ComposeConfigSource {
   }
 
   async read(cwd: string, opts: { signal?: AbortSignal; force?: boolean } = {}): Promise<ComposeFileConfig | null> {
-    const signature = await composeFileSignature(cwd, { stat: this.options.stat, env: this.options.env });
+    const signature = await composeFileSignature(cwd, { stat: this.options.stat, env: this.options.env, readText: this.options.readText });
     if (signature === null) {
       this.cached = null;
       return null;
@@ -115,7 +135,9 @@ export class CachedComposeFileReader implements ComposeConfigSource {
     }
 
     const key = `${cwd}\0${signature}`;
-    if (this.inflight?.key === key) return this.inflight.promise;
+    // Join a read in flight, unless it belongs to a pass that was aborted
+    // (timed out): that one will resolve to a transient failure.
+    if (this.inflight?.key === key && !this.inflight.signal?.aborted) return this.inflight.promise;
 
     const promise = this.reader.read(cwd, { signal: opts.signal }).then((result) => {
       if (!result.transient) this.cached = { cwd, signature, at: this.now(), config: result.config };
@@ -124,7 +146,7 @@ export class CachedComposeFileReader implements ComposeConfigSource {
     }).finally(() => {
       if (this.inflight?.promise === promise) this.inflight = null;
     });
-    this.inflight = { key, promise };
+    this.inflight = { key, promise, signal: opts.signal };
     return promise;
   }
 

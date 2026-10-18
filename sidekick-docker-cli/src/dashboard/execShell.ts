@@ -6,7 +6,8 @@ export function resolveExecShell(flag: string | undefined, env: Record<string, s
   return flag?.trim() || env.SIDEKICK_DOCKER_SHELL?.trim() || DEFAULT_EXEC_SHELL;
 }
 
-const MISSING_BINARY = /executable file not found|no such file or directory|OCI runtime exec failed/i;
+/** What Docker itself prints when the exec'd binary does not exist (not what a shell prints). */
+const MISSING_BINARY = /OCI runtime exec failed|executable file not found in \$PATH|exec: "[^"]*": stat [^:]+: no such file or directory/i;
 
 /**
  * Explain an exec session that ended because the shell does not exist in the
@@ -15,7 +16,9 @@ const MISSING_BINARY = /executable file not found|no such file or directory|OCI 
  * — a shell's exit code is whatever its last command returned.
  */
 export function describeExecExit(e: { exitCode: number | null; outputTail: string; shell: string; containerName: string }): string | null {
-  const missing = e.exitCode === 126 || e.exitCode === 127 || (e.exitCode !== 0 && MISSING_BINARY.test(e.outputTail));
+  // Docker's own message, not the exit code: a shell left with Ctrl+D right
+  // after "command not found" also exits 127.
+  const missing = e.exitCode !== 0 && MISSING_BINARY.test(e.outputTail);
   if (!missing) return null;
   return e.shell === DEFAULT_EXEC_SHELL
     ? `No ${e.shell} in ${e.containerName} — the image may have no shell at all (distroless/scratch). Pick one with --shell or SIDEKICK_DOCKER_SHELL.`

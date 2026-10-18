@@ -190,17 +190,27 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   // each time the row was revisited before the first answer came back. A
   // failure is recorded (the pane says why) and retried on the next visit.
   const inflightDetails = new Set<string>();
-  function fetchDetail<T>(kind: DetailKind, id: string, cached: unknown, fetch: () => Promise<T>, keep: (value: T) => void): void {
+  // Keys invalidated while their fetch was in flight: that result predates the
+  // change, so it is dropped and fetched again.
+  const staleDetails = new Set<string>();
+  function fetchDetail<T>(kind: DetailKind, id: string, cached: unknown, fetch: () => Promise<T>, keep: (value: T) => void, invalidated = false): void {
     const key = DockerState.detailErrorKey(kind, id);
-    if (cached !== undefined || inflightDetails.has(key)) return;
+    if (cached !== undefined) return;
+    if (inflightDetails.has(key)) {
+      if (invalidated) staleDetails.add(key);
+      return;
+    }
     inflightDetails.add(key);
+    staleDetails.delete(key);
     fetch().then((value) => {
+      if (staleDetails.has(key)) return;
       state.clearDetailError(kind, id);
       keep(value);
     }).catch((e: unknown) => {
-      state.setDetailError(kind, id, errorMessage(e));
+      if (!staleDetails.has(key)) state.setDetailError(kind, id, errorMessage(e));
     }).finally(() => {
       inflightDetails.delete(key);
+      if (staleDetails.delete(key)) fetchDetail(kind, id, undefined, fetch, keep);
       scheduleRender();
     });
   }
@@ -315,7 +325,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       if (view?.panelId === 'containers' && view.itemId === event.resourceId
         && (view.detailTabIndex === 2 || view.detailTabIndex === 3)) {
         const id = view.itemId;
-        fetchDetail('details', id, state.getContainerDetails(id), () => client.getContainerDetails(id), d => state.setContainerDetails(id, d));
+        fetchDetail('details', id, state.getContainerDetails(id), () => client.getContainerDetails(id), d => state.setContainerDetails(id, d), true);
       }
     },
     onError: (err) => {

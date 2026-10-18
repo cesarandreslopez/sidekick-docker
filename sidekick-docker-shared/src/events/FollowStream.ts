@@ -88,13 +88,15 @@ export class FollowStream<T> {
   }
 
   /**
-   * The target may have started again: if the stream has finished or is
-   * waiting out a backoff, and the target is now running, reconnect at once.
+   * The target may have started again: a stream that ended because its target
+   * stopped reconnects at once if the target is now running. Streams that are
+   * backing off or gave up (`error`) are left alone — callers invoke this on
+   * every state change, and resetting their backoff here would retry a
+   * permanently failing source (e.g. `--log-driver=none`) forever.
    */
   resume(): void {
     if (!this.started || this.stopped || this.attemptActive) return;
-    const finished = this._state === 'ended' || this._state === 'empty' || this._state === 'error';
-    if (!finished && !this.waiting) return;
+    if (this._state !== 'ended' && this._state !== 'empty') return;
     if (this.opts.isTargetRunning?.() !== true) return;
     this.scheduler.clear();
     this.scheduler.reset();

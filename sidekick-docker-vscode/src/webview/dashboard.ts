@@ -493,7 +493,7 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
   }
 
   let html = tab.render(item, state);
-  const kind = panel.id === 'containers' ? ({ Env: 'inspect', Files: 'changes' } as const)[tab.label as 'Env' | 'Files']
+  const kind = panel.id === 'containers' ? ({ Env: 'inspect', Config: 'inspect', Files: 'changes' } as const)[tab.label as 'Env' | 'Config' | 'Files']
     : panel.id === 'images' && tab.label === 'Layers' ? 'layers' : undefined;
   const load = kind ? state.detailLoads.get(`${kind}:${item.id}`) : undefined;
   if (load?.state === 'error') {

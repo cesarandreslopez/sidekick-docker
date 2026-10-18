@@ -242,6 +242,13 @@ export class DockerService {
   setViewState(next: Partial<DashboardViewState>): void {
     this.viewState = { ...this.viewState, ...next, visible: this.viewState.visible };
     this.applyStreamDemand();
+    // Details invalidated by an event while another tab was showing are
+    // re-loaded when Env or Config comes back into view.
+    const v = this.viewState;
+    if (this.initialized && v.activePanelId === 'containers' && v.selectedItemId
+      && (v.detailTabIndex === 2 || v.detailTabIndex === 3) && !this.inspectedDetails.has(v.selectedItemId)) {
+      void this.loadDetail('inspect', v.selectedItemId);
+    }
   }
 
   async setVisible(visible: boolean): Promise<void> {
@@ -527,7 +534,9 @@ export class DockerService {
     if (this.disposed) return;
     const key = `${kind}:${itemId}`;
     const pending = this.detailPending.get(key);
-    if (pending) return pending;
+    // A retry must not adopt a request that started before whatever made it
+    // stale (an invalidating event, a failure): run again once that one settles.
+    if (pending) return retry ? pending.then(() => this.loadDetail(kind, itemId, true)) : pending;
     const run = async () => {
       this.callbacks.onDetailLoad?.({ kind, itemId, state: 'loading' });
       try {

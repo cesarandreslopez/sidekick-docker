@@ -129,4 +129,21 @@ describe('FollowStream', () => {
     expect(items).toEqual([]);
     expect(open).toHaveBeenCalledTimes(1);
   });
+
+  it('resume() leaves a backing-off or failed stream alone', async () => {
+    const src = batches<string>(new Error('logging driver does not support reading'));
+    const { stream } = make(src.open, { running: () => true });
+    stream.start();
+    await flush();
+    expect(stream.state).toBe('reconnecting');
+    for (let i = 0; i < 5; i++) stream.resume();
+    await flush();
+    expect(src.open).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(stream.state).toBe('error');
+    stream.resume();
+    await flush();
+    expect(src.open).toHaveBeenCalledTimes(11);
+  });
 });
+

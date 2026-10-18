@@ -44,7 +44,10 @@ export class LogSlot<K> {
     this.key = key;
     const itemId = this.spec.itemId(key);
     const stream = new FollowStream<LogEntry>({
-      open: (signal, { reconnect }) => this.spec.open(key, signal, { reconnect, cursor: this.cursor }),
+      open: (signal, { reconnect }) => {
+        if (reconnect) this.cursor.beginResume();
+        return this.spec.open(key, signal, { reconnect, cursor: this.cursor });
+      },
       accept: entry => !this.cursor.isReplay(entry),
       onItem: (entry) => {
         this.cursor.observe(entry);

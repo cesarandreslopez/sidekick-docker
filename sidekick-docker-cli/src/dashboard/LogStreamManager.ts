@@ -32,6 +32,7 @@ export class LogStreamManager extends BaseStreamManager<string | null, LogEntry>
   protected idLabel(id: string | null): string { return id ?? '(none)'; }
 
   protected createStream(id: string | null, signal: AbortSignal, attempt: { reconnect: boolean }): AsyncIterable<LogEntry> {
+    if (attempt.reconnect) this.cursor.beginResume();
     const since = attempt.reconnect ? this.cursor.sinceSeconds() : undefined;
     return this.client.streamLogs(id!, since === undefined ? { follow: true, tail: 100 } : { follow: true, tail: MAX_LOG_LINES, since }, signal);
   }

@@ -35,6 +35,7 @@ export class ComposeLogStreamManager extends BaseStreamManager<ComposeStreamId, 
   protected idLabel(id: ComposeStreamId): string { return id.project ?? '(none)'; }
 
   protected createStream(id: ComposeStreamId, signal: AbortSignal, attempt: { reconnect: boolean }): AsyncIterable<LogEntry> {
+    if (attempt.reconnect) this.cursor.beginResume();
     const since = attempt.reconnect ? this.cursor.sinceIso() : undefined;
     return this.composeClient.streamLogs(id.project!, id.service ?? undefined, since ? MAX_LOG_LINES : 100, signal, since);
   }
