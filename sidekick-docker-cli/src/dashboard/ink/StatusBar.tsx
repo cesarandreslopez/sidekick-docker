@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import { BRAND_INLINE, BRAND_TAGLINE } from 'sidekick-docker-shared';
+import { ACCENT } from '../../theme';
 
 export interface ActionHint {
   key: string;
@@ -72,14 +73,14 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
     segments.push({ group: 'hints', text: ` ${SEP} `, color: 'gray', dimColor: true });
     panelActionHints.forEach((hint, i) => {
       if (i > 0) segments.push({ group: 'hints', text: '  ' });
-      segments.push({ group: 'hints', text: `${hint.key}:${hint.label}`, color: hint.destructive ? 'red' : '#2B4C7E' });
+      segments.push({ group: 'hints', text: `${hint.key}:${hint.label}`, color: hint.destructive ? 'red' : ACCENT });
     });
   }
 
   segments.push({ group: 'focus', text: ` ${SEP} `, color: 'gray', dimColor: true });
-  segments.push({ group: 'focus', text: '◀', color: focusTarget === 'side' ? '#2B4C7E' : 'gray', bold: focusTarget === 'side' });
+  segments.push({ group: 'focus', text: '◀', color: focusTarget === 'side' ? ACCENT : 'gray', bold: focusTarget === 'side' });
   segments.push({ group: 'focus', text: '/', color: 'gray', dimColor: true });
-  segments.push({ group: 'focus', text: '▶', color: focusTarget === 'detail' ? '#2B4C7E' : 'gray', bold: focusTarget === 'detail' });
+  segments.push({ group: 'focus', text: '▶', color: focusTarget === 'detail' ? ACCENT : 'gray', bold: focusTarget === 'detail' });
 
   segments.push({ group: 'nav', text: '  j/k  Tab  /  ?', color: 'gray', dimColor: true });
 

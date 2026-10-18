@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import type { ToastEntry } from './dashboardTypes';
+import { ACCENT_FILL } from '../../theme';
 
 interface ToastNotificationProps {
   toast: ToastEntry;
@@ -9,7 +10,7 @@ interface ToastNotificationProps {
 const SEVERITY_COLORS: Record<string, string> = {
   error: 'red',
   warning: 'yellow',
-  info: '#2B4C7E',
+  info: ACCENT_FILL,
   success: 'green',
 };
 

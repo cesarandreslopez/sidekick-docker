@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { PanelItem } from '../panels/types';
 import { windowLines } from './windowLines';
+import { ACCENT } from '../../theme';
 
 export type ListState = 'disconnected' | 'loading' | 'ready';
 
@@ -53,9 +54,9 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
   const innerWidth = width - 2;
 
   return (
-    <Box flexDirection="column" width={width} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? '#2B4C7E' : 'gray'}>
+    <Box flexDirection="column" width={width} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? ACCENT : 'gray'}>
       {/* Panel title in first row */}
-      <Text color={focused ? '#2B4C7E' : 'gray'} bold>{` ${titleLabel}`}</Text>
+      <Text color={focused ? ACCENT : 'gray'} bold>{` ${titleLabel}`}</Text>
       {win.hasUp && (
         <Text color="gray">{` \u25B2 (${win.above} more)`}</Text>
       )}
@@ -90,11 +91,11 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
             <Box key={item.id}>
               {/* '>' rather than a space: inverse video is stripped under
                   NO_COLOR, which would otherwise leave selection invisible. */}
-              <Text color="#2B4C7E" bold inverse>{`>${prefix}`}</Text>
-              <Text color={item.iconColor || '#2B4C7E'} bold inverse>{icon}</Text>
-              <Text color="#2B4C7E" bold inverse wrap="truncate">{restText}</Text>
+              <Text color={ACCENT} bold inverse>{`>${prefix}`}</Text>
+              <Text color={item.iconColor || ACCENT} bold inverse>{icon}</Text>
+              <Text color={ACCENT} bold inverse wrap="truncate">{restText}</Text>
               {rightLen > 0 && (
-                <Text color="#2B4C7E" bold inverse>{` ${rightLabel}`}</Text>
+                <Text color={ACCENT} bold inverse>{` ${rightLabel}`}</Text>
               )}
               {/* No trailing filler here: restText is already padded out to
                   restWidth, so the row totals exactly innerWidth — the same as
@@ -108,8 +109,8 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
         // Normal rendering: icon gets its own color. Unselected rows use the
         // terminal's own foreground — an explicit 'white' disappears entirely
         // on a light-background terminal.
-        const iconColor = item.iconColor || (isSelected ? '#2B4C7E' : undefined);
-        const textColor = isSelected ? '#2B4C7E' : undefined;
+        const iconColor = item.iconColor || (isSelected ? ACCENT : undefined);
+        const textColor = isSelected ? ACCENT : undefined;
         // Selection in an unfocused list was signalled by colour alone, which
         // is invisible with NO_COLOR or on a monochrome terminal.
         const marker = isSelected ? '>' : ' ';
@@ -165,7 +166,7 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
             <>
               <Text>{''}</Text>
               <Text color="gray" dimColor wrap="truncate">{` ${EMPTY_HINTS[panelId][0]}`}</Text>
-              <Text color="#2B4C7E" bold wrap="truncate">{` ${EMPTY_HINTS[panelId][1]}`}</Text>
+              <Text color={ACCENT} bold wrap="truncate">{` ${EMPTY_HINTS[panelId][1]}`}</Text>
             </>
           )}
         </Box>

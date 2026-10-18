@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { DetailTab } from '../panels/types';
 import { detailTabWindow } from './tabLayout';
+import { ACCENT } from '../../theme';
 
 const CYCLE_HINT = '[/] cycle tabs';
 const FOLLOW_PAUSED = '⏸ follow paused — G to resume';
@@ -45,7 +46,7 @@ export function DetailTabBar({ tabs, activeIndex, followPaused, width }: DetailT
         return (
           <Box key={tab.label} marginRight={1} flexShrink={0}>
             <Text
-              color={isActive ? '#2B4C7E' : 'gray'}
+              color={isActive ? ACCENT : 'gray'}
               bold={isActive}
               inverse={isActive}
               wrap="truncate"

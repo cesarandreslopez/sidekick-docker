@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type { SidePanel } from '../panels/types';
 import { panelCountLabel, shouldCompactTabs } from './tabLayout';
 import type { TabCount } from './tabLayout';
+import { ACCENT } from '../../theme';
 
 interface TabBarProps {
   panels: SidePanel[];
@@ -35,7 +36,7 @@ export function TabBar({ panels, activeIndex, layoutMode, phrase, panelCounts, w
         return (
           <Box key={panel.id} marginRight={1} flexShrink={0}>
             <Text
-              color={isActive ? '#2B4C7E' : 'gray'}
+              color={isActive ? ACCENT : 'gray'}
               bold={isActive}
               inverse={isActive}
               wrap="truncate"
@@ -43,7 +44,7 @@ export function TabBar({ panels, activeIndex, layoutMode, phrase, panelCounts, w
               {compact ? ` ${panel.shortcutKey}` : ` ${panel.shortcutKey} ${panel.title}`}
             </Text>
             <Text
-              color={isActive ? (countColor || '#2B4C7E') : (countColor || 'gray')}
+              color={isActive ? (countColor || ACCENT) : (countColor || 'gray')}
               bold={isActive}
               inverse={isActive}
               dimColor={!isActive && !countColor}
@@ -59,7 +60,7 @@ export function TabBar({ panels, activeIndex, layoutMode, phrase, panelCounts, w
       </Box>
       {/* Never shrink: the rotating phrase beside it is expendable, this is not. */}
       <Box flexShrink={0}>
-        <Text color={layoutMode !== 'normal' ? '#2B4C7E' : 'gray'} wrap="truncate">
+        <Text color={layoutMode !== 'normal' ? ACCENT : 'gray'} wrap="truncate">
           {`z: ${layoutMode === 'expanded' ? 'Expanded' : layoutMode === 'wide' ? 'Wide' : 'Normal'} ▸`}
         </Text>
       </Box>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
+import { ACCENT_FILL } from '../../theme';
 
 interface FilterOverlayProps {
   filterString: string;
@@ -15,7 +16,7 @@ export function FilterOverlay({ filterString, matchCount, totalCount, panelTitle
 
   return (
     <Box position="absolute" marginTop={1} marginLeft={1}>
-      <Text backgroundColor="#2B4C7E" color="white" bold>
+      <Text backgroundColor={ACCENT_FILL} color="white" bold>
         {` \u2315 ${filterString}\u2588 `}
       </Text>
       {countInfo && (

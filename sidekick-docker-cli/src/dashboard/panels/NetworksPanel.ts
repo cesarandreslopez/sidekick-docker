@@ -4,6 +4,7 @@ import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { truncate, colorizeDetailKey, colorizeId, colorizeBool, colorizeNetworkContainer, colorizeEnvLine, sectionHeader } from '../../formatters';
+import { ACCENT } from '../../theme';
 
 export class NetworksPanel implements SidePanel {
   readonly id = 'networks';
@@ -80,7 +81,7 @@ export class NetworksPanel implements SidePanel {
         label: `${icon} ${truncate(net.name, 38)}`,
         sortKey: net.isDefault ? 0 : 1,
         data: net,
-        iconColor: net.isDefault ? '#2B4C7E' : 'gray',
+        iconColor: net.isDefault ? ACCENT : 'gray',
         rightLabel: countLabel,
         rightColor: net.containers.length > 0 ? 'green' : 'gray',
       };

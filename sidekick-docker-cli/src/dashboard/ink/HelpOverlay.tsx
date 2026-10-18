@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type { SidePanel } from '../panels/types';
 import type { HelpBinding, KeyCategory } from './keyRegistry';
 import { BRAND_INLINE, BRAND_TAGLINE } from 'sidekick-docker-shared';
+import { ACCENT_FILL } from '../../theme';
 
 interface HelpOverlayProps {
   panels: SidePanel[];
@@ -16,7 +17,7 @@ const CATEGORY_ORDER: KeyCategory[] = ['Navigation', 'View', 'Filters & Sort', '
 function KeyBadge({ k, dimmed }: { k: string; dimmed?: boolean }): React.ReactElement {
   return dimmed
     ? <Text color="gray" dimColor>{` ${k} `}</Text>
-    : <Text color="white" backgroundColor="#2B4C7E" bold>{` ${k} `}</Text>;
+    : <Text color="white" backgroundColor={ACCENT_FILL} bold>{` ${k} `}</Text>;
 }
 
 function SectionHeader({ title }: { title: string }): React.ReactElement {

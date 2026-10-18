@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { windowLines } from './windowLines';
+import { ACCENT } from '../../theme';
 
 interface DetailPaneProps {
   lines: string[];
@@ -13,7 +14,7 @@ export function DetailPane({ lines, scrollOffset, viewportHeight, focused }: Det
   const win = windowLines(lines, scrollOffset, viewportHeight);
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? '#2B4C7E' : 'gray'}>
+    <Box flexDirection="column" flexGrow={1} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? ACCENT : 'gray'}>
       {win.hasUp && (
         <Text color="gray">{`▲ (${win.above} more)`}</Text>
       )}

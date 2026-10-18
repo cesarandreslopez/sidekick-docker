@@ -4,7 +4,7 @@ import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
 import { panelData, detailFetchError, copyLogsAction } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
+import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, formatFileChange, formatLogTemplate, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
 
 export class ContainersPanel implements SidePanel {
   readonly id = 'containers';
@@ -159,11 +159,7 @@ export class ContainersPanel implements SidePanel {
         if (!changes) return 'Loading filesystem changes...';
         if (changes.length === 0) return 'No filesystem changes detected.';
         const lines = [sectionHeader(`Filesystem Changes (${changes.length} files)`), ''];
-        for (const change of changes) {
-          const icon = change.kind === 'added' ? 'A' : change.kind === 'deleted' ? 'D' : 'C';
-          const color = change.kind === 'added' ? '\x1b[32m' : change.kind === 'deleted' ? '\x1b[31m' : '\x1b[33m';
-          lines.push(`${color} ${icon}\x1b[39m  ${change.path}`);
-        }
+        for (const change of changes) lines.push(formatFileChange(change));
         return lines.join('\n');
       },
     },
@@ -174,12 +170,7 @@ export class ContainersPanel implements SidePanel {
         if (templates.length === 0) return 'No log patterns detected yet. Patterns will appear as logs stream in.';
 
         const lines = [sectionHeader('Top Log Patterns'), ''];
-        for (let i = 0; i < templates.length; i++) {
-          const t = templates[i];
-          const count = `\x1b[33m${String(t.count).padStart(5)}\x1b[39m`;
-          const pattern = t.pattern.replace(/<\*>/g, '\x1b[90m<*>\x1b[39m');
-          lines.push(`${count}  ${pattern}`);
-        }
+        for (const t of templates) lines.push(formatLogTemplate(t));
         return lines.join('\n');
       },
     },

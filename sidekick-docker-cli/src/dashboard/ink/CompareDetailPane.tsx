@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { clipAnsi } from '../../formatters';
+import { ansi, clipAnsi } from '../../formatters';
+import { ACCENT } from '../../theme';
 
 interface CompareDetailPaneProps {
   primaryLines: string[];
@@ -29,8 +30,8 @@ export function CompareDetailPane({
   const colWidth = Math.max(10, Math.floor((totalWidth - 5) / 2));
 
   // Header row: labels with a divider
-  const headerLeft = clipAnsi(`\x1b[1m${primaryLabel}\x1b[22m`, colWidth);
-  const headerRight = clipAnsi(`\x1b[1m${secondaryLabel}\x1b[22m`, colWidth);
+  const headerLeft = clipAnsi(ansi.bold(primaryLabel), colWidth);
+  const headerRight = clipAnsi(ansi.bold(secondaryLabel), colWidth);
 
   // viewportHeight excludes the column-header row (the parent budgets it via
   // scrollViewportHeight so scroll clamps agree); indicator rows fit inside.
@@ -65,7 +66,7 @@ export function CompareDetailPane({
   }
 
   return (
-    <Box flexDirection="column" flexGrow={1} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? '#2B4C7E' : 'gray'}>
+    <Box flexDirection="column" flexGrow={1} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? ACCENT : 'gray'}>
       {/* Column headers */}
       <Box>
         <Text wrap="truncate">{headerLeft}</Text>

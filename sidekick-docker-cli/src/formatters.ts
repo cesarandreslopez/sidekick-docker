@@ -1,6 +1,7 @@
-import type { LogEntry, SeverityLevel, FilterMode, SeverityCounts } from 'sidekick-docker-shared';
+import type { LogEntry, SeverityLevel, FilterMode, SeverityCounts, FilesystemChange, LogTemplate } from 'sidekick-docker-shared';
 import { tokenizeLogLine, formatTimestampTime, filterLine } from 'sidekick-docker-shared';
 import type { LogTokenType, FilterMatch } from 'sidekick-docker-shared';
+import { ACCENT_RGB } from './theme';
 
 // Re-export pure formatters from shared package
 export {
@@ -44,7 +45,7 @@ export const ansi = {
   green: style('32', '39'),
   yellow: style('33', '39'),
   cyan: style('36', '39'),
-  brand: style('38;2;43;76;126', '39'),
+  accent: style(`38;2;${ACCENT_RGB.join(';')}`, '39'),
   dim: style('2', '22'),
   bold: style('1', '22'),
 };
@@ -73,6 +74,19 @@ export function compactUptime(status: string): string {
   }
 }
 
+/** One row of the Files tab: A/D/C marker (green/red/yellow) and the path. */
+export function formatFileChange(change: FilesystemChange): string {
+  const [marker, color] = change.kind === 'added' ? ['A', ansi.green]
+    : change.kind === 'deleted' ? ['D', ansi.red]
+    : ['C', ansi.yellow];
+  return `${color(` ${marker}`)}  ${change.path}`;
+}
+
+/** One row of the Patterns tab: right-aligned count, then the template with dimmed wildcards. */
+export function formatLogTemplate(t: Pick<LogTemplate, 'count' | 'pattern'>): string {
+  return `${ansi.yellow(String(t.count).padStart(5))}  ${t.pattern.replace(/<\*>/g, ansi.gray('<*>'))}`;
+}
+
 /** Bold yellow section header for detail panel grouping. */
 export function sectionHeader(title: string): string {
   return ansi.bold(ansi.yellow(title));
@@ -82,7 +96,7 @@ export function sectionHeader(title: string): string {
 export function coloredSparkline(values: number[], color: 'cpu' | 'memory', width = 40): string {
   const s = sparkline(values, width);
   if (!s) return '';
-  const colorFn = color === 'cpu' ? ansi.brand : ansi.green;
+  const colorFn = color === 'cpu' ? ansi.accent : ansi.green;
   const recent = values.slice(-width);
   const min = Math.min(...recent);
   const max = Math.max(...recent, 1);
@@ -113,7 +127,7 @@ export function sparkline(values: number[], width = 40): string {
 const SEVERITY_COLORS: Record<SeverityLevel, (s: string) => string> = {
   error: ansi.red,
   warn: ansi.yellow,
-  info: ansi.brand,
+  info: ansi.accent,
   debug: ansi.gray,
   other: ansi.gray,
 };
@@ -133,18 +147,18 @@ export function severitySparkline(series: { severity: SeverityLevel; total: numb
 const TOKEN_COLORS: Record<LogTokenType, ((s: string) => string) | null> = {
   'severity-error': ansi.red,
   'severity-warn': ansi.yellow,
-  'severity-info': ansi.brand,
+  'severity-info': ansi.accent,
   'severity-debug': ansi.gray,
   'http-method-safe': ansi.green,
   'http-method-unsafe': ansi.yellow,
   'http-status-2xx': ansi.green,
-  'http-status-3xx': ansi.brand,
+  'http-status-3xx': ansi.accent,
   'http-status-4xx': ansi.yellow,
   'http-status-5xx': ansi.red,
-  'url': ansi.brand,
+  'url': ansi.accent,
   'ip-address': ansi.dim,
   'timestamp': (s: string) => ansi.dim(ansi.gray(s)),
-  'json-key': ansi.brand,
+  'json-key': ansi.accent,
   'state-ok': ansi.green,
   'state-fail': ansi.red,
   'path': ansi.dim,
@@ -223,13 +237,13 @@ function highlightMatches(text: string, matches: FilterMatch[], baseFn?: (s: str
 export function colorizeEnvLine(line: string): string {
   const eqIdx = line.indexOf('=');
   if (eqIdx === -1) return line;
-  return ansi.brand(line.substring(0, eqIdx)) + '=' + line.substring(eqIdx + 1);
+  return ansi.accent(line.substring(0, eqIdx)) + '=' + line.substring(eqIdx + 1);
 }
 
 export function colorizeDetailKey(line: string): string {
   const match = line.match(/^(\s*\S+:\s*)/);
   if (!match) return line;
-  return ansi.brand(match[1]) + line.substring(match[1].length);
+  return ansi.accent(match[1]) + line.substring(match[1].length);
 }
 
 export function colorizeHealth(status: 'healthy' | 'unhealthy' | 'starting'): string {
@@ -297,7 +311,7 @@ export function renderLogLines(
     const parts: string[] = [];
     if (severityCounts.error > 0) parts.push(ansi.red(`E:${severityCounts.error}`));
     if (severityCounts.warn > 0) parts.push(ansi.yellow(`W:${severityCounts.warn}`));
-    if (severityCounts.info > 0) parts.push(ansi.brand(`I:${severityCounts.info}`));
+    if (severityCounts.info > 0) parts.push(ansi.accent(`I:${severityCounts.info}`));
     if (severityCounts.debug > 0) parts.push(ansi.gray(`D:${severityCounts.debug}`));
     if (parts.length > 0) lines.push(parts.join('  '));
   }

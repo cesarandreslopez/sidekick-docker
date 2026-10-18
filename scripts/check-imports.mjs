@@ -41,6 +41,7 @@ function classifyFile(relPath) {
     const rest = relPath.slice(CLI_SRC.length + 1);
     if (rest.startsWith('commands/') || rest === 'cli.ts') return 'cli/commands';
     if (rest.startsWith('formatters')) return 'cli/formatters'; // formatters.ts, formatters.test.ts
+    if (rest.startsWith('theme')) return 'cli/formatters'; // colour tokens: a leaf both panels and ink use
     if (rest.startsWith('utils/')) return 'cli/utils';
     if (rest.startsWith('dashboard/panels/')) return 'cli/panels';
     if (rest.startsWith('dashboard/ink/')) return 'cli/ink';

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { BRAND_INLINE, BRAND_TAGLINE, getRandomPhrase } from 'sidekick-docker-shared';
+import { ACCENT } from '../../theme';
 
 interface VersionOverlayProps {
   version: string;
@@ -12,7 +13,7 @@ export function VersionOverlay({ version }: VersionOverlayProps): React.ReactEle
   return (
     <Box flexDirection="column" flexGrow={1} padding={1}>
       <Text bold color="magenta">{BRAND_INLINE}</Text>
-      <Text color="#2B4C7E" bold>{`${BRAND_TAGLINE} v${version}`}</Text>
+      <Text color={ACCENT} bold>{`${BRAND_TAGLINE} v${version}`}</Text>
       <Text>{''}</Text>
       <Text color="gray" dimColor>{'\u2500'.repeat(40)}</Text>
       <Text>{''}</Text>

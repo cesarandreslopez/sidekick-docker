@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { useTerminalSize } from './useTerminalSize';
+import { ACCENT } from '../../theme';
 
 interface ExecOverlayProps {
   containerName: string;
@@ -18,7 +19,7 @@ export function ExecOverlay({ containerName, outputLines }: ExecOverlayProps): R
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box>
-        <Text bold color="#2B4C7E">{` Exec: ${containerName} `}</Text>
+        <Text bold color={ACCENT}>{` Exec: ${containerName} `}</Text>
         <Text color="gray">{' (Ctrl+] to detach)'}</Text>
       </Box>
       <Box flexDirection="column" flexGrow={1}>

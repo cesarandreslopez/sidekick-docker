@@ -1,6 +1,7 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import type { FilterMode } from 'sidekick-docker-shared';
+import { ACCENT_FILL } from '../../theme';
 
 interface LogFilterOverlayProps {
   filterString: string;
@@ -12,7 +13,7 @@ export function LogFilterOverlay({ filterString, filterMode }: LogFilterOverlayP
 
   return (
     <Box position="absolute" marginTop={1} marginLeft={1}>
-      <Text backgroundColor="#2B4C7E" color="white" bold>
+      <Text backgroundColor={ACCENT_FILL} color="white" bold>
         {` Log filter (${modeLabel}): ${filterString}\u2588 `}
       </Text>
       <Text color="gray">{'  Tab: toggle mode  Enter: apply  Esc: clear'}</Text>

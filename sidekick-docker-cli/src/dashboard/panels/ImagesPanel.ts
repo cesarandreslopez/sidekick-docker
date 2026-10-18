@@ -5,6 +5,7 @@ import { DockerState } from '../DockerState';
 import { panelData, detailFetchError } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { formatBytes, truncate, colorizeDetailKey, colorizeId, colorizeBool, sectionHeader } from '../../formatters';
+import { ACCENT } from '../../theme';
 
 export class ImagesPanel implements SidePanel {
   readonly id = 'images';
@@ -78,7 +79,7 @@ export class ImagesPanel implements SidePanel {
         label: `${icon} ${truncate(tag, 38)}`,
         sortKey: img.isDangling ? 1 : 0,
         data: img,
-        iconColor: img.isDangling ? 'gray' : '#2B4C7E',
+        iconColor: img.isDangling ? 'gray' : ACCENT,
         rightLabel: formatBytes(img.size),
         rightColor: 'gray',
       };

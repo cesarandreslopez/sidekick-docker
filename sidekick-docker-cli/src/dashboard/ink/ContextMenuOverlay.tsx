@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { PanelAction } from '../panels/types';
 import { CONTEXT_MENU_ORIGIN, contextMenuWidth } from './overlayHitTest';
+import { ACCENT } from '../../theme';
 
 interface ContextMenuOverlayProps {
   actions: PanelAction[];
@@ -19,16 +20,17 @@ export function ContextMenuOverlay({ actions, selectedIndex, maxWidth }: Context
       width={width}
       flexDirection="column"
       borderStyle="single"
-      borderColor="#2B4C7E"
+      borderColor={ACCENT}
       paddingX={1}
     >
-      <Text bold color="#2B4C7E">{'\u2630 Actions'}</Text>
+      <Text bold color={ACCENT}>{'\u2630 Actions'}</Text>
       {actions.map((action, i) => {
         const isSelected = i === selectedIndex;
         const isDanger = !!action.confirm;
         // Unselected: danger actions in red, normal in white
         // Selected: inverse highlight
-        const color = isSelected ? (isDanger ? 'red' : '#2B4C7E') : (isDanger ? 'red' : 'white');
+        // undefined (not 'white') = the terminal's own foreground, visible on light backgrounds too.
+        const color = isSelected ? (isDanger ? 'red' : ACCENT) : (isDanger ? 'red' : undefined);
         return (
           <Box key={action.key}>
             <Text

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LogEntry } from 'sidekick-docker-shared';
-import { formatBytes, formatCpu, formatPorts, stateIcon, truncate, stripCursorEscapes, colorizeEnvLine, colorizeBool, colorizeId, colorizePercent, colorizeLogEntry, renderLogLines, sectionHeader, ansi, setColorEnabled, isColorEnabled } from './formatters';
+import { formatBytes, formatCpu, formatPorts, stateIcon, truncate, stripCursorEscapes, colorizeEnvLine, colorizeBool, colorizeId, colorizePercent, colorizeLogEntry, renderLogLines, sectionHeader, ansi, setColorEnabled, isColorEnabled, formatFileChange, formatLogTemplate } from './formatters';
 
 // Vitest runs non-TTY, so detectColor() disables color at import; the
 // color-asserting tests below need it forced on.
@@ -89,7 +89,7 @@ describe('formatters', () => {
   describe('colorizeEnvLine', () => {
     it('colors key before equals sign', () => {
       const result = colorizeEnvLine('MY_VAR=hello');
-      expect(result).toContain('\x1b[38;2;43;76;126m'); // brand
+      expect(result).toContain('\x1b[38;2;91;139;217m'); // accent
       expect(result).toContain('MY_VAR');
       expect(result).toContain('=hello');
     });
@@ -159,7 +159,7 @@ describe('formatters', () => {
         expect(ansi.yellow('x')).toBe('x');
         expect(ansi.gray('x')).toBe('x');
         expect(ansi.cyan('x')).toBe('x');
-        expect(ansi.brand('x')).toBe('x');
+        expect(ansi.accent('x')).toBe('x');
         expect(ansi.dim('x')).toBe('x');
         expect(ansi.bold('x')).toBe('x');
       });
@@ -199,3 +199,20 @@ describe('formatters', () => {
     });
   });
 });
+
+describe('Files and Patterns rows', () => {
+  afterEach(() => { setColorEnabled(true); });
+
+  it('colour the change marker and dim template wildcards', () => {
+    setColorEnabled(true);
+    expect(formatFileChange({ kind: 'added', path: '/etc/x' })).toBe('\x1b[32m A\x1b[39m  /etc/x');
+    expect(formatLogTemplate({ count: 12, pattern: 'GET <*> 200' })).toContain('\x1b[90m<*>\x1b[39m');
+  });
+
+  it('emit no escape codes with colour off (NO_COLOR / --no-color)', () => {
+    setColorEnabled(false);
+    expect(formatFileChange({ kind: 'deleted', path: '/tmp/y' })).toBe(' D  /tmp/y');
+    expect(formatLogTemplate({ count: 3, pattern: 'GET <*> 200' })).toBe('    3  GET <*> 200');
+  });
+});
+

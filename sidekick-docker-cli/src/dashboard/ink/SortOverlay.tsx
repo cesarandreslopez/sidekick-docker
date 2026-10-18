@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import type { SortField } from './dashboardTypes';
 import { SORT_OPTIONS } from './dashboardTypes';
 import { SORT_OVERLAY_ORIGIN, SORT_OVERLAY_WIDTH } from './overlayHitTest';
+import { ACCENT } from '../../theme';
 
 
 interface SortOverlayProps {
@@ -21,11 +22,11 @@ export function SortOverlay({ selectedIndex, currentField, reversed, maxWidth }:
       marginLeft={SORT_OVERLAY_ORIGIN.left}
       flexDirection="column"
       borderStyle="single"
-      borderColor="#2B4C7E"
+      borderColor={ACCENT}
       paddingX={1}
       width={Math.min(maxWidth, SORT_OVERLAY_WIDTH)}
     >
-      <Text bold color="#2B4C7E">{'\u2195 Sort by'}</Text>
+      <Text bold color={ACCENT}>{'\u2195 Sort by'}</Text>
       {SORT_OPTIONS.map((opt, i) => {
         const isSelected = i === selectedIndex;
         const isCurrent = opt.field === currentField;
@@ -35,7 +36,7 @@ export function SortOverlay({ selectedIndex, currentField, reversed, maxWidth }:
             <Text
               // undefined = the terminal's own foreground; an explicit
               // 'white' is invisible on a light background.
-              color={isSelected ? '#2B4C7E' : (isCurrent ? 'yellow' : undefined)}
+              color={isSelected ? ACCENT : (isCurrent ? 'yellow' : undefined)}
               bold={isSelected}
               inverse={isSelected}
             >
