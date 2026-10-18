@@ -1,5 +1,5 @@
-import { DockerClient, EventWatcher } from 'sidekick-docker-shared';
-import type { ContainerInfo, DockerClientOptions } from 'sidekick-docker-shared';
+import { DockerClient, DockerStateStore, EventWatcher } from 'sidekick-docker-shared';
+import type { ContainerInfo, DockerClientOptions, StoreChange } from 'sidekick-docker-shared';
 
 export interface ContainerWatcherCallbacks {
   /** Fired with the containers AND the real connection state they were observed under. */
@@ -19,18 +19,16 @@ export interface ContainerWatcherOptions {
  */
 export class ContainerWatcherService {
   private client: DockerClient;
+  /** Containers-only store: same refresh/event policy as the dashboards, one listing per pass. */
+  private store: DockerStateStore;
   private watcher: EventWatcher | null = null;
-  private containers: ContainerInfo[] = [];
   private connected = false;
   private connectionNotified = false;
   private disposed = false;
   private connectPromise: Promise<boolean> | null = null;
-  private refreshPromise: Promise<void> | null = null;
-  private refreshQueued = false;
 
   private refreshInterval: ReturnType<typeof setInterval> | null = null;
   private reconnectInterval: ReturnType<typeof setInterval> | null = null;
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
   private callbacks: ContainerWatcherCallbacks;
   private refreshIntervalMs: number;
 
@@ -38,6 +36,12 @@ export class ContainerWatcherService {
     this.client = new DockerClient(options?.clientOptions);
     this.callbacks = callbacks;
     this.refreshIntervalMs = options?.refreshIntervalMs ?? 30_000;
+    this.store = new DockerStateStore({
+      client: this.client,
+      include: { images: false, volumes: false, networks: false, compose: false },
+      onChange: change => this.onStoreChange(change),
+      log: (msg, err) => console.debug('watcher', msg, err ?? ''),
+    });
   }
 
   async start(): Promise<void> {
@@ -70,12 +74,7 @@ export class ContainerWatcherService {
 
       // Start event watcher
       this.watcher = new EventWatcher(this.client, {
-        onEvent: (event) => {
-          if (event.resourceType === 'container') {
-            this.handleContainerEvent(event);
-          }
-          this.scheduleRefresh();
-        },
+        onEvent: (event) => { this.store.processEvent(event); },
         onError: () => {
           this.setConnected(false);
           this.stopWatcher();
@@ -99,81 +98,22 @@ export class ContainerWatcherService {
   }
 
   private refresh(): Promise<void> {
-    if (this.disposed) return Promise.resolve();
-    if (this.refreshPromise) {
-      this.refreshQueued = true;
-      return this.refreshPromise;
-    }
-    this.refreshPromise = this.refreshLoop().finally(() => { this.refreshPromise = null; });
-    return this.refreshPromise;
+    return this.store.refresh();
   }
 
-  private async refreshLoop(): Promise<void> {
-    do {
-      this.refreshQueued = false;
-      await this.refreshOnce();
-    } while (this.refreshQueued && !this.disposed);
-  }
-
-  private async refreshOnce(): Promise<void> {
-    try {
-      const containers = await this.client.listContainers(true);
-      if (this.disposed || this.refreshQueued) return;
-      this.containers = containers;
+  private onStoreChange(change: StoreChange): void {
+    if (this.disposed) return;
+    if (change.cause === 'refresh') {
+      if (!this.store.getSnapshot().daemonConnected) {
+        this.setConnected(false);
+        this.callbacks.onContainersChanged([], false);
+        this.stopWatcher();
+        this.startReconnectPolling();
+        return;
+      }
       this.setConnected(true);
-      this.callbacks.onContainersChanged(this.containers, true);
-    } catch {
-      if (this.disposed || this.refreshQueued) return;
-      this.setConnected(false);
-      this.containers = [];
-      this.callbacks.onContainersChanged(this.containers, false);
-      this.stopWatcher();
-      this.startReconnectPolling();
     }
-  }
-
-  private handleContainerEvent(event: { type: string; resourceId: string }): void {
-    if (this.disposed) return;
-    if (this.refreshPromise) this.refreshQueued = true;
-    switch (event.type) {
-      case 'start':
-      case 'unpause': {
-        const c = this.containers.find(c => c.id === event.resourceId);
-        if (c) {
-          c.state = 'running';
-          c.status = 'Up just now';
-        }
-        break;
-      }
-      case 'stop':
-      case 'die': {
-        const c = this.containers.find(c => c.id === event.resourceId);
-        if (c) {
-          c.state = 'exited';
-          c.status = 'Exited';
-        }
-        break;
-      }
-      case 'pause': {
-        const c = this.containers.find(c => c.id === event.resourceId);
-        if (c) c.state = 'paused';
-        break;
-      }
-      case 'destroy':
-        this.containers = this.containers.filter(c => c.id !== event.resourceId);
-        break;
-    }
-    this.callbacks.onContainersChanged(this.containers, this.connected);
-  }
-
-  private scheduleRefresh(): void {
-    if (this.disposed) return;
-    if (this.refreshPromise) { this.refreshQueued = true; return; }
-    if (this.debounceTimer) return;
-    this.debounceTimer = setTimeout(() => {
-      this.debounceTimer = null;
-      this.refresh().catch(e => console.debug('debounced refresh failed:', e));
-    }, 100);
+    this.callbacks.onContainersChanged(this.getContainers(), this.connected);
   }
 
   private setConnected(value: boolean): void {
@@ -214,7 +154,7 @@ export class ContainerWatcherService {
   }
 
   getContainers(): ContainerInfo[] {
-    return this.containers;
+    return this.connected ? this.store.getSnapshot().containers : [];
   }
 
   isConnected(): boolean {
@@ -229,7 +169,7 @@ export class ContainerWatcherService {
     this.disposed = true;
     this.stopWatcher();
     this.stopReconnectPolling();
-    if (this.debounceTimer) clearTimeout(this.debounceTimer);
+    this.store.dispose();
     this.client.dispose();
   }
 }

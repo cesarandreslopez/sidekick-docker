@@ -7,13 +7,25 @@ const { pingMock, listContainersMock } = vi.hoisted(() => ({
   listContainersMock: vi.fn(),
 }));
 
-vi.mock('sidekick-docker-shared', () => ({
+const { watcherRef } = vi.hoisted(() => ({ watcherRef: { onEvent: null as null | ((e: unknown) => void) } }));
+
+vi.mock('sidekick-docker-shared', async importOriginal => ({
+  // The real DockerStateStore runs against the mocked client below.
+  ...await importOriginal<typeof import('sidekick-docker-shared')>(),
   DockerClient: class {
     ping = pingMock;
     listContainers = listContainersMock;
+    listResources = async () => {
+      try {
+        return { containers: { status: 'fulfilled', value: await listContainersMock() } };
+      } catch (reason) {
+        return { containers: { status: 'rejected', reason } };
+      }
+    };
     dispose(): void { /* noop */ }
   },
   EventWatcher: class {
+    constructor(_client: unknown, callbacks: { onEvent: (e: unknown) => void }) { watcherRef.onEvent = callbacks.onEvent; }
     start(): void { /* noop */ }
     stop(): void { /* noop */ }
   },
@@ -127,5 +139,22 @@ describe('ContainerWatcherService', () => {
     await service.forceRefresh();
     expect(callbacks.onContainersChanged).toHaveBeenLastCalledWith([], false);
     expect(service.isConnected()).toBe(false);
+  });
+
+  it('keeps an event that arrives mid-refresh instead of dropping the refresh result', async () => {
+    pingMock.mockResolvedValue(true);
+    listContainersMock.mockResolvedValue([makeContainer()]);
+    const callbacks = createCallbacks();
+    service = new ContainerWatcherService(callbacks);
+    await service.start();
+
+    let resolve!: (value: ContainerInfo[]) => void;
+    listContainersMock.mockReturnValueOnce(new Promise<ContainerInfo[]>(r => { resolve = r; }));
+    const pending = service.forceRefresh();
+    watcherRef.onEvent?.({ type: 'die', resourceType: 'container', resourceId: 'abc123', timestamp: new Date(), attributes: {} });
+    resolve([makeContainer({ name: 'renamed' })]);
+    await pending;
+    // The pass committed (new name) and the mid-flight die was replayed over it.
+    expect(callbacks.onContainersChanged).toHaveBeenLastCalledWith([expect.objectContaining({ name: 'renamed', state: 'exited' })], true);
   });
 });
