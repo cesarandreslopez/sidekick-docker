@@ -21,7 +21,6 @@ import { ToastStack } from './ToastStack';
 import { TooSmallOverlay } from './TooSmallOverlay';
 import { ExecOverlay } from './ExecOverlay';
 import { MouseProvider } from './mouse';
-import { enableMouse, disableMouse } from './mouse';
 import { LogFilterOverlay } from './LogFilterOverlay';
 import { VersionOverlay } from './VersionOverlay';
 import { SortOverlay } from './SortOverlay';
@@ -250,7 +249,6 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       if (data.length === 1 && data[0] === 0x1d) {
         execManagerRef.current?.dispose();
         execManagerRef.current = null;
-        enableMouse();
         dispatch({ type: 'EXEC_END' });
         return;
       }
@@ -295,7 +293,6 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       const manager = new ExecManager();
       execManagerRef.current = manager;
 
-      disableMouse();
       dispatch({ type: 'EXEC_START', containerId, containerName });
 
       manager.start({
@@ -311,8 +308,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         onExit: () => {
           execManagerRef.current?.dispose();
           execManagerRef.current = null;
-          enableMouse();
-          dispatch({ type: 'EXEC_END' });
+            dispatch({ type: 'EXEC_END' });
         },
       }).then(async (started) => {
         if (!started && execManagerRef.current === manager) {
@@ -326,14 +322,12 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
             execInFallbackRef.current = false;
             manager.dispose();
             execManagerRef.current = null;
-            enableMouse();
-            dispatch({ type: 'EXEC_END' });
+                dispatch({ type: 'EXEC_END' });
           }
         }
       }).catch((error: unknown) => {
         manager.dispose();
         execManagerRef.current = null;
-        enableMouse();
         dispatch({ type: 'EXEC_END' });
         addToast(error instanceof Error ? error.message : String(error), 'error');
       });
@@ -594,7 +588,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const contextHint = buildContextHint(keyQueryCtx);
 
   return (
-    <MouseProvider onMouse={handleMouse}>
+    <MouseProvider onMouse={handleMouse} enabled={state.overlay !== 'exec'}>
       <Box flexDirection="column" height={rows} width={columns}>
         {showNormalLayout && (
           <TabBar panels={panels} activeIndex={state.activePanelIndex} layoutMode={state.layoutMode} phrase={phrase} panelCounts={panelCounts} width={columns} />

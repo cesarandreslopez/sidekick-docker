@@ -44,8 +44,10 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
   const { overlay, activePanelIndex, confirmAction, confirmSeverity, layoutMode } = state;
 
   return useCallback((event: TerminalMouseEvent) => {
-    // Text-entry overlays: ignore all mouse events (raw escape bytes leak into the input)
-    if (overlay === 'filter' || overlay === 'log-filter') return;
+    // Text-entry overlays: ignore all mouse events (raw escape bytes leak into the input).
+    // Exec: the shell owns the screen; a click must not close the overlay and
+    // strand the session (MouseProvider also stops tracking while exec runs).
+    if (overlay === 'filter' || overlay === 'log-filter' || overlay === 'exec') return;
     // Overlays are clickable: buttons/rows activate, clicks outside dismiss.
     if (overlay) {
       if (event.type !== 'click' || event.button !== 'left') return;
