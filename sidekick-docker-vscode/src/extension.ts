@@ -134,6 +134,21 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // ── Workspace trust ─────────────────────────────────────────────
+  // socketPath and exec.defaultShell are restricted configurations: until the
+  // folder is trusted VS Code ignores the workspace's values for them, so a
+  // cloned repo's .vscode/settings.json cannot point the always-on watcher (or
+  // exec terminals) at a daemon of its choosing. Granting trust can change the
+  // effective endpoint and enables compose, so rebuild both surfaces.
+  context.subscriptions.push(
+    vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      watcherService?.dispose();
+      watcherService = createWatcherService(getSettings());
+      watcherService.start();
+      dashboardProvider?.reinitializeService();
+    }),
+  );
+
   // ── Dashboard panel serializer (revive after window reload) ─────
   context.subscriptions.push(
     vscode.window.registerWebviewPanelSerializer('sidekick-docker.dashboard', {

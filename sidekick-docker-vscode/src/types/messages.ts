@@ -134,6 +134,7 @@ export interface DashboardStateSnapshot {
 // ─── Extension → Webview ────────────────────────────────────────────
 
 export type DetailKind = 'env' | 'changes' | 'layers';
+export type PanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
 export interface DetailLoadUpdate {
   kind: DetailKind;
   itemId: string;
@@ -160,7 +161,7 @@ export type ExtensionMessage =
   | { type: 'updateComposeLogs'; projectName: string; serviceName: string | null; entries: SerializedLogEntry[] }
   | { type: 'updateChanges'; containerId: string; changes: SerializedFilesystemChange[] }
   | { type: 'updateLayers'; imageId: string; layers: SerializedImageLayer[] }
-  | { type: 'connectionState'; state: 'connected' | 'disconnected' };
+  | { type: 'connectionState'; state: 'connected' | 'disconnected'; reason?: string };
 
 // ─── Webview → Extension ────────────────────────────────────────────
 
@@ -169,7 +170,7 @@ export type WebviewMessage =
   | { type: 'retryStreams' }
   | { type: 'webviewReady' }
   | { type: 'switchPanel'; panelIndex: number }
-  | { type: 'selectItem'; panelId: string; itemId: string | null }
+  | { type: 'selectItem'; panelId: PanelId; itemId: string | null }
   | { type: 'switchDetailTab'; tabIndex: number }
   | { type: 'sortChanged'; field: 'state' | 'name' | 'cpu' | 'mem' | 'net' | 'io' | 'pids'; reversed: boolean }
   | { type: 'action'; actionType: string; itemId: string; panelId: string }

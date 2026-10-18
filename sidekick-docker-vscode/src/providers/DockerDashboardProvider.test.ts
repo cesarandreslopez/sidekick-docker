@@ -25,8 +25,8 @@ vi.mock('../services/DockerService', () => {
       serviceInstances.push(this as unknown as MockService);
     }
 
-    initialize(): Promise<boolean> {
-      return this.initResult;
+    initialize(): Promise<{ ok: true } | { ok: false; reason: string }> {
+      return this.initResult.then(ok => (ok ? { ok: true as const } : { ok: false as const, reason: 'Permission denied on /var/run/docker.sock.' }));
     }
 
     dispose(): void {
@@ -166,5 +166,19 @@ describe('DockerDashboardProvider requestRefresh', () => {
 
     expect(serviceInstances).toHaveLength(1);
     expect(serviceInstances[0].forceRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes the real reason for a failed connect to the webview', async () => {
+    const p = internals(provider);
+    const posted: unknown[] = [];
+    (p as unknown as { _postMessage(m: unknown): void })._postMessage = (m: unknown) => { posted.push(m); };
+
+    const run = p._initializeService();
+    await tick();
+    serviceInstances[0].resolveInitialize(false);
+    await run;
+
+    expect(posted).toContainEqual({ type: 'connectionState', state: 'disconnected', reason: 'Permission denied on /var/run/docker.sock.' });
+    expect(posted).toContainEqual({ type: 'toast', message: 'Permission denied on /var/run/docker.sock.', severity: 'error' });
   });
 });

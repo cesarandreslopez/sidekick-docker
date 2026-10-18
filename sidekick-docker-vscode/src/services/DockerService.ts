@@ -16,6 +16,8 @@ import {
   resolveComposeOptions,
   errorMessage,
   formatBytes,
+  explainDockerUnreachable,
+  describeDockerEndpoint,
 } from 'sidekick-docker-shared';
 import { LogAnalytics, LogSeverityTimeSeries, detectSeverity } from 'sidekick-docker-shared/log';
 import type {
@@ -72,7 +74,6 @@ export interface DockerServiceCallbacks {
   onEnvLoaded: (containerId: string, env: string[]) => void;
   onChangesLoaded: (containerId: string, changes: SerializedFilesystemChange[]) => void;
   onLayersLoaded: (imageId: string, layers: SerializedImageLayer[]) => void;
-  onError: (message: string) => void;
   onStreamState?: (update: StreamStateUpdate) => void;
   onDetailLoad?: (update: DetailLoadUpdate) => void;
 }
@@ -103,7 +104,17 @@ export interface DockerServiceOptions {
    * manifest. Defaults to true so non-VSCode callers and tests are unaffected.
    */
   isTrusted?: boolean;
+  /**
+   * Whether the dashboard is visible when the service starts. A service created
+   * behind a hidden panel (e.g. after a settings change) must not start the
+   * event stream and polling interval until the panel is shown.
+   */
+  visible?: boolean;
+  /** The raw endpoint setting, used to explain a failed connection. */
+  endpoint?: string;
 }
+
+export type InitializeResult = { ok: true } | { ok: false; reason: string };
 
 export interface DashboardViewState {
   activePanelId: DashboardPanelId;
@@ -156,6 +167,7 @@ export class DockerService {
   private cwd: string | undefined;
   private isTrusted: boolean;
   private refreshIntervalMs: number;
+  private endpoint: string | undefined;
   private initialized = false;
   private viewState: DashboardViewState = {
     activePanelId: 'containers',
@@ -188,6 +200,8 @@ export class DockerService {
     this.secondaryComposeLogSlot = this.composeSlot();
     this.isTrusted = options?.isTrusted ?? true;
     this.refreshIntervalMs = options?.refreshIntervalMs ?? 30_000;
+    this.endpoint = options?.endpoint;
+    this.viewState.visible = options?.visible ?? true;
     this.statsSampler = new StatsSampler({
       sample: (id) => this.client.sampleStats(id),
       push: (id, stats) => {
@@ -202,22 +216,26 @@ export class DockerService {
     });
   }
 
-  async initialize(): Promise<boolean> {
-    const ok = await this.client.ping();
-    if (!ok || this.disposed) return false;
+  async initialize(): Promise<InitializeResult> {
+    const ping = await this.client.pingDetailed();
+    if (this.disposed) return { ok: false, reason: 'Disposed' };
+    // Say *why* (permission denied, no socket, refused, bad host) instead of
+    // always asking "Is Docker running?".
+    if (!ping.ok) return { ok: false, reason: explainDockerUnreachable(ping.error, describeDockerEndpoint(this.endpoint)) };
 
     await this.refresh();
-    if (this.disposed) return false;
+    if (this.disposed) return { ok: false, reason: 'Disposed' };
     this.initialized = true;
     if (this.viewState.visible) {
       this.startLiveInfrastructure();
     }
     this.applyStreamDemand();
-    return true;
+    return { ok: true };
   }
 
+  /** Visibility is not part of this: it changes only through setVisible(), which starts/stops polling. */
   setViewState(next: Partial<DashboardViewState>): void {
-    this.viewState = { ...this.viewState, ...next };
+    this.viewState = { ...this.viewState, ...next, visible: this.viewState.visible };
     this.applyStreamDemand();
   }
 

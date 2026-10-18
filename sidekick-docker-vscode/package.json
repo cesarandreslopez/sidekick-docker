@@ -336,7 +336,11 @@
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": "limited",
-      "description": "Containers, images, volumes and networks work normally. Compose is disabled in an untrusted workspace, because running it would execute the workspace's own compose file."
+      "description": "Containers, images, volumes and networks work normally. Compose is disabled in an untrusted workspace, because running it would execute the workspace's own compose file. The endpoint and exec shell settings are read only from user settings until the folder is trusted.",
+      "restrictedConfigurations": [
+        "sidekick-docker.socketPath",
+        "sidekick-docker.exec.defaultShell"
+      ]
     }
   }
 }

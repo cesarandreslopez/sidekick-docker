@@ -1,4 +1,4 @@
-import type { DashboardStateSnapshot } from '../../types/messages';
+import type { DashboardStateSnapshot, PanelId } from '../../types/messages';
 import type { WebviewState } from '../state';
 
 export interface PanelItem {
@@ -32,7 +32,7 @@ export interface DetailTabDefinition {
 }
 
 export interface PanelDefinition {
-  id: string;
+  id: PanelId;
   title: string;
   shortcutKey: number;
   detailTabs: DetailTabDefinition[];

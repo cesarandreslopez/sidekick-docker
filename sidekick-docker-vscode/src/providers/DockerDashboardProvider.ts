@@ -106,7 +106,15 @@ export class DockerDashboardProvider implements vscode.Disposable {
     panel.webview.onDidReceiveMessage(
       (raw: unknown) => {
         const result = WebviewMessageSchema.safeParse(raw);
-        if (result.success) this._handleMessage(result.data);
+        if (!result.success) {
+          console.debug('Sidekick Docker: dropped an invalid webview message', result.error.issues);
+          return;
+        }
+        // Handlers are async; a failure (e.g. clipboard write) must surface,
+        // not become an unhandled rejection.
+        this._handleMessage(result.data).catch((err: unknown) => {
+          this._postMessage({ type: 'toast', message: errorMessage(err), severity: 'error' });
+        });
       },
       undefined,
       this.disposables
@@ -276,32 +284,27 @@ export class DockerDashboardProvider implements vscode.Disposable {
       },
       onDetailLoad: (update) => post({ type: 'detailLoad', update }),
       onStreamState: (update) => post({ type: 'streamState', update }),
-      onError: (message) => {
-        post({ type: 'toast', message, severity: 'error' });
-      },
     }, {
       clientOptions: settings.clientOptions,
       cliEnv: settings.cliEnv,
       refreshIntervalMs: settings.refreshIntervalMs,
       cwd,
       isTrusted: vscode.workspace.isTrusted,
+      visible: this.viewState.visible,
+      endpoint: settings.socketPath,
     });
 
-    const ok = await service.initialize();
+    const result = await service.initialize();
     if (generation !== this.initGeneration) {
       // Superseded while connecting: only the newest run may own
       // this.service or post connection messages.
       service.dispose();
       return;
     }
-    if (!ok) {
+    if (!result.ok) {
       service.dispose();
-      this._postMessage({ type: 'connectionState', state: 'disconnected' });
-      this._postMessage({
-        type: 'toast',
-        message: 'Cannot connect to Docker daemon. Is Docker running?',
-        severity: 'error',
-      });
+      this._postMessage({ type: 'connectionState', state: 'disconnected', reason: result.reason });
+      this._postMessage({ type: 'toast', message: result.reason, severity: 'error' });
       return;
     }
 

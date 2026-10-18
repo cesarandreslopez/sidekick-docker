@@ -12,6 +12,7 @@ vi.mock('sidekick-docker-shared', async importOriginal => {
   return { ...actual,
     DockerClient: class {
       ping = async () => true;
+      pingDetailed = async () => ({ ok: true });
       listContainers = mocks.containers;
       listImages = mocks.images;
       listVolumes = async () => [];
@@ -56,7 +57,7 @@ beforeEach(() => {
   mocks.stats.mockImplementation(async function* () {});
   mocks.logs.mockImplementation(async function* () {});
   mocks.composeLogs.mockImplementation(async function* () {});
-  callbacks = { onStateChange: vi.fn(), onLogsChange: vi.fn(), onStatsChange: vi.fn(), onComposeLogs: vi.fn(), onEnvLoaded: vi.fn(), onChangesLoaded: vi.fn(), onLayersLoaded: vi.fn(), onError: vi.fn(), onStreamState: vi.fn(), onDetailLoad: vi.fn() };
+  callbacks = { onStateChange: vi.fn(), onLogsChange: vi.fn(), onStatsChange: vi.fn(), onComposeLogs: vi.fn(), onEnvLoaded: vi.fn(), onChangesLoaded: vi.fn(), onLayersLoaded: vi.fn(), onStreamState: vi.fn(), onDetailLoad: vi.fn() };
   service = new DockerService(callbacks);
 });
 afterEach(() => { service.dispose(); vi.useRealTimers(); });
@@ -183,5 +184,28 @@ describe('DockerService lifecycle', () => {
     expect(mocks.containers).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(mocks.containers).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not start polling when created behind a hidden panel', async () => {
+    mocks.watcher = null;
+    service.dispose();
+    service = new DockerService(callbacks, { visible: false });
+    await service.initialize();
+    // setViewState carries `visible`, but must not flip it behind setVisible's back.
+    service.setViewState({ visible: true, selectedItemId: 'A' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(mocks.watcher).toBeNull();
+    expect(mocks.logs).not.toHaveBeenCalled();
+    await service.setVisible(true);
+    expect(mocks.watcher).not.toBeNull();
+  });
+
+  it('explains why it could not connect', async () => {
+    service.dispose();
+    service = new DockerService(callbacks, { endpoint: 'unix:///nope.sock' });
+    (service as unknown as { client: { pingDetailed(): Promise<unknown> } }).client.pingDetailed = async () => ({
+      ok: false, error: Object.assign(new Error('connect EACCES'), { code: 'EACCES' }),
+    });
+    expect(await service.initialize()).toEqual({ ok: false, reason: expect.stringMatching(/Permission denied on unix:\/\/\/nope\.sock/) });
   });
 });

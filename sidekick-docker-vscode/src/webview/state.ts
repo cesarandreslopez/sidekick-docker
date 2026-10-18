@@ -65,6 +65,8 @@ export interface WebviewState {
 
   snapshot: DashboardStateSnapshot | null;
   connState: ConnState;
+  /** Why the last connection attempt failed, when the extension knows. */
+  connReason: string | null;
   logs: Map<string, SerializedLogEntry[]>;
   stats: Map<string, ContainerStatsEntry>;
   envVars: Map<string, string[]>;
@@ -118,6 +120,7 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
     filterString: '',
     snapshot: null,
     connState: 'connecting',
+    connReason: null,
     logs: new Map(),
     detailLoads: new Map(),
     streamStates: new Map(),

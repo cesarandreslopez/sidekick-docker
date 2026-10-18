@@ -313,9 +313,15 @@ function renderAll(): void {
   persistViewState();
 }
 
+const DEFAULT_DISCONNECTED_HINT = 'Is Docker running? Check the sidekick-docker.socketPath setting.';
+
 function renderConnectionBanner(): void {
   const $banner = document.getElementById('disconnected-banner')!;
   $banner.classList.toggle('visible', state.connState === 'disconnected');
+  // The extension says why it could not connect (permission, missing socket,
+  // refused, bad host); textContent, so the reason is never parsed as HTML.
+  const $subtitle = $banner.querySelector('.banner-subtitle');
+  if ($subtitle) $subtitle.textContent = state.connReason ?? DEFAULT_DISCONNECTED_HINT;
   let warning = document.getElementById('resource-warning');
   if (!warning) {
     warning = document.createElement('div');
@@ -1058,6 +1064,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 
     case 'connectionState': {
       state.connState = msg.state;
+      state.connReason = msg.reason ?? null;
       renderAll();
       break;
     }

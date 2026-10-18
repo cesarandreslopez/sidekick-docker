@@ -20,6 +20,8 @@ export interface SidekickSettings {
   refreshIntervalMs: number;
   statusBarVisible: boolean;
   execShell: string;
+  /** The raw endpoint setting (trimmed; '' = default), for describing the endpoint in errors. */
+  socketPath: string;
 }
 
 const MIN_REFRESH_SECONDS = 5;
@@ -62,6 +64,7 @@ export function getSettings(): SidekickSettings {
     refreshIntervalMs: Math.max(MIN_REFRESH_SECONDS, refreshSeconds) * 1000,
     statusBarVisible: config.get<boolean>('statusBar.visible', true),
     execShell: config.get<string>('exec.defaultShell', DEFAULT_EXEC_SHELL) || DEFAULT_EXEC_SHELL,
+    socketPath: socketPath.trim(),
   };
 }
 
