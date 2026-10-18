@@ -175,6 +175,26 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     scheduleRender();
   };
 
+  // Lazy detail fetches (env, filesystem changes, image layers). Deduped while
+  // in flight: moving j/k back and forth used to fire the same request again
+  // each time the row was revisited before the first answer came back. A
+  // failure is recorded (the pane says why) and retried on the next visit.
+  const inflightDetails = new Set<string>();
+  function fetchDetail<T>(kind: 'env' | 'changes' | 'layers', id: string, cached: unknown, fetch: () => Promise<T>, keep: (value: T) => void): void {
+    const key = DockerState.detailErrorKey(kind, id);
+    if (cached !== undefined || inflightDetails.has(key)) return;
+    inflightDetails.add(key);
+    fetch().then((value) => {
+      state.clearDetailError(kind, id);
+      keep(value);
+    }).catch((e: unknown) => {
+      state.setDetailError(kind, id, errorMessage(e));
+    }).finally(() => {
+      inflightDetails.delete(key);
+      scheduleRender();
+    });
+  }
+
   const onViewStateChange = (viewState: DashboardViewState) => {
     const { panelId, itemId, detailTabIndex, sortField, compareItemId } = viewState;
     const wantsLiveStats = sortField === 'cpu'
@@ -202,29 +222,9 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       flushComposeLogsNow();
       flushSecondaryLogsNow();
       flushSecondaryComposeLogsNow();
-      // Fetch env vars if not cached
-      if (itemId && !state.getInspectedEnv(itemId)) {
-        client.getContainerEnv(itemId).then(env => {
-          state.clearDetailError('env', itemId);
-          state.setInspectedEnv(itemId, env);
-          scheduleRender();
-        }).catch((e: unknown) => {
-          // Record it so the pane can say what went wrong instead of sitting
-          // on "Loading…" forever.
-          state.setDetailError('env', itemId, errorMessage(e));
-          scheduleRender();
-        });
-      }
-      // Fetch filesystem changes if not cached
-      if (itemId && !state.getContainerChanges(itemId)) {
-        client.getContainerChanges(itemId).then(changes => {
-          state.clearDetailError('changes', itemId);
-          state.setContainerChanges(itemId, changes);
-          scheduleRender();
-        }).catch((e: unknown) => {
-          state.setDetailError('changes', itemId, errorMessage(e));
-          scheduleRender();
-        });
+      if (itemId) {
+        fetchDetail('env', itemId, state.getInspectedEnv(itemId), () => client.getContainerEnv(itemId), env => state.setInspectedEnv(itemId, env));
+        fetchDetail('changes', itemId, state.getContainerChanges(itemId), () => client.getContainerChanges(itemId), changes => state.setContainerChanges(itemId, changes));
       }
     } else if (panelId === 'services' && itemId) {
       void logManager.select(null);
@@ -266,16 +266,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       flushComposeLogsNow();
       flushSecondaryLogsNow();
       flushSecondaryComposeLogsNow();
-      // Fetch image layers if not cached
-      if (itemId && !state.getImageLayers(itemId)) {
-        client.getImageHistory(itemId).then(layers => {
-          state.clearDetailError('layers', itemId);
-          state.setImageLayers(itemId, layers);
-          scheduleRender();
-        }).catch((e: unknown) => {
-          state.setDetailError('layers', itemId, errorMessage(e));
-          scheduleRender();
-        });
+      if (itemId) {
+        fetchDetail('layers', itemId, state.getImageLayers(itemId), () => client.getImageHistory(itemId), layers => state.setImageLayers(itemId, layers));
       }
     } else {
       void logManager.select(null);
@@ -412,6 +404,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     try { if (secondaryLogFlushTimer) clearTimeout(secondaryLogFlushTimer); } catch { /* ignore */ }
     try { if (composeLogFlushTimer) clearTimeout(composeLogFlushTimer); } catch { /* ignore */ }
     try { if (secondaryComposeLogFlushTimer) clearTimeout(secondaryComposeLogFlushTimer); } catch { /* ignore */ }
+    try { if (renderTimer) clearTimeout(renderTimer); } catch { /* ignore */ }
     try { clearInterval(refreshInterval); } catch { /* ignore */ }
     try { if (debugInterval) clearInterval(debugInterval); } catch { /* ignore */ }
     try { watcher.stop(); } catch { /* ignore */ }
@@ -422,14 +415,26 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     }
   }
 
-  const onSigint = () => { if (!externalExec) cleanup(); };
+  // Registering a listener suppresses Node's default exit-on-signal, so the
+  // handler has to finish the job: stop everything, unmount Ink (restoring the
+  // terminal — alternate screen, cursor, raw mode) and let waitUntilExit()
+  // below exit. Previously SIGTERM only disposed the streams and left a frozen
+  // TUI running. The timer is a backstop if unmounting itself hangs.
+  const shutdown = () => {
+    cleanup();
+    instance.unmount();
+    setTimeout(() => process.exit(0), 2000).unref();
+  };
+  // During the `docker exec` fallback the child owns the terminal and Ctrl+C
+  // belongs to it.
+  const onSigint = () => { if (!externalExec) shutdown(); };
   process.on('SIGINT', onSigint);
-  process.on('SIGTERM', cleanup);
+  process.on('SIGTERM', shutdown);
 
   // Wait for exit
   await instance.waitUntilExit();
   process.removeListener('SIGINT', onSigint);
-  process.removeListener('SIGTERM', cleanup);
+  process.removeListener('SIGTERM', shutdown);
   cleanup();
   process.exit(0);
 }
