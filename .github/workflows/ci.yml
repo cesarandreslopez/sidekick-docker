@@ -9,6 +9,8 @@ on:
       - 'sidekick-docker-vscode/**'
       - 'scripts/**'
       - 'package.json'
+      - 'package-lock.json'
+      - 'eslint.config.mjs'
       - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
@@ -18,9 +20,50 @@ on:
       - 'sidekick-docker-vscode/**'
       - 'scripts/**'
       - 'package.json'
+      - 'package-lock.json'
+      - 'eslint.config.mjs'
       - '.github/workflows/ci.yml'
 
 jobs:
+  quality:
+    name: Lint, Types & Import DAG
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            sidekick-docker-shared/package-lock.json
+            sidekick-docker-cli/package-lock.json
+            sidekick-docker-vscode/package-lock.json
+
+      - name: Install dependencies (root + packages)
+        run: |
+          npm ci
+          (cd sidekick-docker-shared && npm ci && npm run build)
+          (cd sidekick-docker-cli && npm ci)
+          (cd sidekick-docker-vscode && npm ci)
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Import DAG
+        run: node scripts/check-imports.mjs
+
+      # esbuild strips types without checking them: this is the only type
+      # gate for the CLI and the extension.
+      - name: Type-check
+        run: |
+          (cd sidekick-docker-shared && npx tsc --noEmit)
+          (cd sidekick-docker-cli && npx tsc --noEmit)
+          (cd sidekick-docker-vscode && npx tsc --noEmit)
+
   shared-tests:
     name: Shared Library Tests
     runs-on: ubuntu-latest

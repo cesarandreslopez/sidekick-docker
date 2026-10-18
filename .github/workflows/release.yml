@@ -44,10 +44,58 @@ jobs:
             echo "$pkg: $PKG_VERSION ✓"
           done
 
+  # Nothing is published unless every gate CI runs is green for the tagged
+  # commit: a tag does not wait for the push's CI run.
+  checks:
+    name: Quality Gates & Tests
+    runs-on: ubuntu-latest
+    needs: validate
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: |
+            package-lock.json
+            sidekick-docker-shared/package-lock.json
+            sidekick-docker-cli/package-lock.json
+            sidekick-docker-vscode/package-lock.json
+
+      - name: Install dependencies (root + packages)
+        run: |
+          npm ci
+          (cd sidekick-docker-shared && npm ci && npm run build)
+          (cd sidekick-docker-cli && npm ci)
+          (cd sidekick-docker-vscode && npm ci)
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Import DAG
+        run: node scripts/check-imports.mjs
+
+      # esbuild strips types without checking them: this is the only type
+      # gate for the CLI and the extension.
+      - name: Type-check
+        run: |
+          (cd sidekick-docker-shared && npx tsc --noEmit)
+          (cd sidekick-docker-cli && npx tsc --noEmit)
+          (cd sidekick-docker-vscode && npx tsc --noEmit)
+
+      - name: Tests
+        run: |
+          (cd sidekick-docker-shared && npm test)
+          (cd sidekick-docker-cli && npm test)
+          (cd sidekick-docker-vscode && npm test)
+
   publish-extension:
     name: Publish VS Code Extension
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [validate, checks]
 
     defaults:
       run:
@@ -104,7 +152,7 @@ jobs:
   publish-cli:
     name: Publish CLI to npm
     runs-on: ubuntu-latest
-    needs: validate
+    needs: [validate, checks]
 
     steps:
       - uses: actions/checkout@v4
@@ -165,7 +213,9 @@ jobs:
         run: |
           VERSION="${{ needs.validate.outputs.version }}"
           if [[ -f CHANGELOG.md ]]; then
-            SECTION=$(sed -n "/^## .*${VERSION}/,/^## /p" CHANGELOG.md | head -n -1)
+            # Exact "[x.y.z]" match (sed treated the dots as wildcards), and no
+            # `head -n -1`, which dropped a real line when the section was last.
+            SECTION=$(awk -v ver="$VERSION" '/^## / { if (found) exit; if (index($0, "[" ver "]")) found = 1 } found' CHANGELOG.md)
             if [[ -n "$SECTION" ]]; then
               echo "body<<EOF" >> "$GITHUB_OUTPUT"
               echo "$SECTION" >> "$GITHUB_OUTPUT"
