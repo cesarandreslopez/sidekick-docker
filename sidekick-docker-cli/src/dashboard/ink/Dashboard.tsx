@@ -33,6 +33,7 @@ import { buildHelpBindings, buildContextHint } from './keyRegistry';
 import type { KeyContext, KeyQueryContext } from './keyRegistry';
 import { maxScrollOffset } from './windowLines';
 import { appendExecOutput, ExecOutputBuffer } from './execOutput';
+import { buildHelpSections, layoutHelp } from './helpLayout';
 import { DEFAULT_EXEC_SHELL, describeExecExit } from '../execShell';
 
 
@@ -86,7 +87,9 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
     case 'SET_FOCUS':
       return { ...state, focusTarget: action.target };
     case 'SET_OVERLAY':
-      return { ...state, overlay: action.overlay, contextMenuIndex: 0 };
+      return { ...state, overlay: action.overlay, contextMenuIndex: 0, helpScroll: 0 };
+    case 'HELP_SCROLL':
+      return { ...state, helpScroll: Math.max(0, Math.min(state.helpScroll + action.delta, action.max)) };
     case 'SET_FILTER':
       return { ...state, filterString: action.value };
     case 'SCROLL_DETAIL': {
@@ -190,6 +193,7 @@ export const initialState: DashboardUIState = {
   sortMenuIndex: 0,
   compareItemIds: {},
   secondaryDetailScrollOffset: 0,
+  helpScroll: 0,
 };
 
 interface DashboardProps {
@@ -573,10 +577,16 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     });
   }, [onRefresh, addToast, removeToast]);
 
+  // The help overlay is laid out to fit (two columns when wide, scrolling when tall).
+  const helpLayout = state.overlay === 'help'
+    ? layoutHelp(buildHelpSections(buildHelpBindings(keyQueryCtx), panel.getActions(), panel.title), rows, columns, state.helpScroll)
+    : null;
+
   const keyCtx: KeyContext = {
     ...keyQueryCtx,
     dispatch, panels, clampedSelection, currentItems, detailLines,
     detailViewportHeight: scrollViewportHeight, sideScroll, addToast, exit, refresh,
+    helpMaxScroll: helpLayout?.maxScroll ?? 0,
   };
 
   // Keyboard input (extracted hook)
@@ -657,8 +667,8 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
           </Box>
         )}
 
-        {state.overlay === 'help' && (
-          <HelpOverlay panels={panels} activePanelIndex={state.activePanelIndex} version={__CLI_VERSION__} bindings={buildHelpBindings(keyQueryCtx)} />
+        {helpLayout && (
+          <HelpOverlay version={__CLI_VERSION__} layout={helpLayout} />
         )}
 
         {state.overlay === 'version' && (

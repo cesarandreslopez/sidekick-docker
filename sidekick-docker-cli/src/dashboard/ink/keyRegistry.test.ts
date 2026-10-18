@@ -41,6 +41,7 @@ function makeState(overrides: Partial<DashboardUIState> = {}): DashboardUIState 
     sortMenuIndex: 0,
     compareItemIds: {},
     secondaryDetailScrollOffset: 0,
+    helpScroll: 0,
     ...overrides,
   };
 }
@@ -79,6 +80,7 @@ function makeCtx(overrides: Partial<KeyContext> = {}): KeyContext {
     addToast: vi.fn().mockReturnValue(1),
     exit: vi.fn(),
     refresh: vi.fn(),
+    helpMaxScroll: 0,
     secondaryDetailLineCount: 0,
     ...overrides,
   };

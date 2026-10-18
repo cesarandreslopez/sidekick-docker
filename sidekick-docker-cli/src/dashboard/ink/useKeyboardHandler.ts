@@ -35,6 +35,7 @@ export function useKeyboardHandler({ ctx, removeToast }: KeyboardHandlerProps): 
         addToast,
         removeToast,
         contextActions: state.overlay === 'context-menu' ? applicableActions : [],
+        helpMaxScroll: ctx.helpMaxScroll,
       };
       OVERLAY_INPUT_HANDLERS[state.overlay](input, key, overlayCtx);
       return;

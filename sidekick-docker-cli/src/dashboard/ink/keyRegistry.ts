@@ -44,6 +44,8 @@ export interface KeyContext extends KeyQueryContext {
   exit: () => void;
   /** Re-fetch everything now (Ctrl+R); feedback is the caller's toast. */
   refresh: () => void;
+  /** Scroll range of the help overlay at the current size (0 when it fits). */
+  helpMaxScroll: number;
 }
 
 export type KeyCategory = 'Navigation' | 'View' | 'Filters & Sort' | 'System';

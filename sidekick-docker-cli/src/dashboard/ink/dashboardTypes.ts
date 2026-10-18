@@ -53,6 +53,8 @@ export interface DashboardUIState {
   /** Per-panel pinned item IDs for compare mode, keyed by panel ID. */
   compareItemIds: Record<string, string | null>;
   secondaryDetailScrollOffset: number;
+  /** First visible row of the help overlay (it scrolls when it does not fit). */
+  helpScroll: number;
 }
 
 export type Action =
@@ -83,7 +85,8 @@ export type Action =
   | { type: 'SORT_MENU_NAV'; delta: number }
   | { type: 'PIN_COMPARE'; panelId: string; itemId: string }
   | { type: 'SCROLL_SECONDARY_DETAIL'; offset: number }
-  | { type: 'SCROLL_SECONDARY_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number };
+  | { type: 'SCROLL_SECONDARY_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number }
+  | { type: 'HELP_SCROLL'; delta: number; max: number };
 
 /**
  * The sort fields, in the order the sort menu lists them.

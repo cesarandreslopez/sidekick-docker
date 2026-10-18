@@ -66,7 +66,8 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
   const failed = Object.keys(props.resourceErrors ?? {});
   if (failed.length) segments.push({ group: 'daemon', text: ` ⚠ ${failed.join(', ')} unavailable`, color: 'yellow' });
   if (ago) {
-    segments.push({ group: 'ago', text: ` ↻ ${ago.text}`, color: ago.stale ? 'yellow' : 'gray', dimColor: !ago.stale });
+    // Stale data says how to fix it.
+    segments.push({ group: 'ago', text: ` ↻ ${ago.text}${ago.stale ? ' (Ctrl+R)' : ''}`, color: ago.stale ? 'yellow' : 'gray', dimColor: !ago.stale });
   }
 
   if (panelActionHints.length > 0) {
@@ -82,7 +83,9 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
   segments.push({ group: 'focus', text: '/', color: 'gray', dimColor: true });
   segments.push({ group: 'focus', text: '▶', color: focusTarget === 'detail' ? ACCENT : 'gray', bold: focusTarget === 'detail' });
 
-  segments.push({ group: 'nav', text: '  j/k  Tab  /  ?', color: 'gray', dimColor: true });
+  segments.push({ group: 'nav', text: '  j/k  Tab  /', color: 'gray', dimColor: true });
+  // Never dropped: however narrow the terminal, the way to find every other key stays visible.
+  segments.push({ group: 'help', text: '  ?:Help', color: ACCENT });
 
   if (contextHint) {
     segments.push({ group: 'context', text: `  ${contextHint}`, color: 'cyan', dimColor: true });

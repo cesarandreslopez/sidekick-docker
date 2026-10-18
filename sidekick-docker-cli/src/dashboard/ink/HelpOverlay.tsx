@@ -1,18 +1,13 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { SidePanel } from '../panels/types';
-import type { HelpBinding, KeyCategory } from './keyRegistry';
+import type { HelpLayout, HelpLine } from './helpLayout';
 import { BRAND_INLINE, BRAND_TAGLINE } from 'sidekick-docker-shared';
 import { ACCENT_FILL } from '../../theme';
 
 interface HelpOverlayProps {
-  panels: SidePanel[];
-  activePanelIndex: number;
   version: string;
-  bindings: HelpBinding[];
+  layout: HelpLayout;
 }
-
-const CATEGORY_ORDER: KeyCategory[] = ['Navigation', 'View', 'Filters & Sort', 'System'];
 
 function KeyBadge({ k, dimmed }: { k: string; dimmed?: boolean }): React.ReactElement {
   return dimmed
@@ -20,67 +15,46 @@ function KeyBadge({ k, dimmed }: { k: string; dimmed?: boolean }): React.ReactEl
     : <Text color="white" backgroundColor={ACCENT_FILL} bold>{` ${k} `}</Text>;
 }
 
-function SectionHeader({ title }: { title: string }): React.ReactElement {
+function Line({ line, width, keyWidth }: { line: HelpLine; width: number; keyWidth: number }): React.ReactElement {
+  if (line.kind === 'blank') return <Text>{''}</Text>;
+  if (line.kind === 'header') {
+    return (
+      <Box>
+        <Text bold color="yellow">{`── ${line.title} `}</Text>
+        <Text color="gray" dimColor>{'─'.repeat(Math.max(4, Math.min(34, width - 4) - line.title.length))}</Text>
+      </Box>
+    );
+  }
   return (
     <Box>
-      <Text bold color="yellow">{`── ${title} `}</Text>
-      <Text color="gray" dimColor>{'─'.repeat(Math.max(4, 34 - title.length))}</Text>
+      <Box width={keyWidth} justifyContent="flex-end" marginRight={1} flexShrink={0}>
+        <KeyBadge k={line.keys} dimmed={line.dimmed} />
+      </Box>
+      <Text color={line.danger ? 'red' : 'gray'} dimColor={line.dimmed} wrap="truncate">
+        {line.label}{line.danger ? ' ⚠' : ''}
+      </Text>
     </Box>
   );
 }
 
-export function HelpOverlay({ panels, activePanelIndex, version, bindings }: HelpOverlayProps): React.ReactElement {
-  const panel = panels[activePanelIndex];
-  const actions = panel.getActions();
-
+export function HelpOverlay({ version, layout }: HelpOverlayProps): React.ReactElement {
+  const { columns, columnWidth, keyWidth, scroll, maxScroll } = layout;
+  const position = maxScroll > 0 ? `  ·  ${scroll === 0 ? 'top' : scroll >= maxScroll ? 'end' : `${scroll}/${maxScroll}`} — j/k to scroll` : '';
   return (
     <Box flexDirection="column" flexGrow={1} padding={1}>
       <Box>
         <Text bold color="magenta">{`${BRAND_INLINE} ${BRAND_TAGLINE}`}</Text>
         <Text color="gray" dimColor>{` v${version}`}</Text>
       </Box>
-
-      {CATEGORY_ORDER.map(category => {
-        const entries = bindings.filter(b => b.category === category);
-        if (entries.length === 0) return null;
-        return (
-          <Box key={category} flexDirection="column">
-            <Text>{''}</Text>
-            <SectionHeader title={category} />
-            {entries.map(b => (
-              <Box key={`${category}-${b.keys[0]}-${b.label}`}>
-                <Box width={10} justifyContent="flex-end" marginRight={1}>
-                  <KeyBadge k={b.keys[0]} dimmed={!b.available} />
-                </Box>
-                <Text color="gray" dimColor={!b.available}>
-                  {b.label}
-                  {!b.available ? ' (not here)' : ''}
-                </Text>
-              </Box>
-            ))}
+      <Box flexDirection="row">
+        {columns.map((col, i) => (
+          <Box key={i} flexDirection="column" width={columnWidth} marginRight={i < columns.length - 1 ? 2 : 0}>
+            {col.map((line, j) => <Line key={j} line={line} width={columnWidth} keyWidth={keyWidth} />)}
           </Box>
-        );
-      })}
-
-      {/* Panel Actions Section */}
-      {actions.length > 0 && (
-        <>
-          <Text>{''}</Text>
-          <SectionHeader title={`${panel.title} Actions`} />
-          {actions.map(a => (
-            <Box key={a.key}>
-              <Box width={10} justifyContent="flex-end" marginRight={1}>
-                <KeyBadge k={a.key} />
-              </Box>
-              <Text color={a.confirm ? 'red' : 'gray'}>{a.label}</Text>
-              {a.confirm && <Text color="red" dimColor>{' ⚠'}</Text>}
-            </Box>
-          ))}
-        </>
-      )}
-
+        ))}
+      </Box>
       <Text>{''}</Text>
-      <Text color="gray" dimColor>{'Press ? or Esc to close · Mouse: click to select, wheel to scroll'}</Text>
+      <Text color="gray" dimColor wrap="truncate">{`Press ? or Esc to close · Mouse: click to select, wheel to scroll${position}`}</Text>
     </Box>
   );
 }

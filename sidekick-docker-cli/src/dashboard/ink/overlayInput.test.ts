@@ -23,7 +23,7 @@ function makeCtx(stateOverrides: Partial<DashboardUIState> = {}): OverlayInputCo
     execOutputLines: [], execContainerId: null, execContainerName: '',
     logFilterString: '', logFilterMode: 'exact', showAllContainers: true,
     sortField: 'state', sortReversed: false, sortMenuIndex: 0,
-    compareItemIds: {}, secondaryDetailScrollOffset: 0,
+    compareItemIds: {}, secondaryDetailScrollOffset: 0, helpScroll: 0,
     ...stateOverrides,
   };
   return {
@@ -34,8 +34,31 @@ function makeCtx(stateOverrides: Partial<DashboardUIState> = {}): OverlayInputCo
     selectedItem: { id: 'c1', label: 'web', sortKey: 0, data: {} },
     addToast: vi.fn().mockReturnValue(1),
     removeToast: vi.fn(),
+    helpMaxScroll: 12,
   };
 }
+
+describe('help overlay input', () => {
+  it('scrolls with j/k, pages, and jumps to the ends', () => {
+    const ctx = makeCtx({ overlay: 'help' });
+    OVERLAY_INPUT_HANDLERS.help('j', bareKey(), ctx);
+    OVERLAY_INPUT_HANDLERS.help('k', bareKey(), ctx);
+    OVERLAY_INPUT_HANDLERS.help('', bareKey({ pageDown: true }), ctx);
+    OVERLAY_INPUT_HANDLERS.help('G', bareKey(), ctx);
+    expect(ctx.dispatched).toEqual([
+      { type: 'HELP_SCROLL', delta: 1, max: 12 },
+      { type: 'HELP_SCROLL', delta: -1, max: 12 },
+      { type: 'HELP_SCROLL', delta: 10, max: 12 },
+      { type: 'HELP_SCROLL', delta: 12, max: 12 },
+    ]);
+  });
+
+  it('still closes on ? / Esc / q', () => {
+    const ctx = makeCtx({ overlay: 'help' });
+    OVERLAY_INPUT_HANDLERS.help('?', bareKey(), ctx);
+    expect(ctx.dispatched).toEqual([{ type: 'SET_OVERLAY', overlay: null }]);
+  });
+});
 
 describe('filter overlay input', () => {
   it("types 'q' into the filter instead of closing it (rabbitmq regression)", () => {

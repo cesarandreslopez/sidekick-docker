@@ -13,6 +13,8 @@ export interface OverlayInputContext {
   selectedItem: PanelItem | undefined;
   addToast: (message: string, severity: ToastSeverity, duration?: number) => number;
   removeToast: (id: number) => void;
+  /** How far the help overlay can scroll at the current terminal size. */
+  helpMaxScroll: number;
 }
 
 export type OverlayInputHandler = (input: string, key: Key, ctx: OverlayInputContext) => void;
@@ -113,10 +115,19 @@ const contextMenu: OverlayInputHandler = (input, key, ctx) => {
   }
 };
 
-const help: OverlayInputHandler = (input, key, { dispatch }) => {
+const help: OverlayInputHandler = (input, key, { dispatch, helpMaxScroll: max }) => {
   if (key.escape || input === '?' || input === 'q') {
     dispatch({ type: 'SET_OVERLAY', overlay: null });
+    return;
   }
+  const delta = input === 'j' || key.downArrow ? 1
+    : input === 'k' || key.upArrow ? -1
+    : key.pageDown || (key.ctrl && input === 'd') ? 10
+    : key.pageUp || (key.ctrl && input === 'u') ? -10
+    : input === 'G' ? max
+    : input === 'g' ? -max
+    : 0;
+  if (delta !== 0) dispatch({ type: 'HELP_SCROLL', delta, max });
 };
 
 const version: OverlayInputHandler = (input, key, { dispatch }) => {
