@@ -32,6 +32,7 @@ import { SORT_FIELDS } from './dashboardTypes';
 import { buildHelpBindings, buildContextHint } from './keyRegistry';
 import type { KeyContext, KeyQueryContext } from './keyRegistry';
 import { maxScrollOffset } from './windowLines';
+import { appendExecOutput, ExecOutputBuffer } from './execOutput';
 
 
 declare const __CLI_VERSION__: string;
@@ -122,20 +123,8 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
       return { ...state, confirmAction: action.action, confirmMessage: action.message, confirmSeverity: action.severity ?? 'high', overlay: action.action ? 'confirm' : null };
     case 'EXEC_START':
       return { ...state, overlay: 'exec', execContainerId: action.containerId, execContainerName: action.containerName, execOutputLines: [] };
-    case 'EXEC_APPEND_OUTPUT': {
-      const MAX_EXEC_LINES = 5000;
-      const parts = action.data.split('\n');
-      const lines = [...state.execOutputLines];
-      if (lines.length > 0) {
-        lines[lines.length - 1] += parts[0];
-      } else {
-        lines.push(parts[0]);
-      }
-      for (let i = 1; i < parts.length; i++) {
-        lines.push(parts[i]);
-      }
-      return { ...state, execOutputLines: lines.length > MAX_EXEC_LINES ? lines.slice(-MAX_EXEC_LINES) : lines };
-    }
+    case 'EXEC_APPEND_OUTPUT':
+      return { ...state, execOutputLines: appendExecOutput(state.execOutputLines, action.data) };
     case 'EXEC_END':
       return { ...state, overlay: null, execContainerId: null, execContainerName: '', execOutputLines: [] };
     case 'SET_LOG_FILTER':
@@ -292,6 +281,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       if (execManagerRef.current) return;
       const manager = new ExecManager();
       execManagerRef.current = manager;
+      const output = new ExecOutputBuffer(data => dispatch({ type: 'EXEC_APPEND_OUTPUT', data }));
 
       dispatch({ type: 'EXEC_START', containerId, containerName });
 
@@ -302,10 +292,10 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         rows,
         env: dockerEnv,
         onData: (data) => {
-          const cleaned = stripCursorEscapes(data);
-          dispatch({ type: 'EXEC_APPEND_OUTPUT', data: cleaned });
+          output.push(stripCursorEscapes(data));
         },
         onExit: () => {
+          output.clear();
           execManagerRef.current?.dispose();
           execManagerRef.current = null;
             dispatch({ type: 'EXEC_END' });
@@ -326,6 +316,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
           }
         }
       }).catch((error: unknown) => {
+        output.clear();
         manager.dispose();
         execManagerRef.current = null;
         dispatch({ type: 'EXEC_END' });
