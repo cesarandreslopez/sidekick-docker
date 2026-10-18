@@ -2,10 +2,11 @@ import React from 'react';
 import { execFallback } from '../dashboard/execFallback.js';
 import { resolveExecShell } from '../dashboard/execShell';
 import type { Command } from 'commander';
-import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId, errorMessage } from 'sidekick-docker-shared';
+import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId, errorMessage, browserHostForEndpoint } from 'sidekick-docker-shared';
 import { debugLog } from '../utils/debug';
 import { connectOrExit } from '../utils/connect';
 import { copyToClipboard } from '../utils/clipboard';
+import { openUrl } from '../utils/openUrl';
 import { DockerState } from '../dashboard/DockerState';
 import type { DetailKind } from '../dashboard/DockerState';
 import { ContainersPanel } from '../dashboard/panels/ContainersPanel';
@@ -398,6 +399,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Wire copy logs handler
   containersPanel.setOnCopyLogs((text: string) => copyToClipboard(text));
+  // Published ports live on the daemon's host — not localhost for a tcp:// or ssh:// endpoint.
+  containersPanel.setOnOpenUrl(openUrl, browserHostForEndpoint(socket ?? process.env.DOCKER_HOST));
   const servicesPanel = panels[1] as ServicesPanel;
   servicesPanel.setOnCopyLogs((text: string) => copyToClipboard(text));
 

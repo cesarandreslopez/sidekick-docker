@@ -181,4 +181,29 @@ describe('DockerDashboardProvider requestRefresh', () => {
     expect(posted).toContainEqual({ type: 'connectionState', state: 'disconnected', reason: 'Permission denied on /var/run/docker.sock.' });
     expect(posted).toContainEqual({ type: 'toast', message: 'Permission denied on /var/run/docker.sock.', severity: 'error' });
   });
+
+  it('opens a published port through asExternalUri, asking which when there are several', async () => {
+    const { __mock } = await import('../test/vscode');
+    __mock.reset();
+    const p = internals(provider);
+    const run = p._initializeService();
+    await tick();
+    serviceInstances[0].resolveInitialize(true);
+    await run;
+    const port = (hostPort: number, containerPort: number) => ({ hostIp: '0.0.0.0', hostPort, containerPort, protocol: 'tcp' });
+    (serviceInstances[0] as unknown as { getStateSnapshot(): unknown }).getStateSnapshot = () => ({
+      containers: [
+        { id: 'one', name: 'web', ports: [port(8080, 80), port(8080, 80)] },
+        { id: 'two', name: 'app', ports: [port(3000, 3000), port(8443, 443)] },
+      ],
+    });
+    const handle = (p as unknown as { _handleAction(a: string, i: string, panel: string): Promise<void> })._handleAction.bind(p);
+
+    await handle('openPort', 'one', 'containers');
+    expect(__mock.openedExternal).toEqual(['http://localhost:8080']);
+
+    __mock.quickPickResult = 'https://localhost:8443';
+    await handle('openPort', 'two', 'containers');
+    expect(__mock.openedExternal.at(-1)).toBe('https://localhost:8443');
+  });
 });

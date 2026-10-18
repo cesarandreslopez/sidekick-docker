@@ -1,5 +1,5 @@
 import type { ContainerInfo, ContainerDetails } from 'sidekick-docker-shared';
-import { DockerClient, shortId, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneCandidateCount, pruneConfirmMessage, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
+import { DockerClient, shortId, publishedPortUrls, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneCandidateCount, pruneConfirmMessage, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
 import { panelData, detailFetchError, copyLogsAction } from './types';
@@ -43,6 +43,9 @@ export class ContainersPanel implements SidePanel {
   private onAction: () => void;
   private onExec?: (containerId: string) => void;
   private onCopyLogs?: (text: string) => boolean;
+  private onOpenUrl?: (url: string) => Promise<void>;
+  /** Where published ports are reachable: the daemon's host (see browserHostForEndpoint). */
+  private browserHost = 'localhost';
   private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(client: DockerClient, onAction: () => void) {
@@ -56,6 +59,11 @@ export class ContainersPanel implements SidePanel {
 
   setOnCopyLogs(handler: (text: string) => boolean): void {
     this.onCopyLogs = handler;
+  }
+
+  setOnOpenUrl(handler: (url: string) => Promise<void>, browserHost: string): void {
+    this.onOpenUrl = handler;
+    this.browserHost = browserHost;
   }
 
   readonly detailTabs: DetailTab[] = [
@@ -315,6 +323,20 @@ export class ContainersPanel implements SidePanel {
             const n = r.containersDeleted.length;
             return `Pruned ${n} container${n === 1 ? '' : 's'} — ${formatBytes(r.spaceReclaimed)} reclaimed`;
           });
+        },
+      },
+      {
+        key: 'b',
+        label: 'Open in Browser',
+        handler: (item) => {
+          const c = panelData<ContainerInfo>(item);
+          const [first, ...rest] = publishedPortUrls(c.ports, this.browserHost);
+          if (!first || !this.onOpenUrl) return;
+          return this.onOpenUrl(first).then(() => (rest.length ? `Opened ${first} (also published: ${rest.join(', ')})` : `Opened ${first}`));
+        },
+        condition: (item) => {
+          const c = panelData<ContainerInfo>(item);
+          return c.state === 'running' && publishedPortUrls(c.ports, this.browserHost).length > 0;
         },
       },
       copyLogsAction(() => this.lastMetrics, m => m.selectedContainerLogs, () => this.onCopyLogs),

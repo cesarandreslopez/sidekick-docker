@@ -1,4 +1,4 @@
-import { summarizeHealth, summarizeRestartPolicy, formatMount } from 'sidekick-docker-shared/formatters';
+import { summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, publishedPortUrls, pruneCandidateCount, pruneConfirmMessage, removeContainerConfirmMessage } from 'sidekick-docker-shared/formatters';
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
@@ -287,16 +287,23 @@ export const containersPanel: PanelDefinition = {
     if (!c) return [];
     const actions: ActionDefinition[] = [];
 
-    if (c.state !== 'running') {
+    // Shared gating: no Start for a paused container (Docker rejects it),
+    // and Stop for paused/restarting ones too.
+    if (canStart(c.state)) {
       actions.push({ key: 's', label: 'Start', actionType: 'start' });
     }
-    if (c.state === 'running') {
+    if (canStop(c.state)) {
       actions.push({ key: 'S', label: 'Stop', actionType: 'stop' });
+    }
+    if (c.state === 'running') {
       actions.push({ key: 'r', label: 'Restart', actionType: 'restart' });
       actions.push({ key: 'p', label: 'Pause', actionType: 'pause' });
     }
     if (c.state === 'paused') {
       actions.push({ key: 'u', label: 'Unpause', actionType: 'unpause' });
+    }
+    if (c.state === 'running' && publishedPortUrls(c.ports, 'localhost').length > 0) {
+      actions.push({ key: 'b', label: 'Open in Browser', actionType: 'openPort' });
     }
     actions.push({ key: 'c', label: 'Copy Logs', actionType: 'copyLogs' });
     actions.push({
@@ -304,10 +311,10 @@ export const containersPanel: PanelDefinition = {
       label: 'Prune',
       actionType: 'prune',
       confirm: true,
-      confirmMessage: 'Remove all stopped containers?',
+      confirmMessage: pruneConfirmMessage('containers', pruneCandidateCount('containers', snapshot.containers)),
       confirmSeverity: 'batch',
     });
-    actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove container "${c.name}"?`, confirmSeverity: 'high' });
+    actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: removeContainerConfirmMessage(c), confirmSeverity: 'high' });
     if (c.state === 'running') {
       actions.push({ key: 'e', label: 'Exec', actionType: 'exec' });
     }

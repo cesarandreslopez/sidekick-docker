@@ -134,7 +134,7 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
 
   it('does not shadow any panel action key', () => {
     // Full inventory of PanelAction keys across the five panels.
-    const panelActionKeys = ['s', 'S', 'r', 'p', 'u', 'd', 'e', 'c', 'P', 'D'];
+    const panelActionKeys = ['s', 'S', 'r', 'p', 'u', 'd', 'e', 'c', 'P', 'D', 'b'];
     for (const k of panelActionKeys) {
       expect(findMatch(k), `panel action key '${k}' must fall through`).toBeUndefined();
     }

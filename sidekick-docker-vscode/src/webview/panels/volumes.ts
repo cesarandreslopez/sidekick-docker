@@ -2,6 +2,7 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot, SerializedVolumeInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { truncate, escapeHtml, colorizeBool, renderKvGrid } from '../formatters';
+import { pruneCandidateCount, pruneConfirmMessage } from 'sidekick-docker-shared/formatters';
 
 function findVolume(name: string, snapshot: DashboardStateSnapshot): SerializedVolumeInfo | undefined {
   return snapshot.volumes.find(v => v.name === name);
@@ -56,7 +57,7 @@ export const volumesPanel: PanelDefinition = {
     if (vol && !vol.isInUse) {
       actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove volume "${vol.name}"?`, confirmSeverity: 'high' });
     }
-    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: 'Prune all unused volumes?', confirmSeverity: 'batch' });
+    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: pruneConfirmMessage('volumes', pruneCandidateCount('volumes', snapshot.volumes)), confirmSeverity: 'batch' });
     return actions;
   },
 

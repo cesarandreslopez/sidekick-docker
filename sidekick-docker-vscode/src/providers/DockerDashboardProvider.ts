@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getRandomPhrase, errorMessage, shortId, ComposeFileReader } from 'sidekick-docker-shared';
+import { getRandomPhrase, errorMessage, shortId, ComposeFileReader, publishedPortUrls, browserHostForEndpoint } from 'sidekick-docker-shared';
 import { getNonce } from '../utils/nonce';
 import { DockerService } from '../services/DockerService';
 import type { DashboardViewState } from '../services/DockerService';
@@ -354,6 +354,10 @@ export class DockerDashboardProvider implements vscode.Disposable {
   private async _handleAction(actionType: string, itemId: string, panelId: string): Promise<void> {
     if (!this.service) return;
     const service = this.service;
+    if (actionType === 'openPort') {
+      await this._openPublishedPort(itemId);
+      return;
+    }
 
     const meta = ACTION_META[actionType];
     // Prune acts on the whole resource type, not the selected item.
@@ -433,6 +437,26 @@ export class DockerDashboardProvider implements vscode.Disposable {
         severity: 'error',
       });
     }
+  }
+
+  /**
+   * Open a container's published port in the browser. asExternalUri maps
+   * localhost through Remote-SSH/WSL/Codespaces port forwarding, so the link
+   * works where the editor runs, not just where the extension host does.
+   */
+  private async _openPublishedPort(containerId: string): Promise<void> {
+    const container = this.service?.getStateSnapshot().containers.find(c => c.id === containerId);
+    if (!container) return;
+    const host = browserHostForEndpoint(getSettings().socketPath || process.env.DOCKER_HOST);
+    const urls = publishedPortUrls(container.ports, host);
+    if (urls.length === 0) {
+      this._postMessage({ type: 'toast', message: `${container.name} publishes no TCP ports`, severity: 'warning' });
+      return;
+    }
+    const url = urls.length === 1 ? urls[0] : await vscode.window.showQuickPick(urls, { placeHolder: `Open which port of ${container.name}?` });
+    if (!url) return;
+    const external = await vscode.env.asExternalUri(vscode.Uri.parse(url));
+    await vscode.env.openExternal(external);
   }
 
   private _openExecTerminal(containerId: string): void {

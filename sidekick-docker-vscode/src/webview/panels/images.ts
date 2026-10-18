@@ -2,6 +2,7 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot, SerializedImageInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { formatBytes, truncate, escapeHtml, escapeAttr, colorizeId, colorizeBool, renderKvGrid, shortId } from '../formatters';
+import { pruneCandidateCount, pruneConfirmMessage } from 'sidekick-docker-shared/formatters';
 
 
 function findImage(id: string, snapshot: DashboardStateSnapshot): SerializedImageInfo | undefined {
@@ -77,7 +78,7 @@ export const imagesPanel: PanelDefinition = {
     const name = img?.repoTags[0] || shortId(item.id);
     return [
       { key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove image "${name}"?`, confirmSeverity: 'high' },
-      { key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: 'Prune all dangling images?', confirmSeverity: 'batch' },
+      { key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: pruneConfirmMessage('images', pruneCandidateCount('images', snapshot.images)), confirmSeverity: 'batch' },
     ];
   },
 
