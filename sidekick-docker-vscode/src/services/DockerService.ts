@@ -114,7 +114,7 @@ export class DockerService {
   private client: DockerClient;
   private composeClient: ComposeClient;
   private composeDetector = new ComposeDetector();
-  private composeFileReader = new ComposeFileReader();
+  private composeFileReader: ComposeFileReader;
   private statsCollector = new StatsCollector();
   /**
    * Fills in stats for every row when the list needs them (a stats-based sort).
@@ -211,6 +211,7 @@ export class DockerService {
   constructor(callbacks: DockerServiceCallbacks, options?: DockerServiceOptions) {
     this.client = new DockerClient(options?.clientOptions);
     this.composeClient = new ComposeClient(options?.cliEnv);
+    this.composeFileReader = new ComposeFileReader(options?.cliEnv);
     this.callbacks = callbacks;
     this.cwd = options?.cwd;
     this.isTrusted = options?.isTrusted ?? true;

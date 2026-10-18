@@ -44,7 +44,7 @@ export interface DockerDashboardMetrics {
 export class DockerState {
   private client: DockerClient;
   private composeDetector = new ComposeDetector();
-  private composeFileReader = new ComposeFileReader();
+  private composeFileReader: ComposeFileReader;
   private statsCollector = new StatsCollector();
 
   private cwd: string | undefined;
@@ -75,9 +75,11 @@ export class DockerState {
   private disposed = false;
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-  constructor(client: DockerClient, cwd?: string, private onChange?: () => void) {
+  /** @param options.cliEnv endpoint overrides for spawned `docker compose` (see `dockerCliEnv`). */
+  constructor(client: DockerClient, cwd?: string, private onChange?: () => void, options: { cliEnv?: Record<string, string> } = {}) {
     this.client = client;
     this.cwd = cwd;
+    this.composeFileReader = new ComposeFileReader(options.cliEnv);
   }
 
   /** Debounced refresh — coalesces rapid event-driven refreshes into a single call. */

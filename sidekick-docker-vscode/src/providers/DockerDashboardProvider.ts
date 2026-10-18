@@ -246,7 +246,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
     this.webviewReady = true;
 
     const settings = getSettings();
-    const cwd = await resolveComposeCwd(new ComposeFileReader());
+    const cwd = await resolveComposeCwd(new ComposeFileReader(settings.cliEnv));
     if (generation !== this.initGeneration) return;
 
     const post = (message: ExtensionMessage) => {

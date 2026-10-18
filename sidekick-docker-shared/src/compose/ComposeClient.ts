@@ -2,11 +2,16 @@ import { spawn } from 'child_process';
 import { StringDecoder } from 'node:string_decoder';
 import type { ComposeCommandOptions } from './composeCwd';
 import type { LogEntry } from '../types/container';
+import { runProcess } from './process';
+import type { ComposeExecResult } from './process';
 
-export interface ComposeExecResult {
-  exitCode: number;
-  stdout: string;
-  stderr: string;
+export type { ComposeExecResult } from './process';
+
+export interface ComposeClientOptions {
+  /** Deadline for read-only commands (`logs`, `ps`). Default 30s. */
+  queryTimeoutMs?: number;
+  /** Deadline for state-changing commands. `up` may pull or build, so the default is generous: 15min. */
+  actionTimeoutMs?: number;
 }
 
 /** Raised when a `docker compose` invocation exits non-zero. */
@@ -62,42 +67,28 @@ export function throwIfComposeFailed(result: ComposeExecResult, action: string):
  * Docker API has no native compose concept, so we shell out.
  */
 export class ComposeClient {
+  private readonly queryTimeoutMs: number;
+  private readonly actionTimeoutMs: number;
+
   /**
    * @param extraEnv Environment overrides for every spawned `docker compose`
    *   process (e.g. DOCKER_HOST so compose targets the same daemon as the API
    *   client — see `dockerCliEnv`). Merged over the inherited environment.
+   * @param options Per-command deadlines; a hung `docker compose` is killed.
    */
-  constructor(private readonly extraEnv?: Record<string, string>) {}
+  constructor(private readonly extraEnv?: Record<string, string>, options: ComposeClientOptions = {}) {
+    this.queryTimeoutMs = options.queryTimeoutMs ?? 30_000;
+    this.actionTimeoutMs = options.actionTimeoutMs ?? 15 * 60_000;
+  }
 
   private spawnEnv(): NodeJS.ProcessEnv | undefined {
     return this.extraEnv ? { ...process.env, ...this.extraEnv } : undefined;
   }
 
-  private async exec(args: string[], cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {
-    return new Promise((resolve, reject) => {
-      const options = typeof cwd === 'string' ? { cwd } : cwd;
-      const files = options?.configFiles?.flatMap(file => ['-f', file]) ?? [];
-      const proc = spawn('docker', ['compose', ...files, ...args], {
-        cwd: options?.cwd,
-        env: this.spawnEnv(),
-        stdio: ['ignore', 'pipe', 'pipe'],
-      });
-
-      const stdout: string[] = [];
-      const stderr: string[] = [];
-
-      proc.stdout.on('data', (data: Buffer) => stdout.push(data.toString()));
-      proc.stderr.on('data', (data: Buffer) => stderr.push(data.toString()));
-
-      proc.on('error', reject);
-      proc.on('close', (code) => {
-        resolve({
-          exitCode: code ?? 1,
-          stdout: stdout.join(''),
-          stderr: stderr.join(''),
-        });
-      });
-    });
+  private exec(args: string[], cwd?: string | ComposeCommandOptions, timeoutMs = this.actionTimeoutMs): Promise<ComposeExecResult> {
+    const options = typeof cwd === 'string' ? { cwd } : cwd;
+    const files = options?.configFiles?.flatMap(file => ['-f', file]) ?? [];
+    return runProcess('docker', ['compose', ...files, ...args], { cwd: options?.cwd, env: this.extraEnv, timeoutMs });
   }
 
   async up(project: string, cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {
@@ -129,16 +120,23 @@ export class ComposeClient {
   async logs(project: string, service?: string, tail = 100): Promise<ComposeExecResult> {
     const args = ['-p', project, 'logs', '--tail', String(tail)];
     if (service) args.push(service);
-    return this.exec(args);
+    return this.exec(args, undefined, this.queryTimeoutMs);
   }
 
   async ps(project: string): Promise<ComposeExecResult> {
-    return this.exec(['-p', project, 'ps', '--format', 'json']);
+    return this.exec(['-p', project, 'ps', '--format', 'json'], undefined, this.queryTimeoutMs);
   }
 
-  async *streamLogs(project: string, service?: string, tail = 100, signal?: AbortSignal): AsyncIterable<LogEntry> {
+  /**
+   * Follow a project's (or one service's) logs.
+   * @param since RFC3339 timestamp; when set, only entries at or after it are
+   *   replayed. Reconnects pass the last seen timestamp so the tail is not
+   *   appended a second time.
+   */
+  async *streamLogs(project: string, service?: string, tail = 100, signal?: AbortSignal, since?: string): AsyncIterable<LogEntry> {
     if (signal?.aborted) return;
     const args = ['-p', project, 'logs', '--no-color', '--follow', '--tail', String(tail), '--timestamps'];
+    if (since) args.push('--since', since);
     if (service) args.push(service);
 
     const proc = spawn('docker', ['compose', ...args], {

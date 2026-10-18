@@ -25,17 +25,17 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   const socket = globalOpts.socket as string | undefined;
   const client = await connectOrExit({ socket });
 
-  // Create state and do initial refresh
-  const cwd = process.cwd();
-  let stateChanged = () => {};
-  const state = new DockerState(client, cwd, () => stateChanged());
-  await state.refresh();
-
   // Subprocesses cannot see the endpoint dockerode was configured with, so
   // every spawned `docker` (compose, exec) needs these overrides or --socket
   // is silently ignored and they talk to the default daemon instead.
   const cliEnv = socket ? dockerCliEnv(socket) : undefined;
   const composeClient = new ComposeClient(cliEnv);
+
+  // Create state and do initial refresh
+  const cwd = process.cwd();
+  let stateChanged = () => {};
+  const state = new DockerState(client, cwd, () => stateChanged(), { cliEnv });
+  await state.refresh();
 
   // Action callback — refresh state after any mutation
   const onAction = () => {

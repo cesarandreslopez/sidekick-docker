@@ -10,11 +10,13 @@ export { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv } from './doc
 export { ComposeDetector } from './compose/ComposeDetector';
 export type { ComposeProjectSource } from './compose/ComposeDetector';
 export { ComposeClient, ComposeError, composeFailureReason, throwIfComposeFailed } from './compose/ComposeClient';
-export type { ComposeExecResult } from './compose/ComposeClient';
+export type { ComposeExecResult, ComposeClientOptions } from './compose/ComposeClient';
+export { runProcess, TIMEOUT_EXIT_CODE } from './compose/process';
+export type { RunProcessOptions } from './compose/process';
 export { resolveComposeCwd, resolveComposeOptions } from './compose/composeCwd';
 export type { ComposeProjectSourceLocation, ComposeCommandOptions } from './compose/composeCwd';
 export { ComposeFileReader } from './compose/ComposeFileReader';
-export type { ComposeFileConfig, ComposeFileServiceConfig } from './compose/ComposeFileReader';
+export type { ComposeFileConfig, ComposeFileServiceConfig, ComposeFileReaderOptions, ComposeReadResult } from './compose/ComposeFileReader';
 
 // Stats
 export { StatsCollector } from './stats/StatsCollector';
