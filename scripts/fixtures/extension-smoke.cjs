@@ -10,9 +10,9 @@ const connected = new Promise(resolve => { ready = resolve; });
 const vscode = {
   TreeItem: class {},
   EventEmitter: class { event = disposable; fire() {} dispose() {} },
-  ThemeColor: class {}, ThemeIcon: class {},
+  ThemeColor: class {}, ThemeIcon: class {}, MarkdownString: class { constructor(value) { this.value = value; } },
   StatusBarAlignment: { Right: 2 }, ProgressLocation: { Notification: 15 },
-  workspace: { isTrusted: true, workspaceFolders: undefined, getConfiguration: () => ({ get: (_key, fallback) => fallback }), onDidChangeConfiguration: disposable, onDidChangeWorkspaceFolders: disposable },
+  workspace: { isTrusted: true, workspaceFolders: undefined, getConfiguration: () => ({ get: (_key, fallback) => fallback }), onDidChangeConfiguration: disposable, onDidChangeWorkspaceFolders: disposable, onDidGrantWorkspaceTrust: disposable },
   window: {
     createTreeView: disposable,
     createStatusBarItem: () => ({
