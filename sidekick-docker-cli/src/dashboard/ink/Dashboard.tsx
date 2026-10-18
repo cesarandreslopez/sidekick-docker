@@ -33,6 +33,7 @@ import { buildHelpBindings, buildContextHint } from './keyRegistry';
 import type { KeyContext, KeyQueryContext } from './keyRegistry';
 import { maxScrollOffset } from './windowLines';
 import { appendExecOutput, ExecOutputBuffer } from './execOutput';
+import { DEFAULT_EXEC_SHELL, describeExecExit } from '../execShell';
 
 
 declare const __CLI_VERSION__: string;
@@ -196,7 +197,9 @@ interface DashboardProps {
   metrics: DockerDashboardMetrics;
   onViewStateChange?: (viewState: DashboardViewState) => void;
   execTriggerRef?: React.RefObject<((containerId: string, containerName: string) => void) | null>;
-  onExecFallback?: (containerId: string) => Promise<void>;
+  onExecFallback?: (containerId: string, containerName: string) => Promise<void>;
+  /** Shell to run for Exec (`--shell` / SIDEKICK_DOCKER_SHELL). */
+  execShell?: string;
   /** Endpoint overrides for the spawned `docker exec` process (see `dockerCliEnv`). */
   dockerEnv?: Record<string, string>;
   /** Re-fetch everything now; resolves with the resources that could not be refreshed. */
@@ -211,7 +214,7 @@ export interface DashboardViewState {
   compareItemId: string | null;
 }
 
-export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh }: DashboardProps): React.ReactElement {
+export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh, execShell = DEFAULT_EXEC_SHELL }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, initialState);
   const { columns, rows } = useTerminalSize();
   const { exit, suspendTerminal } = useApp();
@@ -284,6 +287,8 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       const manager = new ExecManager();
       execManagerRef.current = manager;
       const output = new ExecOutputBuffer(data => dispatch({ type: 'EXEC_APPEND_OUTPUT', data }));
+      // The last bit of output explains an immediate exit (e.g. "stat /bin/sh: no such file").
+      let outputTail = '';
 
       dispatch({ type: 'EXEC_START', containerId, containerName });
 
@@ -293,14 +298,19 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         cols: columns,
         rows,
         env: dockerEnv,
+        shell: execShell,
         onData: (data) => {
-          output.push(stripCursorEscapes(data));
+          const cleaned = stripCursorEscapes(data);
+          outputTail = (outputTail + cleaned).slice(-512);
+          output.push(cleaned);
         },
-        onExit: () => {
+        onExit: (exitCode) => {
           output.clear();
           execManagerRef.current?.dispose();
           execManagerRef.current = null;
-            dispatch({ type: 'EXEC_END' });
+          dispatch({ type: 'EXEC_END' });
+          const reason = describeExecExit({ exitCode, outputTail, shell: execShell, containerName });
+          if (reason) addToast(reason, 'error');
         },
       }).then(async (started) => {
         if (!started && execManagerRef.current === manager) {
@@ -309,7 +319,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
             execInFallbackRef.current = true;
             // The embedded PTY input listener must release stdin to the child too.
             if (execInputHandlerRef.current) process.stdin.removeListener('data', execInputHandlerRef.current);
-            await suspendTerminal(() => onExecFallback(containerId));
+            await suspendTerminal(() => onExecFallback(containerId, containerName));
           } finally {
             execInFallbackRef.current = false;
             manager.dispose();
@@ -326,7 +336,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       });
     };
     return () => { execTriggerRef.current = null; };
-  }, [execTriggerRef, onExecFallback, columns, rows, dockerEnv, suspendTerminal, addToast]);
+  }, [execTriggerRef, onExecFallback, columns, rows, dockerEnv, execShell, suspendTerminal, addToast]);
 
   useEffect(() => () => {
     execManagerRef.current?.dispose();

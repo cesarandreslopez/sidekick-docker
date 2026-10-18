@@ -18,11 +18,12 @@ const program = new Command();
 
 program
   .name('sidekick-docker')
-  .description('Interactive Docker dashboard (TUI), plus scriptable ps and logs commands')
+  .description('Interactive Docker dashboard (TUI), plus scriptable ps, logs, images, volumes, networks, stats, df and inspect commands')
   .version(__CLI_VERSION__)
   .option('--socket <endpoint>', 'Docker endpoint: socket path, unix:// or tcp://host[:port] URL')
   .option('--no-color', 'Disable colored output')
   .option('--verbose', 'Show full error details')
+  .option('--shell <path>', 'Shell for Exec in the dashboard (default: $SIDEKICK_DOCKER_SHELL or /bin/sh)')
   .action(async (_opts, cmd) => {
     await dashboardAction(_opts, cmd);
   });
@@ -112,6 +113,7 @@ Examples:
 
 Environment:
   DOCKER_HOST    Docker endpoint used when --socket is not given (unix://, tcp://, ssh://)
+  SIDEKICK_DOCKER_SHELL  shell for dashboard Exec when --shell is not given (default /bin/sh)
   NO_COLOR       disable colored output    FORCE_COLOR   force colored output
 `);
 

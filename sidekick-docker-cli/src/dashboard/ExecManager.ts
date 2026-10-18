@@ -1,7 +1,9 @@
 /**
  * Manages a PTY-based `docker exec -it` session inside the TUI.
- * Uses node-pty (optional dependency) for interactive terminal emulation.
- * Falls back gracefully if node-pty is unavailable.
+ * Uses node-pty when it can be loaded. It is not a dependency of the published
+ * package (native module, excluded from the bundle), so an npm install always
+ * takes the `start() → false` path and the dashboard falls back to running
+ * `docker exec -it` with the terminal suspended (see execFallback.ts).
  */
 
 interface IPty {
@@ -27,7 +29,10 @@ export interface ExecManagerOptions {
   cols: number;
   rows: number;
   onData: (data: string) => void;
-  onExit: () => void;
+  /** Called with the `docker exec` exit code (126/127: the shell does not exist). */
+  onExit: (exitCode: number) => void;
+  /** Shell to run in the container (see resolveExecShell). */
+  shell: string;
   /**
    * Endpoint overrides for the spawned `docker` process (see `dockerCliEnv`).
    * A subprocess cannot see the endpoint dockerode was configured with, so
@@ -55,7 +60,7 @@ export class ExecManager {
     }
 
     if (this.disposed) return false;
-    this.pty = nodePty.spawn('docker', ['exec', '-it', opts.containerId, '/bin/sh'], {
+    this.pty = nodePty.spawn('docker', ['exec', '-it', opts.containerId, opts.shell], {
       name: 'xterm-256color',
       cols: opts.cols,
       rows: Math.max(1, opts.rows - 2), // Reserve space for header
@@ -66,7 +71,7 @@ export class ExecManager {
       this.pty.onData((data) => opts.onData(data)),
     );
     this.disposables.push(
-      this.pty.onExit(() => opts.onExit()),
+      this.pty.onExit((e) => opts.onExit(e.exitCode)),
     );
 
     return true;

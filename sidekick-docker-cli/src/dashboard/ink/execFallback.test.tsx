@@ -32,7 +32,7 @@ it('keeps the same Ink instance alive and selection intact after fallback exec',
   const exited = vi.fn();
   void app.waitUntilExit().then(exited);
   trigger.current!('container-a', 'Container A');
-  await vi.waitFor(() => expect(fallback).toHaveBeenCalledWith('container-a'));
+  await vi.waitFor(() => expect(fallback).toHaveBeenCalledWith('container-a', 'Container A'));
   expect(exited).not.toHaveBeenCalled();
   expect(stdin.setRawMode).toHaveBeenLastCalledWith(false);
   finish();

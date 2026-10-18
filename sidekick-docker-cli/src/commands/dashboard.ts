@@ -1,5 +1,6 @@
 import React from 'react';
 import { execFallback } from '../dashboard/execFallback.js';
+import { resolveExecShell } from '../dashboard/execShell';
 import type { Command } from 'commander';
 import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId, errorMessage } from 'sidekick-docker-shared';
 import { debugLog } from '../utils/debug';
@@ -29,6 +30,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   // every spawned `docker` (compose, exec) needs these overrides or --socket
   // is silently ignored and they talk to the default daemon instead.
   const cliEnv = socket ? dockerCliEnv(socket) : undefined;
+  const execShell = resolveExecShell(globalOpts.shell as string | undefined);
   const composeClient = new ComposeClient(cliEnv);
 
   // Create state and do initial refresh
@@ -68,6 +70,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           onExecFallback,
           dockerEnv: cliEnv,
           onRefresh,
+          execShell,
         }),
       );
     }, 200);
@@ -334,10 +337,10 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   let externalExec = false;
   const execAbort = new AbortController();
-  const onExecFallback = async (containerId: string): Promise<void> => {
+  const onExecFallback = async (containerId: string, containerName: string): Promise<void> => {
     externalExec = true;
     try {
-      await execFallback(containerId, cliEnv, execAbort.signal);
+      await execFallback(containerId, cliEnv, execAbort.signal, execShell, containerName);
     } finally {
       externalExec = false;
     }
@@ -355,6 +358,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       onExecFallback,
       dockerEnv: cliEnv,
       onRefresh,
+      execShell,
     }),
   );
 
