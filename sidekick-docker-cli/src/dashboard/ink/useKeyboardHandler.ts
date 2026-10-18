@@ -3,7 +3,7 @@ import { OVERLAY_INPUT_HANDLERS } from './overlayInput';
 import type { OverlayInputContext } from './overlayInput';
 import { GLOBAL_BINDINGS } from './keyRegistry';
 import type { KeyContext } from './keyRegistry';
-import { executeAction } from './executeAction';
+import { executeAction, findPanelAction } from './executeAction';
 
 export interface KeyboardHandlerProps {
   ctx: KeyContext;
@@ -52,7 +52,7 @@ export function useKeyboardHandler({ ctx, removeToast }: KeyboardHandlerProps): 
     }
 
     if (selectedItem) {
-      const actionMatch = applicableActions.find(a => a.key === input);
+      const actionMatch = findPanelAction(applicableActions, input, key);
       if (actionMatch) {
         executeAction(actionMatch, selectedItem, dispatch, addToast, removeToast);
       }

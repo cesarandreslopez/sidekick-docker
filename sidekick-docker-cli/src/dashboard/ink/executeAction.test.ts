@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { executeAction } from './executeAction';
+import { executeAction, findPanelAction } from './executeAction';
 import type { PanelAction, PanelItem } from '../panels/types';
 
 const item: PanelItem = { id: 'c1', label: 'web', sortKey: 0, data: {} };
@@ -50,5 +50,19 @@ describe('executeAction', () => {
     executeAction(action, item, h.dispatch, h.addToast, h.removeToast);
     expect(handler).not.toHaveBeenCalled();
     expect(h.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'SET_CONFIRM', message: 'Remove web?', severity: 'high' }));
+  });
+});
+
+describe('findPanelAction', () => {
+  const actions = [{ key: 'r', label: 'Restart', handler: () => {} }, { key: 'S', label: 'Stop', handler: () => {} }];
+
+  it('matches the bare key', () => {
+    expect(findPanelAction(actions, 'r', {})?.label).toBe('Restart');
+    expect(findPanelAction(actions, 'S', {})?.label).toBe('Stop');
+  });
+
+  it('never matches a Ctrl or Meta chord', () => {
+    expect(findPanelAction(actions, 'r', { ctrl: true })).toBeUndefined();
+    expect(findPanelAction(actions, 'r', { meta: true })).toBeUndefined();
   });
 });

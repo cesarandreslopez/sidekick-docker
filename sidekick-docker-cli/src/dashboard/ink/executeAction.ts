@@ -2,6 +2,17 @@ import { errorMessage } from 'sidekick-docker-shared';
 import type { PanelAction, PanelItem } from '../panels/types';
 import type { Action, AddToast } from './dashboardTypes';
 
+/**
+ * The panel action a keypress triggers, if any. Modified keys never match:
+ * Ink reports Ctrl+R as input 'r' with key.ctrl set, so a bare comparison ran
+ * Restart — with no confirmation — for Ctrl+R (and Start/Pause/Exec for
+ * Ctrl+S/P/E).
+ */
+export function findPanelAction(actions: readonly PanelAction[], input: string, key: { ctrl?: boolean; meta?: boolean }): PanelAction | undefined {
+  if (key.ctrl || key.meta) return undefined;
+  return actions.find(a => a.key === input);
+}
+
 export function isPromise(value: unknown): value is Promise<unknown> {
   return value != null && typeof (value as Promise<unknown>).then === 'function';
 }
