@@ -2,6 +2,7 @@ import Dockerode from 'dockerode';
 import { abortableChunks, LineDecoder, streamLines, streamRequest } from './streams';
 import type {
   ContainerInfo,
+  ContainerDetails,
   ContainerStats,
   LogEntry,
   PortBinding,
@@ -29,7 +30,7 @@ import {
   PruneNetworksResponseSchema,
   PruneContainersResponseSchema,
   DiskUsageResponseSchema,
-  ContainerInspectEnvSchema,
+  ContainerInspectDetailsSchema,
   ContainerChangesResponseSchema,
   ImageHistoryResponseSchema,
 } from './schemas';
@@ -209,9 +210,33 @@ export class DockerClient {
   }
 
   async getContainerEnv(id: string): Promise<string[]> {
-    const info = await this.inspectContainer(id);
-    const validated = ContainerInspectEnvSchema.parse(info);
-    return validated.Config.Env ?? [];
+    return (await this.getContainerDetails(id)).env;
+  }
+
+  /** Env, restart policy, mounts, health log and exit status — one inspect call. */
+  async getContainerDetails(id: string): Promise<ContainerDetails> {
+    const v = ContainerInspectDetailsSchema.parse(await this.inspectContainer(id));
+    const health = v.State?.Health;
+    return {
+      env: v.Config.Env ?? [],
+      restartPolicy: {
+        name: v.HostConfig?.RestartPolicy?.Name || 'no',
+        maximumRetryCount: v.HostConfig?.RestartPolicy?.MaximumRetryCount ?? 0,
+      },
+      restartCount: v.RestartCount,
+      mounts: (v.Mounts ?? []).map(m => ({
+        type: m.Type, name: m.Name || undefined, source: m.Source, destination: m.Destination, readOnly: !m.RW,
+      })),
+      exitCode: v.State?.ExitCode ?? 0,
+      oomKilled: v.State?.OOMKilled ?? false,
+      error: v.State?.Error ?? '',
+      health: health?.Status ? {
+        status: health.Status,
+        failingStreak: health.FailingStreak,
+        // Docker keeps the last 5 probes, oldest first.
+        log: (health.Log ?? []).map(l => ({ start: l.Start ? new Date(l.Start) : null, exitCode: l.ExitCode, output: l.Output.trim() })),
+      } : null,
+    };
   }
 
   async *streamLogs(id: string, opts: LogStreamOptions = {}, signal?: AbortSignal): AsyncIterable<LogEntry> {

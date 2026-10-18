@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   actionText, browserHostForEndpoint, canStart, canStop, publishedPortUrls, pruneCandidateCount,
-  pruneConfirmMessage, removeContainerConfirmMessage, sortDirectionLabel,
+  pruneConfirmMessage, removeContainerConfirmMessage, sortDirectionLabel, summarizeRestartPolicy, formatMount, summarizeHealth,
 } from './formatters';
 import type { PortBinding } from './types';
 
@@ -79,5 +79,25 @@ describe('actionText', () => {
   it('words progress and success the same way on both surfaces', () => {
     expect(actionText('stop', 'web')).toEqual({ progress: 'Stopping web…', success: 'Stopped web' });
     expect(actionText('up', 'shop')).toEqual({ progress: 'Bringing shop up…', success: 'shop is up' });
+  });
+});
+
+describe('container detail summaries', () => {
+  it('summarizes the restart policy', () => {
+    expect(summarizeRestartPolicy({ name: 'unless-stopped', maximumRetryCount: 0 })).toBe('unless-stopped');
+    expect(summarizeRestartPolicy({ name: 'on-failure', maximumRetryCount: 5 }, 2)).toBe('on-failure (max 5) · restarted 2×');
+    expect(summarizeRestartPolicy({ name: '', maximumRetryCount: 0 })).toBe('no');
+  });
+
+  it('formats mounts', () => {
+    expect(formatMount({ type: 'volume', name: 'pgdata', source: '/var/lib/docker/volumes/pgdata/_data', destination: '/data', readOnly: false })).toBe('pgdata → /data (volume)');
+    expect(formatMount({ type: 'bind', source: '/srv/conf', destination: '/etc/app', readOnly: true })).toBe('/srv/conf → /etc/app (bind, ro)');
+  });
+
+  it('explains an unhealthy container from its last probe', () => {
+    const health = { status: 'unhealthy', failingStreak: 3, log: [{ exitCode: 0, output: 'ok' }, { exitCode: 7, output: 'curl: (7) Failed to connect\n' }] };
+    expect(summarizeHealth(health)).toEqual(['unhealthy · 3 failing checks in a row', 'Last check: exit 7 — curl: (7) Failed to connect']);
+    expect(summarizeHealth({ status: 'healthy', failingStreak: 0, log: [] })).toEqual(['healthy']);
+    expect(summarizeHealth(null)).toEqual([]);
   });
 });

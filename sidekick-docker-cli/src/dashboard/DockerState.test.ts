@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { DockerState } from './DockerState';
 import type { DockerClient } from 'sidekick-docker-shared';
-import type { DockerEvent } from 'sidekick-docker-shared';
+import type { DockerEvent, ContainerDetails } from 'sidekick-docker-shared';
 
 function makeContainer(overrides: Record<string, unknown> = {}) {
   return {
@@ -16,6 +16,10 @@ function makeContainer(overrides: Record<string, unknown> = {}) {
     composeService: null,
     ...overrides,
   };
+}
+
+function details(env: string[]): ContainerDetails {
+  return { env, restartPolicy: { name: 'no', maximumRetryCount: 0 }, restartCount: 0, mounts: [], exitCode: 0, oomKilled: false, error: '', health: null };
 }
 
 const ok = <T>(value: T) => ({ status: 'fulfilled' as const, value });
@@ -97,22 +101,22 @@ describe('DockerState', () => {
 
   it('prunes cached details and their errors for containers that disappear', async () => {
     await state.refresh();
-    state.setInspectedEnv('abc123', ['A=1']);
+    state.setContainerDetails('abc123', details(['A=1']));
     state.setDetailError('changes', 'abc123', 'boom');
     state.setDetailError('layers', 'img-gone', 'boom');
     client.listResources.mockResolvedValueOnce(listing([]));
     await state.refresh();
     const m = state.getMetrics();
-    expect(m.inspectedEnv.size).toBe(0);
+    expect(m.containerDetails.size).toBe(0);
     expect(m.detailErrors.size).toBe(0);
   });
 
   it('drops details for a destroyed container right away', async () => {
     await state.refresh();
-    state.setInspectedEnv('abc123', ['A=1']);
-    state.setDetailError('env', 'abc123', 'boom');
+    state.setContainerDetails('abc123', details(['A=1']));
+    state.setDetailError('details', 'abc123', 'boom');
     state.processEvent({ type: 'destroy', resourceType: 'container', resourceId: 'abc123', timestamp: new Date(), attributes: {} });
-    expect(state.getInspectedEnv('abc123')).toBeUndefined();
+    expect(state.getContainerDetails('abc123')).toBeUndefined();
     expect(state.getMetrics().detailErrors.size).toBe(0);
   });
 
@@ -264,14 +268,23 @@ describe('DockerState', () => {
     });
   });
 
-  describe('inspected env', () => {
+  it('forgets cached details when a health or lifecycle event makes them stale', async () => {
+    await state.refresh();
+    state.setContainerDetails('abc123', details(['A=1']));
+    state.processEvent({ type: 'exec_die', resourceType: 'container', resourceId: 'abc123', timestamp: new Date(), attributes: {} });
+    expect(state.getContainerDetails('abc123')).toBeDefined();
+    state.processEvent({ type: 'health_status: unhealthy', resourceType: 'container', resourceId: 'abc123', timestamp: new Date(), attributes: {} });
+    expect(state.getContainerDetails('abc123')).toBeUndefined();
+  });
+
+  describe('container details', () => {
     it('stores and retrieves env vars', () => {
-      state.setInspectedEnv('abc123', ['FOO=bar', 'BAZ=qux']);
-      expect(state.getInspectedEnv('abc123')).toEqual(['FOO=bar', 'BAZ=qux']);
+      state.setContainerDetails('abc123', details(['FOO=bar', 'BAZ=qux']));
+      expect(state.getContainerDetails('abc123')?.env).toEqual(['FOO=bar', 'BAZ=qux']);
     });
 
     it('returns undefined for unknown container', () => {
-      expect(state.getInspectedEnv('unknown')).toBeUndefined();
+      expect(state.getContainerDetails('unknown')).toBeUndefined();
     });
   });
 });

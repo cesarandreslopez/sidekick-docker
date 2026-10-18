@@ -73,6 +73,9 @@ export {
   publishedPortUrls,
   browserHostForEndpoint,
   actionText,
+  summarizeRestartPolicy,
+  formatMount,
+  summarizeHealth,
 } from './formatters';
 export type { PruneKind, ContainerSortField, ActionType } from './formatters';
 

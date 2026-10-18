@@ -200,3 +200,35 @@ export function actionText(type: ActionType, name: string): { progress: string; 
   const t = ACTION_TEXT[type];
   return { progress: t.progress(name), success: t.success(name) };
 }
+
+/** "unless-stopped", "on-failure (max 5)", "no" — plus how often it has restarted. */
+export function summarizeRestartPolicy(policy: { name: string; maximumRetryCount: number }, restartCount = 0): string {
+  const name = policy.name || 'no';
+  const base = name === 'on-failure' && policy.maximumRetryCount > 0 ? `on-failure (max ${policy.maximumRetryCount})` : name;
+  return restartCount > 0 ? `${base} · restarted ${restartCount}×` : base;
+}
+
+/** "pgdata → /var/lib/postgresql/data (volume)", "/srv/conf → /etc/app (bind, ro)". */
+export function formatMount(m: { type: string; name?: string; source: string; destination: string; readOnly: boolean }): string {
+  const from = m.name || m.source || '(anonymous)';
+  const tags = [m.type || 'mount', ...(m.readOnly ? ['ro'] : [])].join(', ');
+  return `${from} → ${m.destination} (${tags})`;
+}
+
+/**
+ * Health detail beyond the (healthy)/(unhealthy) badge: the failing streak and
+ * what the last probe printed — usually the actual reason a container is
+ * unhealthy. Empty when the container has no healthcheck.
+ */
+export function summarizeHealth(health: { status: string; failingStreak: number; log: readonly { exitCode: number; output: string }[] } | null): string[] {
+  if (!health) return [];
+  const lines = [health.failingStreak > 0
+    ? `${health.status} · ${health.failingStreak} failing check${health.failingStreak === 1 ? '' : 's'} in a row`
+    : health.status];
+  const last = health.log[health.log.length - 1];
+  if (last) {
+    const output = last.output.split('\n').map(l => l.trim()).filter(Boolean).slice(-3).join(' ⏎ ');
+    lines.push(`Last check: exit ${last.exitCode}${output ? ` — ${truncate(output, 200)}` : ''}`);
+  }
+  return lines;
+}

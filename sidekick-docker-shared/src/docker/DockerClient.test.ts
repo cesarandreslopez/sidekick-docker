@@ -271,4 +271,34 @@ describe('streamLogs (non-follow buffer path)', () => {
     expect(entries.map(e => e.message)).toEqual(['tty-a', 'tty-b']);
     expect(entries.every(e => e.timestamp !== null)).toBe(true);
   });
+
+  it('getContainerDetails maps restart policy, mounts, health and exit status', async () => {
+    const client = new DockerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (client as any).docker.getContainer = vi.fn().mockReturnValue({ inspect: vi.fn().mockResolvedValue({
+      Config: { Env: ['A=1'] },
+      RestartCount: 4,
+      HostConfig: { RestartPolicy: { Name: 'on-failure', MaximumRetryCount: 5 } },
+      Mounts: [{ Type: 'volume', Name: 'data', Source: '/v', Destination: '/data', RW: false }],
+      State: { ExitCode: 137, OOMKilled: true, Error: '', Health: { Status: 'unhealthy', FailingStreak: 2, Log: [{ Start: '2026-01-01T00:00:00Z', ExitCode: 1, Output: 'boom\n' }] } },
+    }) });
+    const d = await client.getContainerDetails('abc');
+    expect(d).toMatchObject({
+      env: ['A=1'], restartCount: 4, restartPolicy: { name: 'on-failure', maximumRetryCount: 5 },
+      mounts: [{ type: 'volume', name: 'data', destination: '/data', readOnly: true }],
+      exitCode: 137, oomKilled: true,
+      health: { status: 'unhealthy', failingStreak: 2, log: [{ exitCode: 1, output: 'boom' }] },
+    });
+    expect(await client.getContainerEnv('abc')).toEqual(['A=1']);
+  });
+
+  it('getContainerDetails tolerates a minimal inspect response', async () => {
+    const client = new DockerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (client as any).docker.getContainer = vi.fn().mockReturnValue({ inspect: vi.fn().mockResolvedValue({ Config: { Env: null } }) });
+    expect(await client.getContainerDetails('abc')).toEqual({
+      env: [], restartPolicy: { name: 'no', maximumRetryCount: 0 }, restartCount: 0, mounts: [],
+      exitCode: 0, oomKilled: false, error: '', health: null,
+    });
+  });
 });

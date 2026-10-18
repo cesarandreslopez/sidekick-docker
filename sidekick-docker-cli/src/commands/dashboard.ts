@@ -7,6 +7,7 @@ import { debugLog } from '../utils/debug';
 import { connectOrExit } from '../utils/connect';
 import { copyToClipboard } from '../utils/clipboard';
 import { DockerState } from '../dashboard/DockerState';
+import type { DetailKind } from '../dashboard/DockerState';
 import { ContainersPanel } from '../dashboard/panels/ContainersPanel';
 import { ServicesPanel } from '../dashboard/panels/ServicesPanel';
 import { ImagesPanel } from '../dashboard/panels/ImagesPanel';
@@ -188,7 +189,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   // each time the row was revisited before the first answer came back. A
   // failure is recorded (the pane says why) and retried on the next visit.
   const inflightDetails = new Set<string>();
-  function fetchDetail<T>(kind: 'env' | 'changes' | 'layers', id: string, cached: unknown, fetch: () => Promise<T>, keep: (value: T) => void): void {
+  function fetchDetail<T>(kind: DetailKind, id: string, cached: unknown, fetch: () => Promise<T>, keep: (value: T) => void): void {
     const key = DockerState.detailErrorKey(kind, id);
     if (cached !== undefined || inflightDetails.has(key)) return;
     inflightDetails.add(key);
@@ -203,7 +204,9 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     });
   }
 
+  let lastView: DashboardViewState | null = null;
   const onViewStateChange = (viewState: DashboardViewState) => {
+    lastView = viewState;
     const { panelId, itemId, detailTabIndex, sortField, compareItemId } = viewState;
     const wantsLiveStats = sortField === 'cpu'
       || sortField === 'mem'
@@ -231,7 +234,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       flushSecondaryLogsNow();
       flushSecondaryComposeLogsNow();
       if (itemId) {
-        fetchDetail('env', itemId, state.getInspectedEnv(itemId), () => client.getContainerEnv(itemId), env => state.setInspectedEnv(itemId, env));
+        fetchDetail('details', itemId, state.getContainerDetails(itemId), () => client.getContainerDetails(itemId), d => state.setContainerDetails(itemId, d));
         fetchDetail('changes', itemId, state.getContainerChanges(itemId), () => client.getContainerChanges(itemId), changes => state.setContainerChanges(itemId, changes));
       }
     } else if (panelId === 'services' && itemId) {
@@ -303,7 +306,17 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   const watcher = new EventWatcher(client, {
     // The state's onChange schedules the render, and only when the event
     // changed something — healthcheck exec events no longer repaint.
-    onEvent: (event) => { state.processEvent(event); },
+    onEvent: (event) => {
+      state.processEvent(event);
+      // A health/lifecycle event drops the selected container's cached
+      // details; re-fetch at once if its Env or Config tab is on screen.
+      const view = lastView;
+      if (view?.panelId === 'containers' && view.itemId === event.resourceId
+        && (view.detailTabIndex === 2 || view.detailTabIndex === 3)) {
+        const id = view.itemId;
+        fetchDetail('details', id, state.getContainerDetails(id), () => client.getContainerDetails(id), d => state.setContainerDetails(id, d));
+      }
+    },
     onError: (err) => {
       debugLog('event watcher error:', err);
     },

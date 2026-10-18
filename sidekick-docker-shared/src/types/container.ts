@@ -45,6 +45,34 @@ export interface LogEntry {
   message: string;
 }
 
+export interface ContainerMount {
+  type: string;
+  /** Volume name for named volumes. */
+  name?: string;
+  source: string;
+  destination: string;
+  readOnly: boolean;
+}
+
+export interface HealthCheckResult {
+  start: Date | null;
+  exitCode: number;
+  output: string;
+}
+
+/** Inspect-only details for the Config tab (one `inspect` call, cached per container). */
+export interface ContainerDetails {
+  env: string[];
+  restartPolicy: { name: string; maximumRetryCount: number };
+  restartCount: number;
+  mounts: ContainerMount[];
+  exitCode: number;
+  oomKilled: boolean;
+  /** Daemon-reported error (e.g. why the container failed to start). */
+  error: string;
+  health: { status: string; failingStreak: number; log: HealthCheckResult[] } | null;
+}
+
 export interface FilesystemChange {
   path: string;
   kind: 'added' | 'changed' | 'deleted';

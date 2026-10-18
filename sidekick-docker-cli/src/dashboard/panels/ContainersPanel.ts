@@ -1,10 +1,38 @@
-import type { ContainerInfo } from 'sidekick-docker-shared';
-import { DockerClient, shortId, canStart, canStop, pruneCandidateCount, pruneConfirmMessage, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
+import type { ContainerInfo, ContainerDetails } from 'sidekick-docker-shared';
+import { DockerClient, shortId, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneCandidateCount, pruneConfirmMessage, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
 import { panelData, detailFetchError, copyLogsAction } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, formatFileChange, formatLogTemplate, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
+import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, ansi, formatFileChange, formatLogTemplate, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
+
+/** Exit status and health detail (inspect-only) for the Config tab's Status section. */
+function configStatusDetails(c: ContainerInfo, d: ContainerDetails | undefined): string[] {
+  if (!d) return [];
+  const lines: string[] = [];
+  if (c.state === 'exited' || c.state === 'dead') {
+    const why = [d.oomKilled ? ansi.red('OOM killed') : '', d.error].filter(Boolean).join(' · ');
+    lines.push(colorizeDetailKey(`  Exit:    ${d.exitCode === 0 ? '0' : ansi.red(String(d.exitCode))}${why ? `  ${why}` : ''}`));
+  }
+  summarizeHealth(d.health).forEach((line, i) => {
+    lines.push(i === 0 ? colorizeDetailKey(`  Checks:  ${line}`) : `           ${ansi.gray(line)}`);
+  });
+  return lines;
+}
+
+/** Restart policy and mounts, which only `inspect` reports. */
+function configInspectSections(d: ContainerDetails | undefined, failure: string | undefined): string[] {
+  if (failure) return ['', ansi.gray(`  Restart policy and mounts unavailable: ${failure}`)];
+  if (!d) return ['', ansi.gray('  Loading restart policy and mounts…')];
+  return [
+    '',
+    sectionHeader('Runtime'),
+    colorizeDetailKey(`  Restart: ${summarizeRestartPolicy(d.restartPolicy, d.restartCount)}`),
+    '',
+    sectionHeader(`Mounts (${d.mounts.length})`),
+    ...(d.mounts.length ? d.mounts.map(m => `  ${formatMount(m)}`) : [ansi.gray('  none')]),
+  ];
+}
 
 export class ContainersPanel implements SidePanel {
   readonly id = 'containers';
@@ -98,9 +126,9 @@ export class ContainersPanel implements SidePanel {
       label: 'Env',
       render: (item, metrics) => {
         const c = panelData<ContainerInfo>(item);
-        const failure = metrics.detailErrors.get(DockerState.detailErrorKey('env', c.id));
+        const failure = metrics.detailErrors.get(DockerState.detailErrorKey('details', c.id));
         if (failure) return detailFetchError('environment variables', failure);
-        const env = metrics.inspectedEnv.get(c.id);
+        const env = metrics.containerDetails.get(c.id)?.env;
         if (!env) return 'Loading environment variables...';
         if (env.length === 0) return 'No environment variables set.';
         return env.sort().map(l => colorizeEnvLine(l)).join('\n');
@@ -108,8 +136,10 @@ export class ContainersPanel implements SidePanel {
     },
     {
       label: 'Config',
-      render: (item) => {
+      render: (item, metrics) => {
         const c = panelData<ContainerInfo>(item);
+        const details = metrics.containerDetails.get(c.id);
+        const detailFailure = metrics.detailErrors.get(DockerState.detailErrorKey('details', c.id));
         const lines = [
           sectionHeader('Identity'),
           colorizeDetailKey(`  ID:      ${colorizeId(shortId(c.id))}`),
@@ -121,9 +151,11 @@ export class ContainersPanel implements SidePanel {
           colorizeDetailKey(`  Status:  ${c.status}`),
           ...(c.healthStatus ? [colorizeDetailKey(`  Health:  ${colorizeHealth(c.healthStatus)}`)] : []),
           colorizeDetailKey(`  Created: ${c.created.toLocaleString()}`),
+          ...configStatusDetails(c, details),
           '',
           sectionHeader('Network'),
           colorizeDetailKey(`  Ports:   ${formatPorts(c.ports)}`),
+          ...configInspectSections(details, detailFailure),
         ];
         if (c.composeProject) {
           lines.push('', sectionHeader('Compose'));

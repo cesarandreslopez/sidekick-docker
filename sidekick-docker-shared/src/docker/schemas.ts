@@ -165,11 +165,44 @@ export const DiskUsageResponseSchema = z.object({
   })).nullable().default([]),
 });
 
-/** Validates the Config.Env field from a Docker inspect response. */
-export const ContainerInspectEnvSchema = z.object({
+/**
+ * The slice of `GET /containers/{id}/json` the Config tab shows beyond the
+ * listing: env, restart policy, mounts, health detail and exit status.
+ */
+export const ContainerInspectDetailsSchema = z.object({
   Config: z.object({
     Env: z.array(z.string()).nullable().default([]),
   }),
+  RestartCount: z.number().optional().default(0),
+  HostConfig: z.object({
+    RestartPolicy: z.object({
+      Name: z.string().optional().default(''),
+      MaximumRetryCount: z.number().optional().default(0),
+    }).nullable().optional(),
+  }).nullable().optional(),
+  Mounts: z.array(z.object({
+    Type: z.string().optional().default(''),
+    Name: z.string().optional(),
+    Source: z.string().optional().default(''),
+    Destination: z.string().optional().default(''),
+    RW: z.boolean().optional().default(true),
+  })).nullable().optional(),
+  State: z.object({
+    ExitCode: z.number().optional().default(0),
+    OOMKilled: z.boolean().optional().default(false),
+    Error: z.string().optional().default(''),
+    StartedAt: z.string().optional(),
+    FinishedAt: z.string().optional(),
+    Health: z.object({
+      Status: z.string().optional().default(''),
+      FailingStreak: z.number().optional().default(0),
+      Log: z.array(z.object({
+        Start: z.string().optional(),
+        ExitCode: z.number().optional().default(0),
+        Output: z.string().optional().default(''),
+      })).nullable().optional(),
+    }).nullable().optional(),
+  }).nullable().optional(),
 });
 
 /** Validates a single entry from Docker container changes API (Kind: 0=Modified, 1=Added, 2=Deleted). */

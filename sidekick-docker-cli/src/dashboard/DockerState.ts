@@ -3,6 +3,7 @@ import type {
   ImageInfo,
   ImageLayer,
   FilesystemChange,
+  ContainerDetails,
   VolumeInfo,
   NetworkInfo,
   ComposeProject,
@@ -21,7 +22,8 @@ export interface DockerDashboardMetrics {
   networks: NetworkInfo[];
   composeProjects: ComposeProject[];
   statsCollector: StatsCollector;
-  inspectedEnv: Map<string, string[]>;
+  /** Inspect-only details (env, restart policy, mounts, health log, exit status). */
+  containerDetails: Map<string, ContainerDetails>;
   containerChanges: Map<string, FilesystemChange[]>;
   imageLayers: Map<string, ImageLayer[]>;
   /** Why a detail-tab fetch failed, keyed `${kind}:${id}`. See DockerState.detailErrorKey. */
@@ -42,6 +44,9 @@ export interface DockerDashboardMetrics {
   secondaryLogSeverityTimeSeries: { severity: SeverityLevel; total: number }[];
 }
 
+/** Lazy per-tab fetches whose failures are recorded (see detailErrors). */
+export type DetailKind = 'details' | 'changes' | 'layers';
+
 export interface DockerStateOptions {
   /** Endpoint overrides for spawned `docker compose` (see `dockerCliEnv`). */
   cliEnv?: Record<string, string>;
@@ -53,6 +58,9 @@ export interface DockerStateOptions {
  * state (refresh + event policy), plus the TUI-only buffers — log rings, lazy
  * detail caches, and the stats collector.
  */
+/** Container events after which cached inspect details are out of date. */
+const DETAIL_STALE_EVENTS = /^(start|restart|die|oom|health_status)\b/;
+
 export class DockerState {
   private store: DockerStateStore;
   private statsCollector = new StatsCollector();
@@ -61,7 +69,7 @@ export class DockerState {
   private selectedComposeLogs: LogEntry[] = [];
   private secondaryLogs: LogEntry[] = [];
   private secondaryComposeLogs: LogEntry[] = [];
-  private inspectedEnv = new Map<string, string[]>();
+  private containerDetails = new Map<string, ContainerDetails>();
   private containerChanges = new Map<string, FilesystemChange[]>();
   private imageLayers = new Map<string, ImageLayer[]>();
   /**
@@ -88,7 +96,7 @@ export class DockerState {
       // Drop cached details (and their errors) for containers/images that are gone.
       const containerIds = new Set(snapshot.containers.map(c => c.id));
       const imageIds = new Set(snapshot.images.map(i => i.id));
-      for (const map of [this.inspectedEnv, this.containerChanges]) {
+      for (const map of [this.containerDetails, this.containerChanges]) {
         for (const id of map.keys()) if (!containerIds.has(id)) map.delete(id);
       }
       for (const id of this.imageLayers.keys()) if (!imageIds.has(id)) this.imageLayers.delete(id);
@@ -100,9 +108,9 @@ export class DockerState {
     }
     for (const id of change.removedContainerIds) {
       this.statsCollector.remove(id);
-      this.inspectedEnv.delete(id);
+      this.containerDetails.delete(id);
       this.containerChanges.delete(id);
-      this.detailErrors.delete(DockerState.detailErrorKey('env', id));
+      this.detailErrors.delete(DockerState.detailErrorKey('details', id));
       this.detailErrors.delete(DockerState.detailErrorKey('changes', id));
     }
     this.onChange?.();
@@ -110,7 +118,7 @@ export class DockerState {
 
   dispose(): void {
     this.store.dispose();
-    this.inspectedEnv.clear();
+    this.containerDetails.clear();
     this.containerChanges.clear();
     this.imageLayers.clear();
     this.detailErrors.clear();
@@ -122,6 +130,13 @@ export class DockerState {
   }
 
   processEvent(event: DockerEvent): void {
+    // Health log, exit code or restart count changed: re-fetch on next look.
+    // Checked here rather than on the store's change: a repeated
+    // `health_status: unhealthy` changes no listed field, but does bring a
+    // new probe result.
+    if (event.resourceType === 'container' && DETAIL_STALE_EVENTS.test(event.type)) {
+      this.containerDetails.delete(event.resourceId);
+    }
     this.store.processEvent(event);
   }
 
@@ -188,12 +203,12 @@ export class DockerState {
     return this.store.getRunningContainerIds();
   }
 
-  setInspectedEnv(containerId: string, env: string[]): void {
-    this.inspectedEnv.set(containerId, env);
+  setContainerDetails(containerId: string, details: ContainerDetails): void {
+    this.containerDetails.set(containerId, details);
   }
 
-  getInspectedEnv(containerId: string): string[] | undefined {
-    return this.inspectedEnv.get(containerId);
+  getContainerDetails(containerId: string): ContainerDetails | undefined {
+    return this.containerDetails.get(containerId);
   }
 
   setContainerChanges(containerId: string, changes: FilesystemChange[]): void {
@@ -212,15 +227,15 @@ export class DockerState {
     return this.imageLayers.get(imageId);
   }
 
-  static detailErrorKey(kind: 'env' | 'changes' | 'layers', id: string): string {
+  static detailErrorKey(kind: DetailKind, id: string): string {
     return `${kind}:${id}`;
   }
 
-  setDetailError(kind: 'env' | 'changes' | 'layers', id: string, message: string): void {
+  setDetailError(kind: DetailKind, id: string, message: string): void {
     this.detailErrors.set(DockerState.detailErrorKey(kind, id), message);
   }
 
-  clearDetailError(kind: 'env' | 'changes' | 'layers', id: string): void {
+  clearDetailError(kind: DetailKind, id: string): void {
     this.detailErrors.delete(DockerState.detailErrorKey(kind, id));
   }
 
@@ -233,7 +248,7 @@ export class DockerState {
       networks: snap.networks,
       composeProjects: snap.composeProjects,
       statsCollector: this.statsCollector,
-      inspectedEnv: this.inspectedEnv,
+      containerDetails: this.containerDetails,
       containerChanges: this.containerChanges,
       imageLayers: this.imageLayers,
       detailErrors: this.detailErrors,
