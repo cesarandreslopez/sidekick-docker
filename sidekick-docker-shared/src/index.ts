@@ -16,6 +16,8 @@ export type { RunProcessOptions } from './compose/process';
 export { resolveComposeCwd, resolveComposeOptions } from './compose/composeCwd';
 export type { ComposeProjectSourceLocation, ComposeCommandOptions } from './compose/composeCwd';
 export { ComposeFileReader } from './compose/ComposeFileReader';
+export { CachedComposeFileReader, composeFileSignature } from './compose/ComposeConfigCache';
+export type { ComposeConfigSource, CachedComposeFileReaderOptions } from './compose/ComposeConfigCache';
 export type { ComposeFileConfig, ComposeFileServiceConfig, ComposeFileReaderOptions, ComposeReadResult } from './compose/ComposeFileReader';
 
 // Stats

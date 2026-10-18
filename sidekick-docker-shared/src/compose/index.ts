@@ -11,4 +11,6 @@ export type { ComposeProjectSource } from './ComposeDetector';
 export { resolveComposeCwd, resolveComposeOptions } from './composeCwd';
 export type { ComposeProjectSourceLocation, ComposeCommandOptions } from './composeCwd';
 export { ComposeFileReader } from './ComposeFileReader';
+export { CachedComposeFileReader, composeFileSignature } from './ComposeConfigCache';
+export type { ComposeConfigSource, CachedComposeFileReaderOptions } from './ComposeConfigCache';
 export type { ComposeFileConfig, ComposeFileServiceConfig, ComposeFileReaderOptions, ComposeReadResult } from './ComposeFileReader';
