@@ -49,3 +49,9 @@ export class ExecOutputBuffer {
     this.pending = '';
   }
 }
+
+/** Ctrl+] (GS, 0x1d) — the embedded exec session's detach key — as a Buffer or a utf8 string chunk. */
+export function isDetachKey(data: Buffer | string): boolean {
+  return typeof data === 'string' ? data === '\x1d' : data.length === 1 && data[0] === 0x1d;
+}
+

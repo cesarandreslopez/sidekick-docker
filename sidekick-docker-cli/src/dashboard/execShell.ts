@@ -17,5 +17,7 @@ const MISSING_BINARY = /executable file not found|no such file or directory|OCI 
 export function describeExecExit(e: { exitCode: number | null; outputTail: string; shell: string; containerName: string }): string | null {
   const missing = e.exitCode === 126 || e.exitCode === 127 || (e.exitCode !== 0 && MISSING_BINARY.test(e.outputTail));
   if (!missing) return null;
-  return `No ${e.shell} in ${e.containerName} (distroless image?) — try --shell /bin/bash or set SIDEKICK_DOCKER_SHELL`;
+  return e.shell === DEFAULT_EXEC_SHELL
+    ? `No ${e.shell} in ${e.containerName} — the image may have no shell at all (distroless/scratch). Pick one with --shell or SIDEKICK_DOCKER_SHELL.`
+    : `No ${e.shell} in ${e.containerName} — try --shell /bin/sh.`;
 }

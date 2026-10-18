@@ -32,7 +32,7 @@ import { SORT_FIELDS } from './dashboardTypes';
 import { buildHelpBindings, buildContextHint } from './keyRegistry';
 import type { KeyContext, KeyQueryContext } from './keyRegistry';
 import { maxScrollOffset } from './windowLines';
-import { appendExecOutput, ExecOutputBuffer } from './execOutput';
+import { appendExecOutput, ExecOutputBuffer, isDetachKey } from './execOutput';
 import { buildHelpSections, layoutHelp } from './helpLayout';
 import { toastDuration } from './toastLayout';
 import { DEFAULT_EXEC_SHELL, describeExecExit } from '../execShell';
@@ -243,8 +243,10 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   // Forward raw stdin to PTY when exec overlay is active
   useEffect(() => {
     if (state.overlay !== 'exec' || execInFallbackRef.current) return;
-    const handler = (data: Buffer) => {
-      if (data.length === 1 && data[0] === 0x1d) {
+    const handler = (data: Buffer | string) => {
+      // Ink sets stdin to utf8, so this arrives as a string: comparing
+      // data[0] to the number 0x1d never matched, and Ctrl+] never detached.
+      if (isDetachKey(data)) {
         execManagerRef.current?.dispose();
         execManagerRef.current = null;
         dispatch({ type: 'EXEC_END' });

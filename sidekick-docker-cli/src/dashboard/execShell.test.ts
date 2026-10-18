@@ -13,7 +13,8 @@ describe('describeExecExit', () => {
   const base = { shell: '/bin/sh', containerName: 'api' };
 
   it('explains a missing shell', () => {
-    expect(describeExecExit({ ...base, exitCode: 126, outputTail: '' })).toMatch(/No \/bin\/sh in api/);
+    expect(describeExecExit({ ...base, exitCode: 126, outputTail: '' })).toMatch(/No \/bin\/sh in api — the image may have no shell/);
+    expect(describeExecExit({ ...base, shell: '/bin/bash', exitCode: 127, outputTail: '' })).toBe('No /bin/bash in api — try --shell /bin/sh.');
     const oci = 'OCI runtime exec failed: exec failed: unable to start container process: exec: "/bin/sh": stat /bin/sh: no such file or directory: unknown';
     expect(describeExecExit({ ...base, exitCode: 1, outputTail: oci })).toMatch(/--shell/);
   });

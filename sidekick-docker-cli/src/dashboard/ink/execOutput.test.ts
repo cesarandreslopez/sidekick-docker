@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { appendExecOutput, ExecOutputBuffer } from './execOutput';
+import { appendExecOutput, ExecOutputBuffer, isDetachKey } from './execOutput';
 
 describe('appendExecOutput', () => {
   it('continues the unterminated last line and starts new ones after newlines', () => {
@@ -38,3 +38,13 @@ describe('ExecOutputBuffer', () => {
     expect(flushed).toEqual(['a']);
   });
 });
+
+describe('isDetachKey', () => {
+  it('recognises Ctrl+] whether stdin delivers a string or a Buffer', () => {
+    expect(isDetachKey('\x1d')).toBe(true);
+    expect(isDetachKey(Buffer.from([0x1d]))).toBe(true);
+    expect(isDetachKey('a')).toBe(false);
+    expect(isDetachKey('\x1dx')).toBe(false);
+  });
+});
+
