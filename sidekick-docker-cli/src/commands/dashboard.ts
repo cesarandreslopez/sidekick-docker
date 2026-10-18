@@ -295,10 +295,9 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
 
   // Start event watcher for real-time updates
   const watcher = new EventWatcher(client, {
-    onEvent: (event) => {
-      state.processEvent(event);
-      scheduleRender();
-    },
+    // The state's onChange schedules the render, and only when the event
+    // changed something — healthcheck exec events no longer repaint.
+    onEvent: (event) => { state.processEvent(event); },
     onError: (err) => {
       debugLog('event watcher error:', err);
     },

@@ -7,9 +7,10 @@ import type {
   NetworkInfo,
   ComposeProject,
   DockerEvent,
-  ComposeFileConfig,
+  StoreChange,
+  ComposeConfigSource,
 } from 'sidekick-docker-shared';
-import { DockerClient, ComposeDetector, StatsCollector, ComposeFileReader, MAX_LOG_LINES, errorMessage } from 'sidekick-docker-shared';
+import { DockerClient, DockerStateStore, StatsCollector, MAX_LOG_LINES } from 'sidekick-docker-shared';
 import type { LogEntry, FilterMode, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
 import { debugLog } from '../utils/debug';
 
@@ -41,18 +42,21 @@ export interface DockerDashboardMetrics {
   secondaryLogSeverityTimeSeries: { severity: SeverityLevel; total: number }[];
 }
 
+export interface DockerStateOptions {
+  /** Endpoint overrides for spawned `docker compose` (see `dockerCliEnv`). */
+  cliEnv?: Record<string, string>;
+  composeReader?: ComposeConfigSource;
+}
+
+/**
+ * The TUI's view of Docker: the shared {@link DockerStateStore} for domain
+ * state (refresh + event policy), plus the TUI-only buffers — log rings, lazy
+ * detail caches, and the stats collector.
+ */
 export class DockerState {
-  private client: DockerClient;
-  private composeDetector = new ComposeDetector();
-  private composeFileReader: ComposeFileReader;
+  private store: DockerStateStore;
   private statsCollector = new StatsCollector();
 
-  private cwd: string | undefined;
-  private containers: ContainerInfo[] = [];
-  private images: ImageInfo[] = [];
-  private volumes: VolumeInfo[] = [];
-  private networks: NetworkInfo[] = [];
-  private composeProjects: ComposeProject[] = [];
   private selectedLogs: LogEntry[] = [];
   private selectedComposeLogs: LogEntry[] = [];
   private secondaryLogs: LogEntry[] = [];
@@ -66,162 +70,68 @@ export class DockerState {
    * pane reading "Loading…" forever with no indication anything went wrong.
    */
   private detailErrors = new Map<string, string>();
-  private refreshPromise: Promise<void> | null = null;
-  private refreshQueued = false;
-  private resourceErrors: Record<string, string> = {};
-  private lastRefresh: Date | null = null;
-  private daemonConnected = false;
-  private cachedFileConfig: ComposeFileConfig | null = null;
-  private disposed = false;
-  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-  /** @param options.cliEnv endpoint overrides for spawned `docker compose` (see `dockerCliEnv`). */
-  constructor(client: DockerClient, cwd?: string, private onChange?: () => void, options: { cliEnv?: Record<string, string> } = {}) {
-    this.client = client;
-    this.cwd = cwd;
-    this.composeFileReader = new ComposeFileReader(options.cliEnv);
+  constructor(client: DockerClient, cwd?: string, private onChange?: () => void, options: DockerStateOptions = {}) {
+    this.store = new DockerStateStore({
+      client,
+      cwd,
+      cliEnv: options.cliEnv,
+      composeReader: options.composeReader,
+      onChange: change => this.onStoreChange(change),
+      log: (msg, err) => debugLog(msg, err ?? ''),
+    });
   }
 
-  /** Debounced refresh — coalesces rapid event-driven refreshes into a single call. */
-  private scheduleRefresh(): void {
-    if (this.disposed) return;
-    if (this.refreshPromise) { this.refreshQueued = true; return; }
-    if (this.refreshTimer) return;
-    this.refreshTimer = setTimeout(() => {
-      this.refreshTimer = null;
-      this.refresh().catch(e => { debugLog('refresh failed:', e); });
-    }, 500);
+  private onStoreChange(change: StoreChange): void {
+    const snapshot = this.store.getSnapshot();
+    if (change.cause === 'refresh') {
+      // Drop cached details (and their errors) for containers/images that are gone.
+      const containerIds = new Set(snapshot.containers.map(c => c.id));
+      const imageIds = new Set(snapshot.images.map(i => i.id));
+      for (const map of [this.inspectedEnv, this.containerChanges]) {
+        for (const id of map.keys()) if (!containerIds.has(id)) map.delete(id);
+      }
+      for (const id of this.imageLayers.keys()) if (!imageIds.has(id)) this.imageLayers.delete(id);
+      for (const key of this.detailErrors.keys()) {
+        const [kind, id] = [key.slice(0, key.indexOf(':')), key.slice(key.indexOf(':') + 1)];
+        if (!(kind === 'layers' ? imageIds : containerIds).has(id)) this.detailErrors.delete(key);
+      }
+      this.statsCollector.prune(new Set(this.store.getRunningContainerIds()));
+    }
+    for (const id of change.removedContainerIds) {
+      this.statsCollector.remove(id);
+      this.inspectedEnv.delete(id);
+      this.containerChanges.delete(id);
+      this.detailErrors.delete(DockerState.detailErrorKey('env', id));
+      this.detailErrors.delete(DockerState.detailErrorKey('changes', id));
+    }
+    this.onChange?.();
   }
 
   dispose(): void {
-    this.disposed = true;
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-      this.refreshTimer = null;
-    }
+    this.store.dispose();
+    this.inspectedEnv.clear();
+    this.containerChanges.clear();
+    this.imageLayers.clear();
+    this.detailErrors.clear();
   }
 
-  refresh(): Promise<void> {
-    if (this.disposed) return Promise.resolve();
-    if (this.refreshPromise) {
-      this.refreshQueued = true;
-      return this.refreshPromise;
-    }
-    this.refreshPromise = this.refreshLoop().finally(() => { this.refreshPromise = null; });
-    return this.refreshPromise;
-  }
-
-  private async refreshLoop(): Promise<void> {
-    do {
-      this.refreshQueued = false;
-      const [containers, images, volumes, networks, fileConfig] = await Promise.allSettled([
-        this.client.listContainers(true), this.client.listImages(),
-        this.client.listVolumes(), this.client.listNetworks(),
-        this.cwd ? this.composeFileReader.readFromDirectory(this.cwd) : Promise.resolve(null),
-      ]);
-      if (this.disposed) return;
-      // A newer request arrived while these results were being fetched.
-      if (this.refreshQueued) continue;
-      this.resourceErrors = {};
-      const results = { containers, images, volumes, networks, services: fileConfig };
-      for (const [kind, result] of Object.entries(results)) {
-        if (result.status === 'rejected') this.resourceErrors[kind] = errorMessage(result.reason);
-      }
-      if (containers.status === 'fulfilled') this.containers = containers.value;
-      if (images.status === 'fulfilled') this.images = images.value;
-      if (volumes.status === 'fulfilled') this.volumes = volumes.value;
-      if (networks.status === 'fulfilled') this.networks = networks.value;
-      if (fileConfig.status === 'fulfilled') this.cachedFileConfig = fileConfig.value;
-      this.composeProjects = this.composeDetector.detect(this.containers, this.cachedFileConfig);
-      this.daemonConnected = [containers, images, volumes, networks].some(r => r.status === 'fulfilled');
-      if (this.daemonConnected) this.lastRefresh = new Date();
-      // Prune stale cache entries for removed containers/images
-      const currentContainerIds = new Set(this.containers.map(c => c.id));
-      for (const id of this.inspectedEnv.keys()) {
-        if (!currentContainerIds.has(id)) this.inspectedEnv.delete(id);
-      }
-      for (const id of this.containerChanges.keys()) {
-        if (!currentContainerIds.has(id)) this.containerChanges.delete(id);
-      }
-      const currentImageIds = new Set(this.images.map(i => i.id));
-      for (const id of this.imageLayers.keys()) {
-        if (!currentImageIds.has(id)) this.imageLayers.delete(id);
-      }
-      const runningIds = new Set(this.containers.filter(c => c.state === 'running').map(c => c.id));
-      this.statsCollector.prune(runningIds);
-      this.onChange?.();
-    } while (this.refreshQueued && !this.disposed);
+  /** Fetch everything now; resolves once fresh data has committed. */
+  refresh(opts: { reloadCompose?: boolean } = {}): Promise<void> {
+    return this.store.refresh(opts);
   }
 
   processEvent(event: DockerEvent): void {
-    if (this.disposed) return;
-    if (this.refreshPromise) this.refreshQueued = true;
-    // Incremental updates based on Docker event type
-    switch (event.resourceType) {
-      case 'container':
-        this.handleContainerEvent(event);
-        break;
-      case 'image':
-      case 'volume':
-      case 'network':
-        // For non-container resources, trigger a debounced refresh
-        this.scheduleRefresh();
-        break;
-    }
+    this.store.processEvent(event);
   }
 
-  private handleContainerEvent(event: DockerEvent): void {
-    const { type, resourceId } = event;
-    const name = event.attributes['name'] || '';
+  /** `undefined` when the container is unknown. */
+  isContainerRunning(id: string): boolean | undefined {
+    return this.store.isContainerRunning(id);
+  }
 
-    switch (type) {
-      case 'start':
-      case 'unpause': {
-        const existing = this.containers.find(c => c.id === resourceId);
-        if (existing) {
-          existing.state = 'running';
-          existing.status = 'Up just now';
-        }
-        // Debounced refresh for accurate data
-        this.scheduleRefresh();
-        break;
-      }
-      case 'stop':
-      case 'die': {
-        const existing = this.containers.find(c => c.id === resourceId);
-        if (existing) {
-          existing.state = 'exited';
-          existing.status = 'Exited';
-        }
-        break;
-      }
-      case 'pause': {
-        const existing = this.containers.find(c => c.id === resourceId);
-        if (existing) {
-          existing.state = 'paused';
-        }
-        break;
-      }
-      case 'destroy':
-        this.containers = this.containers.filter(c => c.id !== resourceId);
-        this.statsCollector.remove(resourceId);
-        this.inspectedEnv.delete(resourceId);
-        this.containerChanges.delete(resourceId);
-        break;
-      case 'create':
-        // New container — debounced refresh to get full info
-        this.scheduleRefresh();
-        break;
-      default:
-        // rename, update, health_status, etc. — debounced refresh
-        if (name) {
-          this.scheduleRefresh();
-        }
-        break;
-    }
-
-    // Update compose projects (use cached file config)
-    this.composeProjects = this.composeDetector.detect(this.containers, this.cachedFileConfig);
+  isComposeTargetRunning(project: string, service: string | null): boolean | undefined {
+    return this.store.isComposeTargetRunning(project, service);
   }
 
   setSelectedLogs(logs: LogEntry[]): void {
@@ -275,7 +185,7 @@ export class DockerState {
    * so sampling them is wasted work.
    */
   getRunningContainerIds(): string[] {
-    return this.containers.filter(c => c.state === 'running').map(c => c.id);
+    return this.store.getRunningContainerIds();
   }
 
   setInspectedEnv(containerId: string, env: string[]): void {
@@ -315,12 +225,13 @@ export class DockerState {
   }
 
   getMetrics(): DockerDashboardMetrics {
+    const snap = this.store.getSnapshot();
     return {
-      containers: this.containers,
-      images: this.images,
-      volumes: this.volumes,
-      networks: this.networks,
-      composeProjects: this.composeProjects,
+      containers: snap.containers,
+      images: snap.images,
+      volumes: snap.volumes,
+      networks: snap.networks,
+      composeProjects: snap.composeProjects,
       statsCollector: this.statsCollector,
       inspectedEnv: this.inspectedEnv,
       containerChanges: this.containerChanges,
@@ -330,9 +241,9 @@ export class DockerState {
       selectedComposeLogs: this.selectedComposeLogs,
       secondaryContainerLogs: this.secondaryLogs,
       secondaryComposeLogs: this.secondaryComposeLogs,
-      lastRefresh: this.lastRefresh,
-      daemonConnected: this.daemonConnected,
-      resourceErrors: { ...this.resourceErrors },
+      lastRefresh: snap.lastRefresh,
+      daemonConnected: snap.daemonConnected,
+      resourceErrors: { ...snap.resourceErrors },
       logFilterString: '',
       logFilterMode: 'exact',
       logSeverityCounts: null,

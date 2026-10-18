@@ -18,20 +18,24 @@ function makeContainer(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function makeMockClient(overrides: Partial<DockerClient> = {}): DockerClient {
+const ok = <T>(value: T) => ({ status: 'fulfilled' as const, value });
+const fail = (msg: string) => ({ status: 'rejected' as const, reason: new Error(msg) });
+
+function listing(containers: unknown[] = [makeContainer()]) {
+  return { containers: ok(containers), images: ok([]), volumes: ok([]), networks: ok([]) };
+}
+
+function makeMockClient(overrides: Record<string, unknown> = {}): DockerClient & { listResources: ReturnType<typeof vi.fn> } {
   return {
-    listContainers: vi.fn().mockResolvedValue([makeContainer()]),
-    listImages: vi.fn().mockResolvedValue([]),
-    listVolumes: vi.fn().mockResolvedValue([]),
-    listNetworks: vi.fn().mockResolvedValue([]),
+    listResources: vi.fn().mockImplementation(() => Promise.resolve(listing())),
     ping: vi.fn().mockResolvedValue(true),
     dispose: vi.fn(),
     ...overrides,
-  } as unknown as DockerClient;
+  } as unknown as DockerClient & { listResources: ReturnType<typeof vi.fn> };
 }
 
 describe('DockerState', () => {
-  let client: DockerClient;
+  let client: ReturnType<typeof makeMockClient>;
   let state: DockerState;
 
   beforeEach(() => {
@@ -56,11 +60,9 @@ describe('DockerState', () => {
     });
 
     it('sets daemonConnected false on failure', async () => {
+      const refused = fail('connection refused');
       client = makeMockClient({
-        listContainers: vi.fn().mockRejectedValue(new Error('connection refused')),
-        listImages: vi.fn().mockRejectedValue(new Error('connection refused')),
-        listVolumes: vi.fn().mockRejectedValue(new Error('connection refused')),
-        listNetworks: vi.fn().mockRejectedValue(new Error('connection refused')),
+        listResources: vi.fn().mockResolvedValue({ containers: refused, images: refused, volumes: refused, networks: refused }),
       });
       state = new DockerState(client);
       await state.refresh();
@@ -68,27 +70,57 @@ describe('DockerState', () => {
     });
   });
 
-  it('coalesces an in-flight refresh and notifies only after its replacement completes', async () => {
-    let finish!: (items: ReturnType<typeof makeContainer>[]) => void;
-    const pending = new Promise<ReturnType<typeof makeContainer>[]>(resolve => { finish = resolve; });
-    vi.mocked(client.listContainers).mockReturnValueOnce(pending).mockResolvedValueOnce([makeContainer({ name: 'new' })]);
-    const changed = vi.fn();
-    state = new DockerState(client, undefined, changed);
+  it('commits every pass, and concurrent refreshes share one follow-up pass', async () => {
+    let finish!: (l: ReturnType<typeof listing>) => void;
+    client.listResources
+      .mockReturnValueOnce(new Promise(resolve => { finish = resolve; }))
+      .mockResolvedValueOnce(listing([makeContainer({ name: 'new' })]));
+    const committed: string[] = [];
+    state = new DockerState(client, undefined, () => { committed.push(state.getMetrics().containers[0].name); });
     const refresh = state.refresh();
-    void state.refresh(); void state.refresh();
-    finish([makeContainer({ name: 'old' })]);
+    const followers = [state.refresh(), state.refresh()];
+    finish(listing([makeContainer({ name: 'old' })]));
     await refresh;
-    expect(client.listContainers).toHaveBeenCalledTimes(2);
-    expect(state.getMetrics().containers[0].name).toBe('new');
-    expect(changed).toHaveBeenCalledTimes(1);
+    await Promise.all(followers);
+    // The first pass committed instead of being discarded, then one follow-up ran.
+    expect(committed).toEqual(['old', 'new']);
+    expect(client.listResources).toHaveBeenCalledTimes(2);
   });
 
   it('retains previously loaded resources on partial failure', async () => {
     await state.refresh();
-    vi.mocked(client.listContainers).mockRejectedValueOnce(new Error('containers denied'));
+    client.listResources.mockResolvedValueOnce({ ...listing(), containers: fail('containers denied') });
     await state.refresh();
     expect(state.getMetrics()).toMatchObject({ daemonConnected: true, resourceErrors: { containers: 'containers denied' } });
     expect(state.getMetrics().containers).toHaveLength(1);
+  });
+
+  it('prunes cached details and their errors for containers that disappear', async () => {
+    await state.refresh();
+    state.setInspectedEnv('abc123', ['A=1']);
+    state.setDetailError('changes', 'abc123', 'boom');
+    state.setDetailError('layers', 'img-gone', 'boom');
+    client.listResources.mockResolvedValueOnce(listing([]));
+    await state.refresh();
+    const m = state.getMetrics();
+    expect(m.inspectedEnv.size).toBe(0);
+    expect(m.detailErrors.size).toBe(0);
+  });
+
+  it('drops details for a destroyed container right away', async () => {
+    await state.refresh();
+    state.setInspectedEnv('abc123', ['A=1']);
+    state.setDetailError('env', 'abc123', 'boom');
+    state.processEvent({ type: 'destroy', resourceType: 'container', resourceId: 'abc123', timestamp: new Date(), attributes: {} });
+    expect(state.getInspectedEnv('abc123')).toBeUndefined();
+    expect(state.getMetrics().detailErrors.size).toBe(0);
+  });
+
+  it('reads compose config through the injected reader', async () => {
+    const read = vi.fn().mockResolvedValue(null);
+    state = new DockerState(client, '/proj', undefined, { composeReader: { read } });
+    await state.refresh({ reloadCompose: true });
+    expect(read).toHaveBeenCalledWith('/proj', expect.objectContaining({ force: true }));
   });
 
   describe('processEvent', () => {
@@ -104,10 +136,24 @@ describe('DockerState', () => {
         timestamp: new Date(),
         attributes: { name: 'test-container' },
       };
+      state.processEvent({ ...event, type: 'die' });
       state.processEvent(event);
       const c = state.getMetrics().containers.find(c => c.id === 'abc123');
       expect(c?.state).toBe('running');
       expect(c?.status).toBe('Up just now');
+    });
+
+    it('ignores healthcheck exec events entirely', async () => {
+      const changed = vi.fn();
+      state = new DockerState(client, undefined, changed);
+      await state.refresh();
+      changed.mockClear();
+      for (const type of ['exec_create: /bin/sh -c true', 'exec_start: /bin/sh -c true', 'exec_die']) {
+        state.processEvent({ type, resourceType: 'container', resourceId: 'abc123', timestamp: new Date(), attributes: { name: 'x' } });
+      }
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(changed).not.toHaveBeenCalled();
+      expect(client.listResources).toHaveBeenCalledTimes(2);
     });
 
     it('handles container stop event', () => {
@@ -171,10 +217,10 @@ describe('DockerState', () => {
       };
       state.processEvent(event);
       // Refresh is debounced — not called yet
-      expect(client.listContainers).toHaveBeenCalledTimes(1); // only initial
+      expect(client.listResources).toHaveBeenCalledTimes(1); // only initial
       // Advance past the 500ms debounce window
       await vi.advanceTimersByTimeAsync(500);
-      expect(client.listContainers).toHaveBeenCalledTimes(2); // initial + debounced
+      expect(client.listResources).toHaveBeenCalledTimes(2); // initial + debounced
     });
 
     it('coalesces multiple events into one refresh', async () => {
@@ -189,9 +235,9 @@ describe('DockerState', () => {
       state.processEvent(makeEvent('pull', 'image'));
       state.processEvent(makeEvent('create', 'container'));
       // All coalesced — only the initial refresh so far
-      expect(client.listContainers).toHaveBeenCalledTimes(1);
+      expect(client.listResources).toHaveBeenCalledTimes(1);
       await vi.advanceTimersByTimeAsync(500);
-      expect(client.listContainers).toHaveBeenCalledTimes(2); // one debounced refresh
+      expect(client.listResources).toHaveBeenCalledTimes(2); // one debounced refresh
     });
   });
 
