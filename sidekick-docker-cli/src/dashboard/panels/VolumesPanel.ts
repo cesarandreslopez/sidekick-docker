@@ -1,9 +1,9 @@
 import type { VolumeInfo } from 'sidekick-docker-shared';
-import { DockerClient, pruneCandidateCount, pruneConfirmMessage } from 'sidekick-docker-shared';
+import { DockerClient, pruneConfirmFor, pruneResultText, removeVolumeConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { formatBytes, truncate, colorizeDetailKey, colorizeBool, sectionHeader } from '../../formatters';
+import { truncate, colorizeDetailKey, colorizeBool, sectionHeader } from '../../formatters';
 
 export class VolumesPanel implements SidePanel {
   readonly id = 'volumes';
@@ -63,11 +63,14 @@ export class VolumesPanel implements SidePanel {
         key: 'd',
         label: 'Remove',
         confirm: true,
-        confirmMessage: (item) => `Remove volume "${panelData<VolumeInfo>(item).name}"?`,
+        confirmMessage: (item) => removeVolumeConfirmMessage(panelData<VolumeInfo>(item).name),
         confirmSeverity: 'high',
         handler: (item) => {
           const vol = panelData<VolumeInfo>(item);
-          return this.client.removeVolume(vol.name).then(() => { this.onAction(); });
+          return this.client.removeVolume(vol.name).then(() => {
+            this.onAction();
+            return actionText('remove', vol.name).success;
+          });
         },
         condition: (item) => !panelData<VolumeInfo>(item).isInUse,
       },
@@ -75,12 +78,12 @@ export class VolumesPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: () => pruneConfirmMessage('volumes', pruneCandidateCount('volumes', this.lastMetrics?.volumes ?? [])),
+        confirmMessage: () => pruneConfirmFor('volumes', this.lastMetrics?.volumes ?? []),
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneVolumes().then((r) => {
             this.onAction();
-            return `Pruned — ${formatBytes(r.spaceReclaimed)} reclaimed`;
+            return pruneResultText('volumes', r);
           });
         },
       },

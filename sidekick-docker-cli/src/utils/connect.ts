@@ -16,7 +16,7 @@ export async function connectOrExit(globalOpts: { socket?: string }): Promise<Do
 
   const result = await client.pingDetailed();
   if (!result.ok) {
-    console.error(`Error: ${explainDockerUnreachable(result.error, describeDockerEndpoint(globalOpts.socket))}`);
+    console.error(`Error: ${explainDockerUnreachable(result.error, describeDockerEndpoint(globalOpts.socket), '--socket or DOCKER_HOST')}`);
     process.exit(1);
   }
 

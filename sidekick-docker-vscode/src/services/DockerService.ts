@@ -1,4 +1,5 @@
 import { LogSlot } from './LogSlot';
+import { POINT_ELSEWHERE } from './endpointHint';
 import {
   DockerClient,
   DockerStateStore,
@@ -15,7 +16,8 @@ import {
   throwIfComposeFailed,
   resolveComposeOptions,
   errorMessage,
-  formatBytes,
+  pruneResultText,
+  imageDisplayName,
   explainDockerUnreachable,
   describeDockerEndpoint,
 } from 'sidekick-docker-shared';
@@ -226,7 +228,7 @@ export class DockerService {
     if (this.disposed) return { ok: false, reason: 'Disposed' };
     // Say *why* (permission denied, no socket, refused, bad host) instead of
     // always asking "Is Docker running?".
-    if (!ping.ok) return { ok: false, reason: explainDockerUnreachable(ping.error, describeDockerEndpoint(this.endpoint)) };
+    if (!ping.ok) return { ok: false, reason: explainDockerUnreachable(ping.error, describeDockerEndpoint(this.endpoint), POINT_ELSEWHERE) };
 
     await this.refresh();
     if (this.disposed) return { ok: false, reason: 'Disposed' };
@@ -624,14 +626,13 @@ export class DockerService {
   async pruneContainers(): Promise<string> {
     const { containersDeleted, spaceReclaimed } = await this.client.pruneContainers();
     await this.refresh();
-    const n = containersDeleted.length;
-    return `Pruned ${n} container${n === 1 ? '' : 's'} \u2014 ${formatBytes(spaceReclaimed)} reclaimed`;
+    return pruneResultText('containers', { spaceReclaimed, deleted: containersDeleted.length });
   }
 
   async pruneImages(): Promise<string> {
     const { spaceReclaimed } = await this.client.pruneImages();
     await this.refresh();
-    return `Pruned images — ${formatBytes(spaceReclaimed)} reclaimed`;
+    return pruneResultText('images', { spaceReclaimed });
   }
 
   async removeVolume(name: string): Promise<void> {
@@ -642,7 +643,7 @@ export class DockerService {
   async pruneVolumes(): Promise<string> {
     const { spaceReclaimed } = await this.client.pruneVolumes();
     await this.refresh();
-    return `Pruned volumes — ${formatBytes(spaceReclaimed)} reclaimed`;
+    return pruneResultText('volumes', { spaceReclaimed });
   }
 
   async removeNetwork(id: string): Promise<void> {
@@ -653,8 +654,7 @@ export class DockerService {
   async pruneNetworks(): Promise<string> {
     const { networksDeleted } = await this.client.pruneNetworks();
     await this.refresh();
-    const n = networksDeleted.length;
-    return `Pruned ${n} network${n === 1 ? '' : 's'}`;
+    return pruneResultText('networks', { deleted: networksDeleted.length });
   }
 
   /**
@@ -739,7 +739,7 @@ export class DockerService {
         return this.getContainerName(itemId) ?? shortId(itemId);
       case 'images': {
         const image = this.store.getSnapshot().images.find(i => i.id === itemId);
-        return image?.repoTags[0] ?? shortId(itemId);
+        return image ? imageDisplayName(image) : shortId(itemId);
       }
       case 'volumes':
         return itemId;

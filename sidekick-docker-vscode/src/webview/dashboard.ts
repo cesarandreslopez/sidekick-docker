@@ -15,7 +15,7 @@ import { imagesPanel } from './panels/images';
 import { volumesPanel } from './panels/volumes';
 import { networksPanel } from './panels/networks';
 import { colorizeLogEntry, escapeHtml, escapeAttr, renderSeverityBadges, optionAccessibleName, rovingTabIndex, buildStatusHints } from './formatters';
-import { sortDirectionLabel } from 'sidekick-docker-shared/formatters';
+import { sortDirectionLabel, matchesRunningOnly } from 'sidekick-docker-shared/formatters';
 import {
   initOverlays,
   showConfirm,
@@ -151,7 +151,7 @@ function getFilteredItems(): PanelItem[] {
   if (!state.showAllContainers && getPanel().id === 'containers') {
     items = items.filter(it => {
       const c = state.snapshot!.containers.find(cc => cc.id === it.id);
-      return c?.state === 'running';
+      return c !== undefined && matchesRunningOnly(c.state);
     });
   }
 

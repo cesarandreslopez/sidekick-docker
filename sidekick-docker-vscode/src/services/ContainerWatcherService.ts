@@ -1,5 +1,6 @@
 import { DockerClient, DockerStateStore, EventWatcher, explainDockerUnreachable, describeDockerEndpoint, errorMessage } from 'sidekick-docker-shared';
 import type { ContainerInfo, DockerClientOptions, StoreChange } from 'sidekick-docker-shared';
+import { POINT_ELSEWHERE } from './endpointHint';
 
 export interface ContainerWatcherCallbacks {
   /** Fired with the containers AND the real connection state they were observed under. */
@@ -69,7 +70,7 @@ export class ContainerWatcherService {
       const ping = await this.client.pingDetailed();
       if (this.disposed) return false;
       if (!ping.ok) {
-        this.setConnected(false, explainDockerUnreachable(ping.error, describeDockerEndpoint(this.endpoint)));
+        this.setConnected(false, explainDockerUnreachable(ping.error, describeDockerEndpoint(this.endpoint), POINT_ELSEWHERE));
         return false;
       }
 

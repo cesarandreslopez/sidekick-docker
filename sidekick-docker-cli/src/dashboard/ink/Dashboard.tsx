@@ -24,7 +24,7 @@ import { MouseProvider } from './mouse';
 import { LogFilterOverlay } from './LogFilterOverlay';
 import { VersionOverlay } from './VersionOverlay';
 import { SortOverlay } from './SortOverlay';
-import { getRandomPhrase } from 'sidekick-docker-shared';
+import { getRandomPhrase, matchesRunningOnly } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes, renderLogLines } from '../../formatters';
 import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
@@ -381,7 +381,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     if (panel.id === 'containers' && !state.showAllContainers) {
       items = items.filter(it => {
         const c = it.data as import('sidekick-docker-shared').ContainerInfo;
-        return c.state === 'running' || c.state === 'paused';
+        return matchesRunningOnly(c.state);
       });
     }
     if (state.filterString) {

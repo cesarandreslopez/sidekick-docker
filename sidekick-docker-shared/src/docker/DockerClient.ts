@@ -10,6 +10,7 @@ import type {
   ImageLayer,
   FilesystemChange,
   VolumeInfo,
+  VolumePruneScope,
   NetworkInfo,
   NetworkContainerRef,
   DiskUsage,
@@ -87,6 +88,7 @@ export interface LogStreamOptions {
 export class DockerClient {
   private docker: Dockerode;
   private readonly requestTimeoutMs: number;
+  private apiVersion: Promise<string | null> | undefined;
 
   constructor(opts?: DockerClientOptions) {
     const { requestTimeoutMs, ...endpoint } = opts ?? {};
@@ -168,8 +170,8 @@ export class DockerClient {
       raw.then(list => list.map(toContainerInfo)),
       opts.images === false ? Promise.resolve(undefined) : this.listImages(false, signal),
       opts.volumes === false ? Promise.resolve(undefined)
-        : Promise.all([this.request(abortSignal => this.docker.listVolumes({ abortSignal }), signal), raw])
-          .then(([res, list]) => buildVolumeInfos(res.Volumes || [], list)),
+        : Promise.all([this.request(abortSignal => this.docker.listVolumes({ abortSignal }), signal), raw, this.getApiVersion(signal)])
+          .then(([res, list, apiVersion]) => buildVolumeInfos(res.Volumes || [], list, volumePruneScope(apiVersion))),
       opts.networks === false ? Promise.resolve(undefined)
         : Promise.all([this.request(abortSignal => this.docker.listNetworks({ abortSignal }), signal), raw])
           .then(([nets, list]) => buildNetworkInfos(nets, list)),
@@ -437,19 +439,50 @@ export class DockerClient {
     const images = await this.request(abortSignal => this.docker.listImages({ all, abortSignal }), signal);
     return images.map((img): ImageInfo => {
       const validated = ImageItemRawSchema.parse(img);
-      const repoTags = validated.RepoTags ?? ['<none>:<none>'];
+      // API ≥ 1.43 (Engine 24) reports an untagged image as `RepoTags: []`,
+      // older daemons as `["<none>:<none>"]` or null. Normalise all three, or
+      // dangling images go undetected and the image prune count reads 0.
+      const tags = realImageTags(validated.RepoTags);
       return {
         id: shortId(validated.Id.replace('sha256:', '')),
-        repoTags,
+        repoTags: tags.length > 0 ? tags : [UNTAGGED_IMAGE],
         size: validated.Size,
         created: new Date(validated.Created * 1000),
-        isDangling: repoTags[0] === '<none>:<none>',
+        isDangling: tags.length === 0,
       };
     });
   }
 
+  /**
+   * Remove an image and every tag it carries.
+   *
+   * Docker refuses to delete an image by ID while more than one tag references
+   * it (409 "must be forced"), so a multi-tag image is untagged by name
+   * instead — the last untag deletes it. Tags are read fresh, since the
+   * dashboard's list may predate a retag; and containers are checked first,
+   * because untagging all but the last tag of an image a container still uses
+   * would strip its names and then fail, leaving the image behind.
+   */
   async removeImage(id: string): Promise<void> {
-    await this.docker.getImage(id).remove();
+    const image = this.docker.getImage(id);
+    const info = await this.request(abortSignal => image.inspect({ abortSignal } as object));
+    const tags = realImageTags(info.RepoTags);
+    if (tags.length <= 1) {
+      await image.remove();
+      return;
+    }
+    const candidates = await this.request(abortSignal =>
+      this.docker.listContainers({ all: true, filters: { ancestor: [info.Id] }, abortSignal }));
+    // `ancestor` also matches containers of images built FROM this one; only
+    // containers of this exact image block the removal.
+    const users = candidates.filter(c => c.ImageID === info.Id);
+    if (users.length > 0) {
+      const names = users.map(c => (c.Names?.[0] ?? shortId(c.Id)).replace(/^\//, ''));
+      throw new Error(`Image is used by ${names.length === 1 ? 'container' : 'containers'} ${names.join(', ')}. Remove ${names.length === 1 ? 'it' : 'them'} first.`);
+    }
+    for (const tag of tags) {
+      await this.docker.getImage(tag).remove();
+    }
   }
 
   async pruneImages(): Promise<{ spaceReclaimed: number }> {
@@ -459,11 +492,32 @@ export class DockerClient {
   }
 
   async listVolumes(): Promise<VolumeInfo[]> {
-    const [result, containers] = await Promise.all([
+    const [result, containers, apiVersion] = await Promise.all([
       this.request(abortSignal => this.docker.listVolumes({ abortSignal })),
       this.rawContainers(true),
+      this.getApiVersion(),
     ]);
-    return buildVolumeInfos(result.Volumes || [], containers);
+    return buildVolumeInfos(result.Volumes || [], containers, volumePruneScope(apiVersion));
+  }
+
+  /**
+   * The daemon's API version, read once per client. The client sends
+   * unversioned requests, so the daemon answers with its newest API — which
+   * decides, for instance, what a volume prune removes. Null when it cannot be
+   * read; a failure is not cached, so the next call asks again.
+   */
+  getApiVersion(signal?: AbortSignal): Promise<string | null> {
+    this.apiVersion ??= Promise.resolve()
+      .then(() => this.request(abortSignal =>
+        // version accepts abortSignal at runtime; its typings only declare a callback.
+        (this.docker.version as (o: object) => Promise<Dockerode.DockerVersion>).call(this.docker, { abortSignal }), signal))
+      .then(v => (typeof v.ApiVersion === 'string' && v.ApiVersion) || null)
+      .catch(() => null)
+      .then(version => {
+        if (version === null) this.apiVersion = undefined;
+        return version;
+      });
+    return this.apiVersion;
   }
 
   async removeVolume(name: string): Promise<void> {
@@ -621,8 +675,38 @@ export function toContainerInfo(c: RawContainer): ContainerInfo {
   };
 }
 
+/** Docker's placeholder for an image with no tags. */
+const UNTAGGED_IMAGE = '<none>:<none>';
+
+/** An image's tags without the `<none>:<none>` placeholder; empty when untagged. */
+function realImageTags(tags: readonly string[] | null | undefined): string[] {
+  return (tags ?? []).filter(t => t && t !== UNTAGGED_IMAGE);
+}
+
+/** Set by Engine 23+ on volumes created without a name. */
+const ANONYMOUS_VOLUME_LABEL = 'com.docker.volume.anonymous';
+
+/** "1.43" ≥ "1.42", compared numerically per component. */
+function apiVersionAtLeast(version: string, min: string): boolean {
+  const a = version.split('.').map(Number);
+  const b = min.split('.').map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (Number.isNaN(x)) return false;
+    if (x !== y) return x > y;
+  }
+  return true;
+}
+
+/** What `docker volume prune` (no filters) removes on a daemon speaking `apiVersion`. */
+export function volumePruneScope(apiVersion: string | null): VolumePruneScope {
+  if (!apiVersion) return 'unknown';
+  return apiVersionAtLeast(apiVersion, '1.42') ? 'anonymous' : 'all';
+}
+
 /** Volumes, annotated with which containers mount them (from a raw container listing). */
-export function buildVolumeInfos(volumes: unknown[], containers: RawContainer[]): VolumeInfo[] {
+export function buildVolumeInfos(volumes: unknown[], containers: RawContainer[], pruneScope: VolumePruneScope = 'unknown'): VolumeInfo[] {
   // Keep *which* containers use each volume, not just whether any do. A Set
   // because one container can mount the same named volume at more than one
   // path, and it should still be listed once.
@@ -646,6 +730,8 @@ export function buildVolumeInfos(volumes: unknown[], containers: RawContainer[])
       created: new Date(validated.CreatedAt || 0),
       isInUse: volumeUsers.has(validated.Name),
       usedBy: [...(volumeUsers.get(validated.Name) ?? [])],
+      anonymous: validated.Labels?.[ANONYMOUS_VOLUME_LABEL] !== undefined,
+      pruneScope,
     };
   });
 }

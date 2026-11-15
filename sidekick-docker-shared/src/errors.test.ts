@@ -35,29 +35,36 @@ describe('errorCode', () => {
 
 describe('explainDockerUnreachable', () => {
   const ep = '/var/run/docker.sock';
+  const HINT = '--socket or DOCKER_HOST';
 
   it('explains permission errors', () => {
-    expect(explainDockerUnreachable(errnoError('EACCES'), ep)).toMatch(/Permission denied.*docker.*group/i);
-    expect(explainDockerUnreachable(errnoError('EPERM'), ep)).toMatch(/Permission denied/);
+    expect(explainDockerUnreachable(errnoError('EACCES'), ep, HINT)).toMatch(/Permission denied.*docker.*group/i);
+    expect(explainDockerUnreachable(errnoError('EPERM'), ep, HINT)).toMatch(/Permission denied/);
   });
 
   it('explains a missing socket', () => {
-    expect(explainDockerUnreachable(errnoError('ENOENT'), ep)).toMatch(/socket not found/i);
-    expect(explainDockerUnreachable(errnoError('ENOENT'), ep)).toContain(ep);
+    expect(explainDockerUnreachable(errnoError('ENOENT'), ep, HINT)).toMatch(/socket not found/i);
+    expect(explainDockerUnreachable(errnoError('ENOENT'), ep, HINT)).toContain(ep);
+  });
+
+  it('advises the surface-specific way to point elsewhere', () => {
+    expect(explainDockerUnreachable(errnoError('ENOENT'), ep, 'the sidekick-docker.socketPath setting'))
+      .toMatch(/Point elsewhere with the sidekick-docker\.socketPath setting\.$/);
+    expect(explainDockerUnreachable(errnoError('ENOENT'), ep, 'the sidekick-docker.socketPath setting')).not.toContain('--socket');
   });
 
   it('explains connection refused', () => {
-    expect(explainDockerUnreachable(errnoError('ECONNREFUSED'), 'tcp://h:2375')).toMatch(/Connection refused at tcp:\/\/h:2375/);
+    expect(explainDockerUnreachable(errnoError('ECONNREFUSED'), 'tcp://h:2375', HINT)).toMatch(/Connection refused at tcp:\/\/h:2375/);
   });
 
   it('explains unreachable hosts', () => {
     for (const code of ['ETIMEDOUT', 'EHOSTUNREACH', 'ENETUNREACH']) {
-      expect(explainDockerUnreachable(errnoError(code), 'tcp://h:2375')).toMatch(/Cannot reach/);
+      expect(explainDockerUnreachable(errnoError(code), 'tcp://h:2375', HINT)).toMatch(/Cannot reach/);
     }
   });
 
   it('falls back to a generic message with the original error text', () => {
-    const msg = explainDockerUnreachable(new Error('weird failure'), ep);
+    const msg = explainDockerUnreachable(new Error('weird failure'), ep, HINT);
     expect(msg).toContain('weird failure');
     expect(msg).toContain(ep);
   });

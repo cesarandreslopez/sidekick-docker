@@ -30,6 +30,9 @@ export interface SerializedVolumeInfo {
   isInUse: boolean;
   /** Containers mounting this volume, so "in use" says by what. */
   usedBy: string[];
+  anonymous: boolean;
+  /** What a volume prune removes on this daemon (Engine 23+: anonymous only). */
+  pruneScope: 'anonymous' | 'all' | 'unknown';
 }
 
 export interface SerializedNetworkIpamConfig {

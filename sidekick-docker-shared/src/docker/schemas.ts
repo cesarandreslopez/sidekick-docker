@@ -87,6 +87,7 @@ export const VolumeItemRawSchema = z.object({
   Driver: z.string(),
   Mountpoint: z.string(),
   CreatedAt: z.string().optional(),
+  Labels: z.record(z.string(), z.string()).nullable().optional(),
 });
 export type VolumeItemRaw = z.infer<typeof VolumeItemRawSchema>;
 

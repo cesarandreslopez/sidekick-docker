@@ -1,5 +1,5 @@
 import type { ComposeService, ComposeProject, ComposeExecResult, ComposeCommandOptions } from 'sidekick-docker-shared';
-import { ComposeClient, throwIfComposeFailed, resolveComposeOptions } from 'sidekick-docker-shared';
+import { ComposeClient, throwIfComposeFailed, resolveComposeOptions, composeDownConfirmMessage } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData, copyLogsAction } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -164,7 +164,7 @@ export class ServicesPanel implements SidePanel {
         key: 'D',
         label: 'Down',
         confirm: true,
-        confirmMessage: (item) => `Bring down project "${getProjectName(panelData<ServiceItemData>(item))}"?`,
+        confirmMessage: (item) => composeDownConfirmMessage(getProjectName(panelData<ServiceItemData>(item))),
         confirmSeverity: 'high',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);

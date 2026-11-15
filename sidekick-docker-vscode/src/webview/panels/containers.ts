@@ -1,4 +1,4 @@
-import { summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, publishedPortUrls, pruneCandidateCount, pruneConfirmMessage, removeContainerConfirmMessage } from 'sidekick-docker-shared/formatters';
+import { summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, publishedPortUrls, pruneConfirmFor, removeContainerConfirmMessage } from 'sidekick-docker-shared/formatters';
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
@@ -311,7 +311,7 @@ export const containersPanel: PanelDefinition = {
       label: 'Prune',
       actionType: 'prune',
       confirm: true,
-      confirmMessage: pruneConfirmMessage('containers', pruneCandidateCount('containers', snapshot.containers)),
+      confirmMessage: pruneConfirmFor('containers', snapshot.containers),
       confirmSeverity: 'batch',
     });
     actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: removeContainerConfirmMessage(c), confirmSeverity: 'high' });

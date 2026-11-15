@@ -1,5 +1,5 @@
 import type { NetworkInfo } from 'sidekick-docker-shared';
-import { DockerClient, pruneCandidateCount, pruneConfirmMessage } from 'sidekick-docker-shared';
+import { DockerClient, pruneConfirmFor, pruneResultText, removeNetworkConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -94,11 +94,14 @@ export class NetworksPanel implements SidePanel {
         key: 'd',
         label: 'Remove',
         confirm: true,
-        confirmMessage: (item) => `Remove network "${panelData<NetworkInfo>(item).name}"?`,
+        confirmMessage: (item) => removeNetworkConfirmMessage(panelData<NetworkInfo>(item).name),
         confirmSeverity: 'high',
         handler: (item) => {
           const net = panelData<NetworkInfo>(item);
-          return this.client.removeNetwork(net.id).then(() => { this.onAction(); });
+          return this.client.removeNetwork(net.id).then(() => {
+            this.onAction();
+            return actionText('remove', net.name).success;
+          });
         },
         condition: (item) => {
           const net = panelData<NetworkInfo>(item);
@@ -109,13 +112,12 @@ export class NetworksPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: () => pruneConfirmMessage('networks', pruneCandidateCount('networks', this.lastMetrics?.networks ?? [])),
+        confirmMessage: () => pruneConfirmFor('networks', this.lastMetrics?.networks ?? []),
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneNetworks().then((r) => {
             this.onAction();
-            const n = r.networksDeleted.length;
-            return `Pruned ${n} network${n === 1 ? '' : 's'}`;
+            return pruneResultText('networks', { deleted: r.networksDeleted.length });
           });
         },
       },

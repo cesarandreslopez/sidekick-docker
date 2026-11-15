@@ -1,5 +1,5 @@
 import type { ImageInfo } from 'sidekick-docker-shared';
-import { DockerClient, shortId, pruneCandidateCount, pruneConfirmMessage } from 'sidekick-docker-shared';
+import { DockerClient, pruneConfirmFor, pruneResultText, imageDisplayName, removeImageConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
 import { panelData, detailFetchError } from './types';
@@ -72,7 +72,7 @@ export class ImagesPanel implements SidePanel {
   getItems(metrics: DockerDashboardMetrics): PanelItem[] {
     this.lastMetrics = metrics;
     return metrics.images.map((img): PanelItem => {
-      const tag = img.repoTags[0] || '<none>';
+      const tag = imageDisplayName(img);
       const icon = img.isDangling ? '\u25CB' : '\u25CF'; // ○ vs ●
       return {
         id: img.id,
@@ -92,28 +92,26 @@ export class ImagesPanel implements SidePanel {
         key: 'd',
         label: 'Remove',
         confirm: true,
-        confirmMessage: (item) => {
-          const img = panelData<ImageInfo>(item);
-          const tag = img.repoTags[0] || shortId(img.id);
-          const multiTag = img.repoTags.length > 1 ? ` (removes all ${img.repoTags.length} tags)` : '';
-          return `Remove image "${tag}"?${multiTag}`;
-        },
+        confirmMessage: (item) => removeImageConfirmMessage(panelData<ImageInfo>(item)),
         confirmSeverity: 'high',
         handler: (item) => {
           const img = panelData<ImageInfo>(item);
-          return this.client.removeImage(img.id).then(() => { this.onAction(); });
+          return this.client.removeImage(img.id).then(() => {
+            this.onAction();
+            return actionText('remove', imageDisplayName(img)).success;
+          });
         },
       },
       {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: () => pruneConfirmMessage('images', pruneCandidateCount('images', this.lastMetrics?.images ?? [])),
+        confirmMessage: () => pruneConfirmFor('images', this.lastMetrics?.images ?? []),
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneImages().then((r) => {
             this.onAction();
-            return `Pruned — ${formatBytes(r.spaceReclaimed)} reclaimed`;
+            return pruneResultText('images', r);
           });
         },
       },

@@ -6,7 +6,7 @@ import { ContainerWatcherService } from './services/ContainerWatcherService';
 import { getSettings, onSettingsChanged } from './settings';
 import type { SidekickSettings } from './settings';
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { canStart, describeDockerEndpoint, removeContainerConfirmMessage } from 'sidekick-docker-shared';
+import { canStart, composeDownConfirmMessage, describeDockerEndpoint, removeContainerConfirmMessage } from 'sidekick-docker-shared';
 import type { ComposeProjectGroupItem } from './providers/ContainerTreeProvider';
 
 let dashboardProvider: DockerDashboardProvider | undefined;
@@ -283,7 +283,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('sidekick-docker.composeDown', async (item?: ComposeProjectGroupItem) => {
       if (!item?.project) return;
       const choice = await vscode.window.showWarningMessage(
-        `Take compose project "${item.project.projectName}" down? Its containers and networks are removed (volumes are kept).`,
+        composeDownConfirmMessage(item.project.projectName),
         { modal: true },
         'Down',
       );

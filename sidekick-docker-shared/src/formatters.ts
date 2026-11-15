@@ -1,4 +1,4 @@
-import type { PortBinding, ContainerInfo } from './types';
+import type { PortBinding, ContainerInfo, VolumePruneScope } from './types';
 
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -89,6 +89,14 @@ export function canStop(state: ContainerState): boolean {
   return state === 'running' || state === 'paused' || state === 'restarting';
 }
 
+/**
+ * Which containers the "running only" toggle (`a`) keeps: every container with
+ * a live process — running, paused or restarting — as `docker ps` lists them.
+ */
+export function matchesRunningOnly(state: ContainerState): boolean {
+  return canStop(state);
+}
+
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
 export type PruneKind = 'containers' | 'images' | 'volumes' | 'networks';
@@ -97,28 +105,106 @@ interface PruneCandidateFields {
   state?: string;
   isDangling?: boolean;
   isInUse?: boolean;
+  anonymous?: boolean;
+  pruneScope?: VolumePruneScope;
   isDefault?: boolean;
   containers?: readonly unknown[];
 }
 
-/** How many items a prune of `kind` would remove, from the listed items. */
+/** What a volume prune removes on this daemon, read off the listed volumes. */
+function volumePruneScopeOf(items: readonly PruneCandidateFields[]): VolumePruneScope {
+  return items.find(v => v.pruneScope)?.pruneScope ?? 'unknown';
+}
+
+/**
+ * How many items a prune of `kind` would remove, from the listed items.
+ * Engine 23+ prunes only anonymous volumes, so named ones are not counted there.
+ */
 export function pruneCandidateCount(kind: PruneKind, items: readonly PruneCandidateFields[]): number {
   switch (kind) {
     case 'containers': return items.filter(c => c.state === 'exited' || c.state === 'created' || c.state === 'dead').length;
     case 'images': return items.filter(i => i.isDangling).length;
-    case 'volumes': return items.filter(v => !v.isInUse).length;
+    case 'volumes': {
+      const anonymousOnly = volumePruneScopeOf(items) === 'anonymous';
+      return items.filter(v => !v.isInUse && (!anonymousOnly || v.anonymous === true)).length;
+    }
     case 'networks': return items.filter(n => !n.isDefault && (n.containers?.length ?? 0) === 0).length;
   }
 }
 
-/** Confirmation text for a prune, naming how many items it removes when known. */
-export function pruneConfirmMessage(kind: PruneKind, count: number): string {
+/**
+ * Confirmation text for a prune, naming how many items it removes when known.
+ * `volumeScope` says what a volume prune removes on this daemon: on Engine 23+
+ * only anonymous volumes, so the text says named ones are kept; when the
+ * daemon version is unknown it names no count rather than guess.
+ */
+export function pruneConfirmMessage(kind: PruneKind, count: number, volumeScope: VolumePruneScope = 'all'): string {
   switch (kind) {
     case 'containers': return count > 0 ? `Remove ${plural(count, 'stopped container')}?` : 'Remove all stopped containers?';
     case 'images': return count > 0 ? `Prune ${plural(count, 'dangling image')}?` : 'Prune all dangling images?';
-    case 'volumes': return count > 0 ? `Prune ${plural(count, 'unused volume')}?` : 'Prune all unused volumes?';
+    case 'volumes':
+      switch (volumeScope) {
+        case 'anonymous': return `${count > 0 ? `Prune ${plural(count, 'unused anonymous volume')}?` : 'Prune all unused anonymous volumes?'} Named volumes are kept.`;
+        case 'unknown': return 'Prune unused volumes?';
+        default: return count > 0 ? `Prune ${plural(count, 'unused volume')}?` : 'Prune all unused volumes?';
+      }
     case 'networks': return count > 0 ? `Prune ${plural(count, 'unused network')}?` : 'Prune all unused networks?';
   }
+}
+
+/** The prune confirmation for the listed items of `kind` — what both dashboards show. */
+export function pruneConfirmFor(kind: PruneKind, items: readonly PruneCandidateFields[]): string {
+  return pruneConfirmMessage(kind, pruneCandidateCount(kind, items), kind === 'volumes' ? volumePruneScopeOf(items) : 'all');
+}
+
+const PRUNE_NOUN: Record<PruneKind, string> = { containers: 'container', images: 'image', volumes: 'volume', networks: 'network' };
+
+/**
+ * Toast text after a prune: how many went (when the daemon says) and what was
+ * reclaimed. Networks reclaim no space, so they report only the count.
+ */
+export function pruneResultText(kind: PruneKind, result: { spaceReclaimed?: number; deleted?: number }): string {
+  if (kind === 'networks') {
+    const n = result.deleted ?? 0;
+    return n > 0 ? `Pruned ${plural(n, 'network')}` : 'No unused networks to prune';
+  }
+  const what = result.deleted === undefined ? kind : plural(result.deleted, PRUNE_NOUN[kind]);
+  return `Pruned ${what} — ${formatBytes(result.spaceReclaimed ?? 0)} reclaimed`;
+}
+
+/** Docker's placeholder tag for an untagged image. */
+const UNTAGGED_IMAGE = '<none>:<none>';
+
+function imageTagsOf(img: { repoTags: readonly string[] }): string[] {
+  return img.repoTags.filter(t => t && t !== UNTAGGED_IMAGE);
+}
+
+/** "nginx:latest", or "<none> (abc123def456)" for an untagged image so it can be told apart. */
+export function imageDisplayName(img: { id: string; repoTags: readonly string[] }): string {
+  return imageTagsOf(img)[0] ?? `<none> (${img.id})`;
+}
+
+/** Removing an image removes every tag it carries; say which. */
+export function removeImageConfirmMessage(img: { id: string; repoTags: readonly string[] }): string {
+  const tags = imageTagsOf(img);
+  if (tags.length === 0) return `Remove untagged image ${img.id}?`;
+  if (tags.length === 1) return `Remove image "${tags[0]}"?`;
+  const others = tags.slice(1);
+  const listed = others.slice(0, 2).join(', ') + (others.length > 2 ? ', …' : '');
+  return `Remove image "${tags[0]}" and ${plural(others.length, 'other tag')} (${listed})?`;
+}
+
+/** `docker compose down` removes containers and networks but keeps volumes. */
+export function composeDownConfirmMessage(project: string): string {
+  return `Take compose project "${project}" down? Its containers and networks are removed (volumes are kept).`;
+}
+
+export function removeVolumeConfirmMessage(name: string): string {
+  return `Remove volume "${name}"? Its data is deleted.`;
+}
+
+export function removeNetworkConfirmMessage(name: string): string {
+  return `Remove network "${name}"?`;
 }
 
 /** Both dashboards remove with force, so say so when that kills a live process. */
@@ -199,6 +285,26 @@ const ACTION_TEXT: Record<ActionType, { progress: (name: string) => string; succ
 export function actionText(type: ActionType, name: string): { progress: string; success: string } {
   const t = ACTION_TEXT[type];
   return { progress: t.progress(name), success: t.success(name) };
+}
+
+const FAILURE_VERB: Record<ActionType, (name: string) => string> = {
+  start: n => `start ${n}`,
+  stop: n => `stop ${n}`,
+  restart: n => `restart ${n}`,
+  pause: n => `pause ${n}`,
+  unpause: n => `unpause ${n}`,
+  remove: n => `remove ${n}`,
+  up: n => `bring ${n} up`,
+  down: n => `take ${n} down`,
+  prune: n => `prune ${n}`,
+};
+
+/**
+ * "Failed to stop web: <reason>". Takes the message rather than the error so
+ * the webview bundle need not import the error helpers.
+ */
+export function actionFailedText(type: ActionType, name: string, message: string): string {
+  return `Failed to ${FAILURE_VERB[type](name)}: ${message}`;
 }
 
 /** "unless-stopped", "on-failure (max 5)", "no" — plus how often it has restarted. */

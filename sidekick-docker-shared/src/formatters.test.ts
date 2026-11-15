@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
-  actionText, browserHostForEndpoint, canStart, canStop, publishedPortUrls, pruneCandidateCount,
-  pruneConfirmMessage, removeContainerConfirmMessage, sortDirectionLabel, summarizeRestartPolicy, formatMount, summarizeHealth,
+  actionText, actionFailedText, browserHostForEndpoint, canStart, canStop, matchesRunningOnly, publishedPortUrls, pruneCandidateCount,
+  pruneConfirmMessage, pruneConfirmFor, pruneResultText, removeContainerConfirmMessage, sortDirectionLabel, summarizeRestartPolicy,
+  formatMount, summarizeHealth, imageDisplayName, removeImageConfirmMessage, composeDownConfirmMessage,
+  removeVolumeConfirmMessage, removeNetworkConfirmMessage,
 } from './formatters';
 import type { PortBinding } from './types';
 
@@ -29,6 +31,37 @@ describe('prune wording', () => {
     expect(pruneConfirmMessage('containers', 1)).toBe('Remove 1 stopped container?');
     expect(pruneConfirmMessage('images', 3)).toBe('Prune 3 dangling images?');
     expect(pruneConfirmMessage('volumes', 0)).toBe('Prune all unused volumes?');
+  });
+
+  it('counts only anonymous volumes where the daemon prunes only those (Engine 23+)', () => {
+    const vols = [
+      { isInUse: false, anonymous: true, pruneScope: 'anonymous' as const },
+      { isInUse: false, anonymous: false, pruneScope: 'anonymous' as const },
+      { isInUse: true, anonymous: true, pruneScope: 'anonymous' as const },
+    ];
+    expect(pruneCandidateCount('volumes', vols)).toBe(1);
+    expect(pruneConfirmFor('volumes', vols)).toBe('Prune 1 unused anonymous volume? Named volumes are kept.');
+  });
+
+  it('counts every unused volume on an older daemon, and names no count when the version is unknown', () => {
+    const old = [{ isInUse: false, anonymous: false, pruneScope: 'all' as const }, { isInUse: false, anonymous: true, pruneScope: 'all' as const }];
+    expect(pruneConfirmFor('volumes', old)).toBe('Prune 2 unused volumes?');
+    const unknown = [{ isInUse: false, anonymous: false, pruneScope: 'unknown' as const }];
+    expect(pruneConfirmFor('volumes', unknown)).toBe('Prune unused volumes?');
+    expect(pruneConfirmFor('volumes', [])).toBe('Prune unused volumes?');
+  });
+
+  it('pruneConfirmFor matches pruneConfirmMessage for the other kinds', () => {
+    expect(pruneConfirmFor('images', [{ isDangling: true }, { isDangling: true }])).toBe('Prune 2 dangling images?');
+    expect(pruneConfirmFor('containers', [{ state: 'exited' }])).toBe('Remove 1 stopped container?');
+  });
+
+  it('words prune results the same on both surfaces', () => {
+    expect(pruneResultText('images', { spaceReclaimed: 0 })).toBe('Pruned images — 0 B reclaimed');
+    expect(pruneResultText('volumes', { spaceReclaimed: 2048 })).toBe('Pruned volumes — 2.0 KB reclaimed');
+    expect(pruneResultText('containers', { spaceReclaimed: 0, deleted: 1 })).toBe('Pruned 1 container — 0 B reclaimed');
+    expect(pruneResultText('networks', { deleted: 2 })).toBe('Pruned 2 networks');
+    expect(pruneResultText('networks', { deleted: 0 })).toBe('No unused networks to prune');
   });
 
   it('warns when removing a container will stop it first', () => {
@@ -99,5 +132,42 @@ describe('container detail summaries', () => {
     expect(summarizeHealth(health)).toEqual(['unhealthy · 3 failing checks in a row', 'Last check: exit 7 — curl: (7) Failed to connect']);
     expect(summarizeHealth({ status: 'healthy', failingStreak: 0, log: [] })).toEqual(['healthy']);
     expect(summarizeHealth(null)).toEqual([]);
+  });
+});
+
+describe('image naming and removal wording', () => {
+  it('tells untagged images apart by id', () => {
+    expect(imageDisplayName({ id: 'abc123def456', repoTags: ['nginx:latest'] })).toBe('nginx:latest');
+    expect(imageDisplayName({ id: 'abc123def456', repoTags: ['<none>:<none>'] })).toBe('<none> (abc123def456)');
+    expect(imageDisplayName({ id: 'abc123def456', repoTags: [] })).toBe('<none> (abc123def456)');
+  });
+
+  it('says every tag goes with the image', () => {
+    expect(removeImageConfirmMessage({ id: 'abc', repoTags: ['app:latest'] })).toBe('Remove image "app:latest"?');
+    expect(removeImageConfirmMessage({ id: 'abc', repoTags: ['app:latest', 'app:1.2'] })).toBe('Remove image "app:latest" and 1 other tag (app:1.2)?');
+    expect(removeImageConfirmMessage({ id: 'abc', repoTags: ['a:1', 'a:2', 'a:3', 'a:4'] })).toBe('Remove image "a:1" and 3 other tags (a:2, a:3, …)?');
+    expect(removeImageConfirmMessage({ id: 'abc123', repoTags: ['<none>:<none>'] })).toBe('Remove untagged image abc123?');
+  });
+});
+
+describe('shared confirm and failure wording', () => {
+  it('says what compose down removes and keeps', () => {
+    expect(composeDownConfirmMessage('shop')).toBe('Take compose project "shop" down? Its containers and networks are removed (volumes are kept).');
+  });
+
+  it('names the volume or network being removed', () => {
+    expect(removeVolumeConfirmMessage('pgdata')).toBe('Remove volume "pgdata"? Its data is deleted.');
+    expect(removeNetworkConfirmMessage('backend')).toBe('Remove network "backend"?');
+  });
+
+  it('words failures with the target name', () => {
+    expect(actionFailedText('stop', 'web', 'timeout')).toBe('Failed to stop web: timeout');
+    expect(actionFailedText('down', 'shop', 'boom')).toBe('Failed to take shop down: boom');
+    expect(actionFailedText('up', 'shop', 'boom')).toBe('Failed to bring shop up: boom');
+  });
+
+  it('keeps every container with a live process under "running only"', () => {
+    expect(['running', 'paused', 'restarting'].every(s => matchesRunningOnly(s as never))).toBe(true);
+    expect(['exited', 'created', 'dead'].some(s => matchesRunningOnly(s as never))).toBe(false);
   });
 });

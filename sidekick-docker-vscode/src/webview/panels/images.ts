@@ -2,7 +2,7 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot, SerializedImageInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { formatBytes, truncate, escapeHtml, escapeAttr, colorizeId, colorizeBool, renderKvGrid, shortId } from '../formatters';
-import { pruneCandidateCount, pruneConfirmMessage } from 'sidekick-docker-shared/formatters';
+import { pruneConfirmFor, imageDisplayName, removeImageConfirmMessage } from 'sidekick-docker-shared/formatters';
 
 
 function findImage(id: string, snapshot: DashboardStateSnapshot): SerializedImageInfo | undefined {
@@ -60,7 +60,7 @@ export const imagesPanel: PanelDefinition = {
 
   getItems(snapshot: DashboardStateSnapshot): PanelItem[] {
     return snapshot.images.map(img => {
-      const tag = img.repoTags[0] || '<none>';
+      const tag = imageDisplayName(img);
       return {
         id: img.id,
         label: truncate(tag, 22),
@@ -75,10 +75,10 @@ export const imagesPanel: PanelDefinition = {
 
   getActions(item: PanelItem, snapshot: DashboardStateSnapshot): ActionDefinition[] {
     const img = findImage(item.id, snapshot);
-    const name = img?.repoTags[0] || shortId(item.id);
+    const confirmRemove = img ? removeImageConfirmMessage(img) : `Remove image ${shortId(item.id)}?`;
     return [
-      { key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: `Remove image "${name}"?`, confirmSeverity: 'high' },
-      { key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: pruneConfirmMessage('images', pruneCandidateCount('images', snapshot.images)), confirmSeverity: 'batch' },
+      { key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: confirmRemove, confirmSeverity: 'high' },
+      { key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: pruneConfirmFor('images', snapshot.images), confirmSeverity: 'batch' },
     ];
   },
 

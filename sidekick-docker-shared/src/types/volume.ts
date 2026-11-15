@@ -10,4 +10,15 @@ export interface VolumeInfo {
    * this?" before you try to remove it.
    */
   usedBy: string[];
+  /** Created without a name (labelled `com.docker.volume.anonymous` by Engine 23+). */
+  anonymous: boolean;
+  /**
+   * What a default `docker volume prune` removes on this daemon: since API 1.42
+   * (Engine 23) only anonymous volumes, before that every unused one. `unknown`
+   * when the daemon version could not be read. The same for every volume of a
+   * listing; carried per volume so the browser-safe prune wording can read it.
+   */
+  pruneScope: VolumePruneScope;
 }
+
+export type VolumePruneScope = 'anonymous' | 'all' | 'unknown';

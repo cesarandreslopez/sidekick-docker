@@ -1,5 +1,5 @@
 import type { ContainerInfo, ContainerDetails } from 'sidekick-docker-shared';
-import { DockerClient, shortId, publishedPortUrls, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneCandidateCount, pruneConfirmMessage, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
+import { DockerClient, shortId, publishedPortUrls, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneConfirmFor, pruneResultText, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
 import { panelData, detailFetchError, copyLogsAction } from './types';
@@ -315,13 +315,12 @@ export class ContainersPanel implements SidePanel {
         key: 'P',
         label: 'Prune',
         confirm: true,
-        confirmMessage: () => pruneConfirmMessage('containers', pruneCandidateCount('containers', this.lastMetrics?.containers ?? [])),
+        confirmMessage: () => pruneConfirmFor('containers', this.lastMetrics?.containers ?? []),
         confirmSeverity: 'batch',
         handler: () => {
           return this.client.pruneContainers().then((r) => {
             this.onAction();
-            const n = r.containersDeleted.length;
-            return `Pruned ${n} container${n === 1 ? '' : 's'} — ${formatBytes(r.spaceReclaimed)} reclaimed`;
+            return pruneResultText('containers', { spaceReclaimed: r.spaceReclaimed, deleted: r.containersDeleted.length });
           });
         },
       },

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DockerClient, demuxFrames, looksMultiplexed } from './DockerClient';
+import { DockerClient, demuxFrames, looksMultiplexed, volumePruneScope } from './DockerClient';
 
 // Mock dockerode
 vi.mock('dockerode', () => {
@@ -7,6 +7,7 @@ vi.mock('dockerode', () => {
     default: vi.fn().mockImplementation(function () {
       return {
         ping: vi.fn().mockResolvedValue('OK'),
+        version: vi.fn().mockResolvedValue({ ApiVersion: '1.45' }),
         listContainers: vi.fn().mockResolvedValue([
           {
             Id: 'abc123def456',
@@ -110,6 +111,95 @@ describe('DockerClient', () => {
     expect(volumes).toHaveLength(1);
     expect(volumes[0].name).toBe('test-vol');
     expect(volumes[0].driver).toBe('local');
+    expect(volumes[0].anonymous).toBe(false);
+    expect(volumes[0].pruneScope).toBe('anonymous');
+  });
+
+  it('marks anonymous volumes and reads the prune scope from the daemon API version', async () => {
+    const c = new DockerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = (c as any).docker;
+    d.listVolumes = vi.fn().mockResolvedValue({ Volumes: [
+      { Name: 'a1b2', Driver: 'local', Mountpoint: '/x', Labels: { 'com.docker.volume.anonymous': '' } },
+      { Name: 'named', Driver: 'local', Mountpoint: '/y', Labels: null },
+    ] });
+    d.version = vi.fn().mockResolvedValue({ ApiVersion: '1.41' });
+    const vols = await c.listVolumes();
+    expect(vols.map(v => v.anonymous)).toEqual([true, false]);
+    expect(vols.every(v => v.pruneScope === 'all')).toBe(true);
+    await c.listVolumes();
+    expect(d.version).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries the version lookup after a failure and reports the scope as unknown meanwhile', async () => {
+    const c = new DockerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const d = (c as any).docker;
+    d.version = vi.fn().mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ ApiVersion: '1.43' });
+    expect((await c.listVolumes())[0].pruneScope).toBe('unknown');
+    expect((await c.listVolumes())[0].pruneScope).toBe('anonymous');
+  });
+
+  it('volumePruneScope compares API versions numerically', () => {
+    expect(volumePruneScope('1.42')).toBe('anonymous');
+    expect(volumePruneScope('1.100')).toBe('anonymous');
+    expect(volumePruneScope('1.41')).toBe('all');
+    expect(volumePruneScope('1.9')).toBe('all');
+    expect(volumePruneScope(null)).toBe('unknown');
+  });
+
+  it('listImages detects untagged images however the daemon reports them', async () => {
+    const c = new DockerClient();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (c as any).docker.listImages = vi.fn().mockResolvedValue([
+      { Id: 'sha256:aaaaaaaaaaaa1', RepoTags: [], Size: 1, Created: 0 },
+      { Id: 'sha256:bbbbbbbbbbbb1', RepoTags: ['<none>:<none>'], Size: 1, Created: 0 },
+      { Id: 'sha256:cccccccccccc1', RepoTags: null, Size: 1, Created: 0 },
+      { Id: 'sha256:dddddddddddd1', RepoTags: ['app:1'], Size: 1, Created: 0 },
+    ]);
+    const images = await c.listImages();
+    expect(images.map(i => i.isDangling)).toEqual([true, true, true, false]);
+    expect(images[0].repoTags).toEqual(['<none>:<none>']);
+  });
+
+  describe('removeImage', () => {
+    function setup(repoTags: string[] | null, containers: unknown[] = []) {
+      const c = new DockerClient();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const d = (c as any).docker;
+      const removed: string[] = [];
+      d.getImage = vi.fn((name: string) => ({
+        inspect: vi.fn().mockResolvedValue({ Id: 'sha256:full', RepoTags: repoTags }),
+        remove: vi.fn(async () => { removed.push(name); }),
+      }));
+      d.listContainers = vi.fn().mockResolvedValue(containers);
+      return { c, d, removed };
+    }
+
+    it('removes a single-tag image by id', async () => {
+      const { c, removed } = setup(['app:latest']);
+      await c.removeImage('abc');
+      expect(removed).toEqual(['abc']);
+    });
+
+    it('untags a multi-tag image by name, using the tags read fresh', async () => {
+      const { c, d, removed } = setup(['app:latest', 'app:1.2']);
+      await c.removeImage('abc');
+      expect(removed).toEqual(['app:latest', 'app:1.2']);
+      expect(d.listContainers).toHaveBeenCalledWith(expect.objectContaining({ all: true, filters: { ancestor: ['sha256:full'] } }));
+    });
+
+    it('refuses before untagging when a container uses the image', async () => {
+      const { c, removed } = setup(['app:latest', 'app:1.2'], [{ Id: 'c1', Names: ['/web'], ImageID: 'sha256:full' }]);
+      await expect(c.removeImage('abc')).rejects.toThrow('Image is used by container web. Remove it first.');
+      expect(removed).toEqual([]);
+    });
+
+    it('ignores containers of child images matched by the ancestor filter', async () => {
+      const { c, removed } = setup(['base:1', 'base:latest'], [{ Id: 'c1', Names: ['/kid'], ImageID: 'sha256:child' }]);
+      await c.removeImage('abc');
+      expect(removed).toEqual(['base:1', 'base:latest']);
+    });
   });
 
   it('listNetworks returns formatted network info', async () => {

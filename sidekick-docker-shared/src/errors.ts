@@ -14,15 +14,17 @@ export function errorCode(err: unknown): string | undefined {
 
 /**
  * One-line, actionable explanation of why the Docker daemon is unreachable.
- * `endpoint` should come from describeDockerEndpoint().
+ * `endpoint` should come from describeDockerEndpoint(). `pointElsewhere` names
+ * how *this* surface selects another endpoint — the CLI's `--socket` flag or
+ * the VS Code setting — so neither inherits the other's advice.
  */
-export function explainDockerUnreachable(err: unknown, endpoint: string): string {
+export function explainDockerUnreachable(err: unknown, endpoint: string, pointElsewhere: string): string {
   switch (errorCode(err)) {
     case 'EACCES':
     case 'EPERM':
       return `Permission denied on ${endpoint}. Add your user to the 'docker' group, or run with elevated permissions.`;
     case 'ENOENT':
-      return `Docker socket not found at ${endpoint}. Is Docker installed and running? Point elsewhere with --socket or DOCKER_HOST.`;
+      return `Docker socket not found at ${endpoint}. Is Docker installed and running? Point elsewhere with ${pointElsewhere}.`;
     case 'ECONNREFUSED':
       return `Connection refused at ${endpoint}. Is the Docker daemon running?`;
     case 'ETIMEDOUT':

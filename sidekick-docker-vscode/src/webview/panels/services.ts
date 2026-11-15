@@ -2,6 +2,7 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { parseComposeItemId, composeProjectNameOf } from '../../types/composeItemId';
+import { composeDownConfirmMessage } from 'sidekick-docker-shared/formatters';
 import { stateIcon, stateColor, escapeHtml, escapeAttr, colorizeState, colorizeId, renderKvGrid, colorizeLogEntry } from '../formatters';
 
 function getComposeLogKey(itemId: string): string {
@@ -131,7 +132,7 @@ export const servicesPanel: PanelDefinition = {
     const projectName = composeProjectNameOf(item.id) ?? item.label.trim();
     return [
       { key: 'u', label: 'Up', actionType: 'up' },
-      { key: 'D', label: 'Down', actionType: 'down', confirm: true, confirmMessage: `Bring down compose project "${projectName}"?`, confirmSeverity: 'high' },
+      { key: 'D', label: 'Down', actionType: 'down', confirm: true, confirmMessage: composeDownConfirmMessage(projectName), confirmSeverity: 'high' },
       { key: 'r', label: 'Restart', actionType: 'restart' },
       { key: 'S', label: 'Stop', actionType: 'stop' },
       { key: 'c', label: 'Copy Logs', actionType: 'copyLogs' },
