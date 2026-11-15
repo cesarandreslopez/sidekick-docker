@@ -2,8 +2,9 @@ import { summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { stateIcon, stateColor, truncate, formatPorts, formatBytes, formatMemory, colorizeLogEntry, escapeHtml, escapeAttr, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline, renderSeveritySparkline, renderSeverityBadges } from '../formatters';
-import { filterLine, LogTemplateEngine } from 'sidekick-docker-shared/log';
+import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, escapeHtml, escapeAttr, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline, renderSeveritySparkline, renderSeverityBadges } from '../formatters';
+import { LogTemplateEngine } from 'sidekick-docker-shared/log';
+import { renderLogFilterBar, renderLogLines, NO_MATCHING_LOGS } from './logPane';
 
 
 function findContainer(id: string, snapshot: DashboardStateSnapshot): SerializedContainerInfo | undefined {
@@ -14,46 +15,13 @@ function renderSingleLogPane(containerId: string, state: WebviewState, logRoot: 
   const entries = state.logs.get(containerId);
   if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
 
-  const firstKey = `${entries[0]?.timestamp ?? ''}:${entries[0]?.stream ?? ''}:${entries[0]?.message ?? ''}`;
-  let html = `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeAttr(containerId)}" data-rendered-count="${entries.length}" data-first-key="${escapeAttr(firstKey)}">`;
-
   const counts = state.logSeverityCounts.get(containerId);
+  const lines = renderLogLines(entries, state);
+  let html = `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeAttr(containerId)}">`;
   html += `<div class="severity-counts" data-log-severity>${counts && counts.total > 0 ? renderSeverityBadges(counts) : ''}</div>`;
-
-  // Only show filter bar on primary pane
-  if (logRoot === 'container') {
-    html += `<div class="log-filter-bar">
-      <input type="text" id="log-filter-input" placeholder="Filter logs..." value="${escapeAttr(state.logFilterString)}" data-container-id="${escapeAttr(containerId)}" />
-      <button type="button" class="filter-mode" id="log-filter-mode" aria-label="Filter mode: ${state.logFilterMode}. Activate to toggle." title="Click to toggle">${state.logFilterMode}</button>
-      <button type="button" class="copy-logs-btn" id="copy-logs-btn" title="Copy logs to clipboard (c)">Copy</button>
-      <span class="match-count" data-log-match-count>`;
-  }
-
-  const query = state.logFilterString;
-  const mode = state.logFilterMode;
-  let filteredHtml = '';
-  let matchCount = 0;
-
-  if (query) {
-    for (const e of entries) {
-      const result = filterLine(e.message, query, mode);
-      if (result.matched) {
-        matchCount++;
-        filteredHtml += colorizeLogEntry(e, result.matches);
-      }
-    }
-    if (logRoot === 'container') html += `${matchCount} matches`;
-  } else {
-    for (const e of entries) {
-      filteredHtml += colorizeLogEntry(e);
-    }
-  }
-
-  if (logRoot === 'container') {
-    html += `</span></div>`;
-  }
-
-  html += `<div class="log-content" data-log-content>${filteredHtml || '<div style="padding:8px;color:var(--vscode-descriptionForeground)">No matching logs</div>'}</div>`;
+  // Only the primary pane has a filter bar; the filter applies to both.
+  if (logRoot === 'container') html += renderLogFilterBar(state, lines.matched);
+  html += `<div class="log-content" data-log-content>${lines.html || NO_MATCHING_LOGS}</div>`;
   html += `</div>`;
   return html;
 }
@@ -101,6 +69,10 @@ export const containersPanel: PanelDefinition = {
 
         const statsData = state.stats.get(item.id);
         if (!statsData || statsData.loading) {
+          // A failed or finished stream never delivers a sample: the stream
+          // status above says why, so stop spinning.
+          const stream = state.streamStates.get(`stats:${item.id}`);
+          if (stream && (stream.state === 'error' || stream.state === 'ended' || stream.state === 'empty')) return 'No stats available.';
           return '<span class="stats-spinner"></span> Loading stats...';
         }
         if (!statsData.stats) return 'No stats available.';
@@ -227,9 +199,12 @@ export const containersPanel: PanelDefinition = {
       render: (item: PanelItem, state: WebviewState): string => {
         const changes = state.containerChanges.get(item.id);
         if (!changes) return 'Loading filesystem changes...';
-        if (changes.length === 0) return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4C2}</div><div class="empty-title">No filesystem changes</div><div class="empty-subtitle">No changes detected in the container\'s filesystem</div></div>';
+        // Re-read each time the tab is shown or refreshed; say how fresh it is.
+        const at = state.containerChangesAt.get(item.id);
+        const asOf = at ? ` \u00B7 as of ${new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : '';
+        if (changes.length === 0) return `<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4C2}</div><div class="empty-title">No filesystem changes</div><div class="empty-subtitle">No changes detected in the container's filesystem${escapeHtml(asOf)}</div></div>`;
 
-        let html = `<div style="font-size:12px;color:var(--vscode-descriptionForeground);margin-bottom:6px;">Filesystem Changes (${changes.length} files)</div>`;
+        let html = `<div style="font-size:12px;color:var(--vscode-descriptionForeground);margin-bottom:6px;">Filesystem Changes (${changes.length} files)${escapeHtml(asOf)}</div>`;
         for (const c of changes) {
           const kind = c.kind === 'added' ? 'A' : c.kind === 'deleted' ? 'D' : 'C';
           const cls = `change-${c.kind}`;
@@ -271,7 +246,7 @@ export const containersPanel: PanelDefinition = {
   getItems(snapshot: DashboardStateSnapshot): PanelItem[] {
     return snapshot.containers.map(c => ({
       id: c.id,
-      label: truncate(c.name, 22),
+      label: c.name,
       icon: stateIcon(c.state),
       iconColor: stateColor(c.state),
       sortKey: c.state === 'running' ? 0 : 1,

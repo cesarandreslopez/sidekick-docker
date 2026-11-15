@@ -70,7 +70,7 @@ export class ContainerWatcherService {
       const ping = await this.client.pingDetailed();
       if (this.disposed) return false;
       if (!ping.ok) {
-        this.setConnected(false, explainDockerUnreachable(ping.error, describeDockerEndpoint(this.endpoint), POINT_ELSEWHERE));
+        this.setConnected(false, this.explain(ping.error));
         return false;
       }
 
@@ -99,9 +99,14 @@ export class ContainerWatcherService {
       return true;
     } catch (err) {
       if (this.disposed) return false;
-      this.setConnected(false, errorMessage(err));
+      this.setConnected(false, this.explain(err));
       return false;
     }
+  }
+
+  /** "Docker socket not found at …", "Permission denied on …" — not a raw ENOENT. */
+  private explain(err: unknown): string {
+    return explainDockerUnreachable(err, describeDockerEndpoint(this.endpoint), POINT_ELSEWHERE);
   }
 
   private refresh(): Promise<void> {
@@ -113,9 +118,19 @@ export class ContainerWatcherService {
     if (change.cause === 'refresh') {
       const snapshot = this.store.getSnapshot();
       if (!snapshot.daemonConnected) {
-        this.setConnected(false, snapshot.resourceErrors.containers);
-        this.callbacks.onContainersChanged([], false);
         this.stopWatcher();
+        if (this.connectPromise) {
+          // Inside connect(): the ping just succeeded, so the listing's own
+          // error is the best reason there is.
+          this.setConnected(false, snapshot.resourceErrors.containers);
+        } else {
+          // The daemon went away mid-session. The listing only has a raw
+          // message ("connect ENOENT …"); ping again for the explained reason
+          // (no socket, permission, refused) that replaces the tree's message.
+          this.connected = false;
+          void this.tryConnect();
+        }
+        this.callbacks.onContainersChanged([], false);
         this.startReconnectPolling();
         return;
       }
@@ -176,8 +191,19 @@ export class ContainerWatcherService {
     return this.reason;
   }
 
+  /**
+   * Refresh now ("Retry Connection" and the refresh button). While
+   * disconnected this is a reconnect, whose ping explains the failure — a bare
+   * refresh replaced the explanation with the listing's raw error.
+   */
   async forceRefresh(): Promise<void> {
+    if (!this.connected) {
+      await this.tryConnect();
+      return;
+    }
     await this.refresh();
+    // A failed refresh starts a reconnect; let the caller see how it ends.
+    await this.connectPromise;
   }
 
   dispose(): void {

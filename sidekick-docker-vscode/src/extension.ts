@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 import { DockerDashboardProvider } from './providers/DockerDashboardProvider';
-import { ContainerTreeProvider, ContainerTreeItem } from './providers/ContainerTreeProvider';
+import { ContainerTreeProvider, ContainerTreeItem, containerIdFromArg, openOptionsFromArg } from './providers/ContainerTreeProvider';
 import { ACTION_META, runDockerAction } from './providers/actionRegistry';
 import { ContainerWatcherService } from './services/ContainerWatcherService';
-import { getSettings, onSettingsChanged } from './settings';
+import { getSettings, onSettingsChanged, warnIfInvalidEndpoint } from './settings';
 import type { SidekickSettings } from './settings';
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { canStart, composeDownConfirmMessage, describeDockerEndpoint, removeContainerConfirmMessage } from 'sidekick-docker-shared';
+import { actionFailedText, canStart, canStop, composeDownConfirmMessage, describeDockerEndpoint, removeContainerConfirmMessage } from 'sidekick-docker-shared';
 import type { ComposeProjectGroupItem } from './providers/ContainerTreeProvider';
 
 let dashboardProvider: DockerDashboardProvider | undefined;
@@ -14,10 +14,23 @@ let watcherService: ContainerWatcherService | undefined;
 let treeProvider: ContainerTreeProvider | undefined;
 let treeView: vscode.TreeView<unknown> | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
+/** Whether the tree's "Connecting…" welcome is still showing. */
+let connecting = true;
+
+/**
+ * End the "Connecting…" state. Only once containers arrive (or the connect
+ * fails): clearing it on the connection notice alone flashed "No containers
+ * found" before the first listing.
+ */
+function connectingDone(): void {
+  if (!connecting) return;
+  connecting = false;
+  void vscode.commands.executeCommand('setContext', 'sidekickDocker.connecting', false);
+}
 
 async function withDockerClient(
   action: (client: InstanceType<typeof import('sidekick-docker-shared').DockerClient>) => Promise<void>,
-  errorPrefix: string,
+  failureText: (message: string) => string,
 ): Promise<void> {
   let client: InstanceType<typeof import('sidekick-docker-shared').DockerClient> | undefined;
   try {
@@ -27,7 +40,7 @@ async function withDockerClient(
     await watcherService?.forceRefresh();
   } catch (err: unknown) {
     const { errorMessage } = await import('sidekick-docker-shared');
-    vscode.window.showErrorMessage(`${errorPrefix}: ${errorMessage(err)}`);
+    vscode.window.showErrorMessage(failureText(errorMessage(err)));
   } finally {
     client?.dispose();
   }
@@ -47,18 +60,20 @@ async function runContainerCommand(
   await withDockerClient(async (client) => {
     await runDockerAction(meta, name, () => action(client));
     vscode.window.showInformationMessage(meta.successMessage(name));
-  }, `Failed to ${actionType} container`);
+  }, message => actionFailedText(actionType, name, message));
 }
 
 function createWatcherService(settings: SidekickSettings): ContainerWatcherService {
   return new ContainerWatcherService({
     onContainersChanged: (containers, connected) => {
       treeProvider!.update(containers, connected);
+      connectingDone();
       updateBadge(containers);
       updateStatusBar(containers, connected);
     },
     onConnectionChanged: (connected, reason) => {
-      void vscode.commands.executeCommand('setContext', 'sidekickDocker.connecting', false);
+      // A failed connect never lists containers, so it ends "Connecting…" here.
+      if (!connected) connectingDone();
       // viewsWelcome text is static; the tree's message can say *why*.
       if (treeView) treeView.message = connected ? undefined : reason;
       if (!connected) {
@@ -97,6 +112,7 @@ async function pickContainer(
 
 export function activate(context: vscode.ExtensionContext): void {
   const settings = getSettings();
+  warnIfInvalidEndpoint();
 
   // ── Dashboard provider ──────────────────────────────────────────
   dashboardProvider = new DockerDashboardProvider(context.extensionUri);
@@ -121,6 +137,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ── Container watcher ───────────────────────────────────────────
   // Until the first connect settles, show "Connecting…" rather than "No containers found".
+  connecting = true;
   void vscode.commands.executeCommand('setContext', 'sidekickDocker.connecting', true);
   watcherService = createWatcherService(settings);
   watcherService.start();
@@ -129,6 +146,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // ── Settings changes ────────────────────────────────────────────
   context.subscriptions.push(
     onSettingsChanged((next, affected) => {
+      if (affected.has('clientOptions')) warnIfInvalidEndpoint();
       if (affected.has('clientOptions') || affected.has('refreshIntervalMs')) {
         watcherService?.dispose();
         watcherService = createWatcherService(next);
@@ -150,6 +168,7 @@ export function activate(context: vscode.ExtensionContext): void {
   // effective endpoint and enables compose, so rebuild both surfaces.
   context.subscriptions.push(
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
+      warnIfInvalidEndpoint();
       watcherService?.dispose();
       watcherService = createWatcherService(getSettings());
       watcherService.start();
@@ -177,11 +196,15 @@ export function activate(context: vscode.ExtensionContext): void {
       dashboardProvider!.open(undefined, vscode.ViewColumn.Beside);
     }),
 
-    vscode.commands.registerCommand('sidekick-docker.openContainerInDashboard', (arg?: ContainerTreeItem | string) => {
-      const containerId = typeof arg === 'string' ? arg : arg?.container.id;
+    vscode.commands.registerCommand('sidekick-docker.openContainerInDashboard', (arg?: unknown, options?: unknown) => {
+      const containerId = containerIdFromArg(arg);
       if (!containerId) return;
-      dashboardProvider!.open(containerId);
+      dashboardProvider!.open(containerId, undefined, openOptionsFromArg(options).preserveFocus);
     }),
+
+    // F5 while the dashboard is the active editor (package.json keybinding).
+    // Keeps F5 from also starting the debugger there.
+    vscode.commands.registerCommand('sidekick-docker.refreshDashboard', () => dashboardProvider?.refreshFromKeybinding()),
 
     vscode.commands.registerCommand('sidekick-docker.refreshContainers', () => {
       watcherService?.forceRefresh();
@@ -292,13 +315,14 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('sidekick-docker.quickStop', async () => {
       const containers = watcherService?.getContainers() ?? [];
-      const running = containers.filter(c => c.state === 'running');
-      if (running.length === 0) {
-        vscode.window.showInformationMessage('No running containers to stop.');
+      // Paused and restarting containers can be stopped too (shared gating).
+      const stoppable = containers.filter(c => canStop(c.state));
+      if (stoppable.length === 0) {
+        vscode.window.showInformationMessage('No running, paused or restarting containers to stop.');
         return;
       }
       const picked = await vscode.window.showQuickPick(
-        running.map(c => ({ label: c.name, description: c.image, detail: c.status, containerId: c.id })),
+        stoppable.map(c => ({ label: c.name, description: c.image, detail: c.status, containerId: c.id })),
         { placeHolder: 'Select a container to stop' }
       );
       if (!picked) return;
@@ -376,7 +400,7 @@ async function runComposeCommand(action: 'up' | 'down' | 'restart', item?: Compo
     });
     vscode.window.showInformationMessage(meta.successMessage(name));
   } catch (err: unknown) {
-    vscode.window.showErrorMessage(`Compose ${action} ${name} failed: ${shared.errorMessage(err)}`);
+    vscode.window.showErrorMessage(actionFailedText(action, name, shared.errorMessage(err)));
   } finally {
     await watcherService?.forceRefresh();
   }

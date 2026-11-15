@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedNetworkInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { truncate, escapeHtml, colorizeId, colorizeBool, colorizeNetworkContainer, renderKvGrid } from '../formatters';
+import { escapeHtml, colorizeId, colorizeBool, colorizeNetworkContainer, renderKvGrid } from '../formatters';
 import { pruneConfirmFor, removeNetworkConfirmMessage } from 'sidekick-docker-shared/formatters';
 
 function findNetwork(id: string, snapshot: DashboardStateSnapshot): SerializedNetworkInfo | undefined {
@@ -47,6 +47,12 @@ export const networksPanel: PanelDefinition = {
             html += `<div style="padding-left:8px;">${colorizeNetworkContainer(c.containerName, c.containerId)}${addr}</div>`;
           }
         }
+        // Labels arrive on the listing (compose project, driver options); the TUI shows them.
+        const labelKeys = Object.keys(net.labels).sort();
+        if (labelKeys.length > 0) {
+          html += `<div class="detail-section">Labels (${labelKeys.length})</div>`;
+          html += renderKvGrid(labelKeys.map((k): [string, string] => [k, escapeHtml(net.labels[k])]));
+        }
         return html;
       },
     },
@@ -55,7 +61,7 @@ export const networksPanel: PanelDefinition = {
   getItems(snapshot: DashboardStateSnapshot): PanelItem[] {
     return snapshot.networks.map(net => ({
       id: net.id,
-      label: truncate(net.name, 20),
+      label: net.name,
       icon: net.isDefault ? '\u25C6' : '\u25C7',
       iconColor: net.isDefault ? 'var(--vscode-foreground)' : 'var(--vscode-descriptionForeground)',
       sortKey: net.isDefault ? 0 : 1,

@@ -1,7 +1,7 @@
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedVolumeInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
-import { truncate, escapeHtml, colorizeBool, renderKvGrid } from '../formatters';
+import { escapeHtml, colorizeBool, renderKvGrid } from '../formatters';
 import { pruneConfirmFor, removeVolumeConfirmMessage } from 'sidekick-docker-shared/formatters';
 
 function findVolume(name: string, snapshot: DashboardStateSnapshot): SerializedVolumeInfo | undefined {
@@ -42,7 +42,7 @@ export const volumesPanel: PanelDefinition = {
   getItems(snapshot: DashboardStateSnapshot): PanelItem[] {
     return snapshot.volumes.map(vol => ({
       id: vol.name,
-      label: truncate(vol.name, 26),
+      label: vol.name,
       icon: vol.isInUse ? '\u25CF' : '\u25CB',
       iconColor: vol.isInUse ? 'var(--vscode-foreground)' : 'var(--vscode-descriptionForeground)',
       sortKey: vol.isInUse ? 0 : 1,

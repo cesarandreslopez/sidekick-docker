@@ -368,6 +368,8 @@ export class DockerService {
       daemonConnected: s.daemonConnected,
       resourceErrors: { ...s.resourceErrors },
       lastRefresh: s.lastRefresh?.toISOString() ?? null,
+      // Compose is refused in an untrusted workspace; the webview hides its actions.
+      composeAllowed: this.isTrusted,
     };
   }
 

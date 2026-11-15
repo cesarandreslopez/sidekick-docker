@@ -22,7 +22,10 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       --tab-height: 36px;
       --status-height: 28px;
       --detail-tab-height: 30px;
-      /* Single info accent — passes contrast on both default themes. */
+      /*
+       * Info accent for syntax tokens, borders and bars. Not for body text: in
+       * Light+ it is about 3.6:1 on white, below the 4.5:1 text minimum.
+       */
       --sd-info: var(--vscode-editorInfo-foreground, #3794ff);
     }
     :focus-visible {
@@ -66,9 +69,15 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       background: var(--vscode-tab-inactiveBackground, var(--vscode-editor-background));
       border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-editorGroup-border));
       flex-shrink: 0;
-      overflow: hidden;
+      /* Scroll rather than clip the panel tabs in a narrow editor. */
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
     }
+    #tab-bar::-webkit-scrollbar,
+    #detail-tab-bar::-webkit-scrollbar { display: none; }
     #tab-bar .tab {
+      flex-shrink: 0;
       padding: 0 14px;
       height: 100%;
       display: flex;
@@ -104,6 +113,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       text-overflow: ellipsis;
       white-space: nowrap;
       max-width: 50%;
+      min-width: 0;
     }
 
     /* ─── Main area ────────────────────────────────────────────── */
@@ -146,6 +156,12 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       flex: 1;
       min-width: 0;
     }
+    /* Middle truncation: the head ellipsizes, the tail (an image tag) stays. */
+    #side-list .side-item .side-label.split { display: flex; }
+    #side-list .side-item .side-label-head { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+    #side-list .side-item .side-label-tail { flex-shrink: 0; }
+    /* A compose service under its project (leading spaces collapsed under nowrap). */
+    #side-list .side-item.indented { padding-left: 28px; }
     #side-list .side-item .side-badge {
       margin-left: auto;
       padding-left: 8px;
@@ -260,8 +276,13 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       flex-shrink: 0;
       padding: 0 8px;
       gap: 4px;
+      overflow-x: auto;
+      overflow-y: hidden;
+      scrollbar-width: none;
     }
     #detail-tab-bar .detail-tab {
+      flex-shrink: 0;
+      white-space: nowrap;
       padding: 2px 10px;
       cursor: pointer;
       font-size: 11px;
@@ -285,6 +306,12 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
       font-size: var(--vscode-editor-font-size, 13px);
       line-height: 1.5;
+      /*
+       * The log patcher drops lines from the top of a full buffer and moves
+       * scrollTop by exactly their height; browser scroll anchoring would move
+       * it a second time.
+       */
+      overflow-anchor: none;
     }
     #detail-content.fade-in {
       animation: fadeIn 0.15s ease;
@@ -325,6 +352,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .log-compare-pane .log-shell {
       flex: 1;
       overflow-y: auto;
+      overflow-anchor: none;
     }
 
     /* ─── Custom scrollbars ──────────────────────────────────────── */
@@ -346,6 +374,9 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       display: flex;
       padding: 0 4px;
     }
+    /* The message is one flex item, so the spaces between its tokens survive. */
+    .log-msg { flex: 1; min-width: 0; }
+    .log-no-match { padding: 8px; color: var(--vscode-descriptionForeground); white-space: normal; }
     .log-line:nth-child(even) {
       background: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.06));
     }
@@ -412,6 +443,13 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       gap: 8px;
       padding: 4px 8px;
       border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
+      /* Stays on screen while you read older lines, so f never has to scroll. */
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: var(--vscode-editor-background);
+      /* Paints over the scroller's top padding, should a line show through it. */
+      box-shadow: 0 -10px 0 var(--vscode-editor-background);
     }
     .log-filter-bar input {
       flex: 1;
@@ -467,7 +505,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       background: var(--vscode-list-hoverBackground);
     }
     .pattern-count {
-      color: var(--vscode-editorWarning-foreground, #cca700);
+      color: var(--vscode-foreground);
       font-weight: 600;
       min-width: 40px;
       text-align: right;
@@ -590,12 +628,19 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
     #status-bar .hints {
       flex-grow: 1;
+      min-width: 0;
       opacity: 0.8;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
       font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
       font-size: 11px;
+    }
+    /* Outside .hints, so the ellipsis never clips the buttons. */
+    #status-bar .hint-chips {
+      display: flex;
+      flex-shrink: 0;
+      white-space: nowrap;
     }
     #status-bar .filter-indicator {
       color: var(--vscode-statusBarItem-warningForeground, var(--vscode-editorWarning-foreground, #cca700));
@@ -632,7 +677,8 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       align-items: baseline;
     }
     .kv-key {
-      color: var(--sd-info);
+      color: var(--vscode-foreground);
+      font-weight: 600;
       white-space: nowrap;
     }
     .kv-value {
@@ -650,9 +696,9 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       align-items: baseline;
     }
     .env-grid-key {
-      color: var(--sd-info);
+      color: var(--vscode-foreground);
       white-space: nowrap;
-      font-weight: 500;
+      font-weight: 600;
     }
     .env-grid-value {
       word-break: break-all;
@@ -745,16 +791,13 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
 
     /* ─── Filter overlay ───────────────────────────────────────── */
+    /* In normal flow under the tab bar: it used to float over the first row and the detail tabs. */
     #filter-overlay {
       display: none;
-      position: fixed;
-      top: var(--tab-height);
-      left: 0;
-      right: 0;
+      flex-shrink: 0;
       background: var(--vscode-editor-background);
       border-bottom: 1px solid var(--vscode-focusBorder);
       padding: 6px 14px;
-      z-index: 90;
     }
     #filter-overlay.visible { display: flex; align-items: center; gap: 8px; }
     #filter-overlay .label { color: var(--vscode-descriptionForeground); font-size: 12px; }
@@ -881,6 +924,11 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     #main-area.layout-normal #side-list { width: 250px; min-width: 250px; }
     #main-area.layout-wide #side-list { width: 340px; min-width: 340px; }
     #main-area.layout-expanded #side-list { display: none; }
+    /* Narrow editors: the fixed list width left the details a sliver. */
+    @media (max-width: 600px) {
+      #main-area.layout-normal #side-list,
+      #main-area.layout-wide #side-list { width: 40%; min-width: 140px; }
+    }
 
     /* ─── Overlay panels (sort, help, version) ──────────────────── */
     .overlay-panel {
@@ -898,6 +946,20 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       transition: opacity 0.15s ease, visibility 0.15s ease;
     }
     .overlay-panel.visible { visibility: visible; opacity: 1; }
+    /* A solid panel over the scrim, scrollable when taller than the pane. */
+    .overlay-panel .overlay-body {
+      background: var(--vscode-editorWidget-background, var(--vscode-editor-background));
+      color: var(--vscode-editorWidget-foreground, var(--vscode-foreground));
+      border: 1px solid var(--vscode-editorWidget-border, var(--vscode-panel-border));
+      border-radius: 6px;
+      box-shadow: 0 2px 8px var(--vscode-widget-shadow, rgba(0,0,0,0.3));
+      padding: 14px 20px;
+      max-height: calc(100vh - 32px);
+      max-width: calc(100vw - 32px);
+      overflow: auto;
+    }
+    .overlay-panel .overlay-body:focus { outline: none; }
+    .overlay-panel .overlay-body.centered { display: flex; flex-direction: column; align-items: center; }
     .overlay-panel .overlay-title {
       font-size: 14px;
       font-weight: 600;
@@ -907,10 +969,10 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .overlay-panel .overlay-section {
       font-size: 12px;
       font-weight: 600;
-      color: var(--vscode-editorWarning-foreground, #cca700);
+      color: var(--vscode-foreground);
       margin-top: 12px;
       margin-bottom: 4px;
-      border-bottom: 1px solid var(--vscode-panel-border);
+      border-bottom: 1px solid var(--vscode-editorWarning-foreground, #cca700);
       padding-bottom: 2px;
     }
     .overlay-panel .overlay-hint {
@@ -938,15 +1000,27 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       color: var(--vscode-list-activeSelectionForeground);
     }
     .sort-item.current {
-      color: var(--vscode-editorWarning-foreground, #cca700);
+      font-weight: 600;
+      box-shadow: inset 2px 0 0 var(--vscode-editorWarning-foreground, #cca700);
     }
 
+    /* Text in the foreground colour; the warning colour marks the edge (contrast). */
     #resource-warning, .load-error, .stream-status {
       padding: 8px 12px;
-      color: var(--vscode-editorWarning-foreground, #cca700);
+      color: var(--vscode-foreground);
+      border-left: 3px solid var(--vscode-editorWarning-foreground, #cca700);
       overflow-wrap: anywhere;
       font-size: 12px;
       flex-shrink: 0;
+      font-family: var(--vscode-font-family, sans-serif);
+    }
+    .detail-note {
+      margin-top: 10px;
+      padding: 4px 8px;
+      border-left: 3px solid var(--vscode-editorWarning-foreground, #cca700);
+      color: var(--vscode-foreground);
+      font-family: var(--vscode-font-family, sans-serif);
+      font-size: 12px;
     }
     #resource-warning button, .load-error button, .stream-status button {
       background: var(--vscode-button-secondaryBackground);
@@ -973,8 +1047,11 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       text-align: center;
       font-family: var(--vscode-editor-font-family, monospace);
     }
+    /* White on the error colour was about 2.5:1; outline it instead. */
     .help-key.destructive {
-      background: var(--vscode-errorForeground, #f85149);
+      background: transparent;
+      color: var(--vscode-errorForeground, #f85149);
+      box-shadow: inset 0 0 0 1px var(--vscode-errorForeground, #f85149);
     }
     .help-label {
       color: var(--vscode-descriptionForeground);
@@ -986,7 +1063,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     /* ─── Version overlay ───────────────────────────────────────── */
     .version-tagline {
       font-size: 13px;
-      color: var(--sd-info);
+      color: var(--vscode-foreground);
       font-weight: 600;
     }
     .version-divider {
@@ -1062,6 +1139,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     .layer-size.zero { color: var(--vscode-descriptionForeground); opacity: 0.5; }
     .layer-cmd { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .layer-summary { padding: 8px 4px; font-size: 12px; color: var(--vscode-descriptionForeground); }
+    .layer-comment { padding: 0 4px 2px 110px; font-size: 11px; color: var(--vscode-descriptionForeground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
     /* ─── Detail sub-sections (volume users, container labels) ───── */
     .detail-section {
@@ -1141,6 +1219,10 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
 </head>
 <body>
   <div id="tab-bar"></div>
+  <div id="filter-overlay">
+    <span class="label">Filter:</span>
+    <input type="text" id="filter-input" placeholder="Type to filter..." aria-label="Filter items">
+  </div>
   <div id="main-area">
     <div id="side-list"></div>
     <div id="detail-pane">
@@ -1160,17 +1242,13 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
   </div>
 
   <div id="confirm-overlay">
-    <div class="dialog" role="alertdialog" aria-modal="true" aria-label="Confirm action">
-      <div class="message"></div>
+    <div class="dialog" role="alertdialog" aria-modal="true" aria-label="Confirm action" aria-describedby="confirm-message">
+      <div class="message" id="confirm-message"></div>
       <div class="buttons">
         <button class="btn-confirm">Confirm (y)</button>
         <button class="btn-cancel">Cancel (n)</button>
       </div>
     </div>
-  </div>
-  <div id="filter-overlay">
-    <span class="label">Filter:</span>
-    <input type="text" id="filter-input" placeholder="Type to filter..." />
   </div>
   <div id="context-menu" role="menu" aria-label="Actions" tabindex="-1"></div>
   <div id="sort-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Sort options"></div>

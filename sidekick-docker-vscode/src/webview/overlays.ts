@@ -10,6 +10,10 @@ export const GLOBAL_KEYBINDINGS = [
   { key: '1-5', label: 'Switch panel' },
   { key: 'j/k', label: 'Navigate / scroll' },
   { key: 'g/G', label: 'Jump to first / last' },
+  { key: 'Enter, l/\u2192', label: 'Focus details' },
+  { key: 'h/\u2190', label: 'Back to the list' },
+  { key: 'Esc', label: 'Close / clear filter / back to the list' },
+  { key: 'y/n', label: 'Confirm / cancel a prompt' },
   { key: 'Tab / Shift+Tab', label: 'Next / previous control' },
   { key: '[/]', label: 'Cycle detail tabs' },
   { key: 'z', label: 'Cycle layout (Normal/Wide/Expanded)' },
@@ -44,7 +48,47 @@ export interface OverlayDeps {
 }
 
 let deps: OverlayDeps;
-let previouslyFocused: Element | null = null;
+
+/**
+ * Where focus was before an overlay opened. Background renders rebuild rows
+ * and status-bar chips, so the element itself may be gone by the time the
+ * overlay closes: remember an identifying attribute to find its replacement.
+ */
+interface FocusMemo { el: Element | null; attr?: string; value?: string }
+const FOCUS_KEYS = ['data-menu-id', 'data-pin-id', 'data-hint-action', 'data-panel', 'data-tab', 'id'];
+let previouslyFocused: FocusMemo | null = null;
+/** What opened the context menu (its ⋯ button, the list), to return to on close. */
+let menuTrigger: FocusMemo | null = null;
+
+function rememberFocus(): FocusMemo {
+  const el = document.activeElement;
+  const attr = el instanceof HTMLElement ? FOCUS_KEYS.find(key => el.hasAttribute(key)) : undefined;
+  return { el, attr, value: attr ? el?.getAttribute(attr) ?? undefined : undefined };
+}
+
+/** Focus the remembered element, else its re-rendered twin, else the pane the user was in. */
+function returnFocus(memo: FocusMemo | null): void {
+  if (!memo) return;
+  const { el, attr, value } = memo;
+  if (el instanceof HTMLElement && el !== document.body && document.contains(el)) {
+    el.focus({ preventScroll: true });
+    return;
+  }
+  if (attr && value !== undefined) {
+    const twin = [...document.querySelectorAll<HTMLElement>(`[${attr}]`)].find(candidate => candidate.getAttribute(attr) === value);
+    if (twin) {
+      twin.focus({ preventScroll: true });
+      return;
+    }
+  }
+  document.getElementById(deps.state.focusTarget === 'detail' ? 'detail-content' : 'side-list')?.focus({ preventScroll: true });
+}
+
+function setMenuExpanded(itemId: string | null): void {
+  document.querySelectorAll<HTMLElement>('[data-menu-id]').forEach(button => {
+    button.setAttribute('aria-expanded', String(button.getAttribute('data-menu-id') === itemId));
+  });
+}
 
 // ─── DOM refs (owned by this module) ─────────────────────────────────
 const $confirmOverlay = document.getElementById('confirm-overlay')!;
@@ -70,7 +114,8 @@ export function initOverlays(d: OverlayDeps): void {
     const last = focusable[focusable.length - 1];
     if (!first) {
       event.preventDefault();
-      modal.focus();
+      // The help body is the scrollable part; keep focus there so arrows scroll it.
+      (modal.querySelector<HTMLElement>('.overlay-body[tabindex]') ?? modal).focus();
     } else if (!modal.contains(document.activeElement) || document.activeElement === modal
       || (event.shiftKey && document.activeElement === first) || (!event.shiftKey && document.activeElement === last)) {
       event.preventDefault();
@@ -141,23 +186,21 @@ function activeModal(): HTMLElement | null {
     .find(el => el.classList.contains('visible')) ?? null;
 }
 
-function focusOverlay(el: HTMLElement): void {
+function focusOverlay(el: HTMLElement, target: HTMLElement = el): void {
   // These are render functions, called on every render while the overlay is
   // open — so this must be idempotent, or it re-captures previouslyFocused as
   // the overlay itself and restore becomes a no-op.
   if (el.contains(document.activeElement)) return;
-  if (!previouslyFocused) previouslyFocused = document.activeElement;
+  if (!previouslyFocused) previouslyFocused = rememberFocus();
   el.setAttribute('tabindex', '-1');
-  el.focus({ preventScroll: true });
+  target.focus({ preventScroll: true });
 }
 
 /** Restore focus to wherever it was before the overlay opened. */
 function restoreFocus(): void {
   // Also called from render functions on every hidden render, so it must
   // no-op once focus has already been handed back.
-  if (previouslyFocused instanceof HTMLElement && document.contains(previouslyFocused)) {
-    previouslyFocused.focus();
-  }
+  returnFocus(previouslyFocused);
   previouslyFocused = null;
 }
 
@@ -170,7 +213,7 @@ export function showConfirm(message: string, callback: () => void, severity: Con
   $confirmOverlay.classList.add('visible', `severity-${severity}`);
   // Record focus and default to the safe button; Enter activates the
   // focused button, so confirming requires y or a deliberate focus move.
-  previouslyFocused = document.activeElement;
+  previouslyFocused = rememberFocus();
   $confirmNo.focus();
 }
 
@@ -178,17 +221,12 @@ export function hideConfirm(): void {
   deps.state.confirmVisible = false;
   deps.state.confirmCallback = null;
   $confirmOverlay.classList.remove('visible');
-  if (previouslyFocused instanceof HTMLElement && document.contains(previouslyFocused)) {
-    previouslyFocused.focus();
-  } else {
-    (document.activeElement as HTMLElement | null)?.blur();
-  }
-  previouslyFocused = null;
+  restoreFocus();
 }
 
 // ─── Filter overlay ──────────────────────────────────────────────────
 export function showFilter(): void {
-  previouslyFocused = document.activeElement;
+  previouslyFocused = rememberFocus();
   deps.state.filterVisible = true;
   $filterOverlay.classList.add('visible');
   $filterInput.value = deps.state.filterString;
@@ -209,9 +247,11 @@ export function showContextMenu(items: PanelItem[], anchor?: { x: number; y: num
   const actions = deps.getPanel().getActions(item, deps.state.snapshot);
   if (actions.length === 0) return;
 
+  if (!$contextMenu.contains(document.activeElement)) menuTrigger = rememberFocus();
   deps.state.contextMenuVisible = true;
   deps.state.contextMenuIndex = 0;
   renderContextMenu(actions);
+  setMenuExpanded(item.id);
 
   // Anchor at the pointer, or at the selected row for keyboard invocation.
   let x: number;
@@ -244,7 +284,11 @@ export function showContextMenu(items: PanelItem[], anchor?: { x: number; y: num
 export function hideContextMenu(): void {
   deps.state.contextMenuVisible = false;
   $contextMenu.classList.remove('visible');
-  if (document.activeElement === $contextMenu) document.getElementById('side-list')?.focus();
+  setMenuExpanded(null);
+  // Back to the ⋯ button (or list) that opened it — unless the user already
+  // moved focus elsewhere, e.g. by clicking outside.
+  if ($contextMenu.contains(document.activeElement)) returnFocus(menuTrigger);
+  menuTrigger = null;
 }
 
 export function renderContextMenu(actions: ActionDefinition[]): void {
@@ -288,7 +332,7 @@ export function renderSortOverlay(): void {
   }
   html += '<div class="overlay-hint">j/k select  Enter apply  R reverse  Esc close</div>';
   focusOverlay($sortOverlay);
-  $sortOverlay.innerHTML = html;
+  $sortOverlay.innerHTML = `<div class="overlay-body">${html}</div>`;
   $sortOverlay.classList.add('visible');
   $sortOverlay.querySelector<HTMLElement>('.sort-item.selected')?.focus();
 }
@@ -325,9 +369,10 @@ export function renderHelpOverlay(): void {
   }
 
   html += '<div class="overlay-hint">Press ? or Esc to close</div>';
-  $helpOverlay.innerHTML = html;
+  // A solid, scrollable body: the list is taller than a short editor pane.
+  $helpOverlay.innerHTML = `<div class="overlay-body" tabindex="-1">${html}</div>`;
   $helpOverlay.classList.add('visible');
-  focusOverlay($helpOverlay);
+  focusOverlay($helpOverlay, $helpOverlay.querySelector<HTMLElement>('.overlay-body') ?? $helpOverlay);
 }
 
 // ─── Version overlay ─────────────────────────────────────────────────
@@ -340,14 +385,14 @@ export function renderVersionOverlay(): void {
     }
     return;
   }
-  $versionOverlay.innerHTML = `
+  $versionOverlay.innerHTML = `<div class="overlay-body centered">
     <div class="overlay-title">\u26A1 SIDEKICK</div>
     <div class="version-tagline">Docker v${__VERSION__}</div>
     <div class="version-divider"></div>
     <div class="version-phrase">"${escapeHtml(state.phrase)}"</div>
     <div class="version-divider"></div>
     <div class="overlay-hint">Press V or Esc to close</div>
-  `;
+  </div>`;
   $versionOverlay.classList.add('visible');
   focusOverlay($versionOverlay);
 }

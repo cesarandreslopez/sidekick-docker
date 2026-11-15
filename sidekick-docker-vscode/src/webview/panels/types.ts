@@ -3,7 +3,15 @@ import type { WebviewState } from '../state';
 
 export interface PanelItem {
   id: string;
+  /** Full text; CSS ellipsizes it. */
   label: string;
+  /**
+   * Kept visible after `label` when the row is too narrow (an image's `:tag`),
+   * so long references truncate in the middle instead of losing the tag.
+   */
+  labelTail?: string;
+  /** Rendered indented under the previous row (a compose service under its project). */
+  indent?: boolean;
   icon: string;
   iconColor: string;
   sortKey: number;

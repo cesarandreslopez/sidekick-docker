@@ -111,18 +111,20 @@ export function colorizeLogEntry(entry: SerializedLogEntry, filterMatches?: Filt
   const ts = entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
   const tsHtml = ts ? `<span class="log-timestamp">${escapeHtml(ts)}</span> ` : '';
 
+  let msgHtml: string;
   if (entry.stream === 'stderr') {
-    const msgHtml = filterMatches && filterMatches.length > 0
+    msgHtml = filterMatches && filterMatches.length > 0
       ? highlightMatchesHtml(entry.message, filterMatches, 'log-stderr')
       : `<span class="log-stderr">${escapeHtml(entry.message)}</span>`;
-    return `<span class="log-line">${tsHtml}${msgHtml}</span>`;
+  } else if (filterMatches && filterMatches.length > 0) {
+    msgHtml = highlightMatchesHtml(entry.message, filterMatches);
+  } else {
+    msgHtml = colorizeTokensHtml(entry.message);
   }
-
-  if (filterMatches && filterMatches.length > 0) {
-    return `<span class="log-line">${tsHtml}${highlightMatchesHtml(entry.message, filterMatches)}</span>`;
-  }
-
-  return `<span class="log-line">${tsHtml}${colorizeTokensHtml(entry.message)}</span>`;
+  // One message element on every path: .log-line is a flex row, and flex
+  // layout drops whitespace-only text between token spans ("ERROR 500"
+  // rendered as "ERROR500").
+  return `<span class="log-line">${tsHtml}<span class="log-msg">${msgHtml}</span></span>`;
 }
 
 // Detail panel colorize helpers
@@ -237,9 +239,9 @@ export function renderSeverityBadges(counts: { error: number; warn: number; info
  * Screen-reader name for a side-list row. State used to be carried only by
  * the icon's colour and glyph, so "web" read the same running or stopped.
  */
-export function optionAccessibleName(item: { label: string; group?: string; badge?: string; health?: string }, pinned = false): string {
+export function optionAccessibleName(item: { label: string; labelTail?: string; group?: string; badge?: string; health?: string }, pinned = false): string {
   return [
-    item.label,
+    item.label + (item.labelTail ?? ''),
     item.group?.toLowerCase(),
     item.badge,
     item.health ? `health ${item.health}` : '',
@@ -274,7 +276,7 @@ export function buildStatusHints(opts: {
   const parts = opts.actions.map(a => `${a.key}:${a.label}`);
   if (opts.panelId === 'containers') {
     parts.push(opts.showAllContainers ? 'a:All' : 'a:Running');
-    parts.push(`\u2195${opts.sortLabel} \u00B7 ${opts.sortDirection}`);
+    parts.push(`o:\u2195${opts.sortLabel} \u00B7 ${opts.sortDirection}`);
   }
   return parts.join('  ');
 }

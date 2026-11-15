@@ -1,4 +1,5 @@
 import type { ContainerInfo } from 'sidekick-docker-shared';
+import { canStop } from 'sidekick-docker-shared';
 
 /**
  * Pure grouping logic for the container tree view.
@@ -77,9 +78,19 @@ export function buildContainerGroups(containers: ContainerInfo[]): ContainerGrou
 
 /**
  * Tree contextValue for a compose project group, so its menu can offer Down
- * and Restart only where something is running (Up is always offered).
+ * and Restart only where something is live (Up is always offered). "Running"
+ * means any container with a process — paused or restarting too: an
+ * all-paused project still needs Down.
  */
 export function composeGroupContextValue(project: ComposeProjectGroup): 'compose-project-group-running' | 'compose-project-group-stopped' {
-  return project.containers.some(c => c.state === 'running') ? 'compose-project-group-running' : 'compose-project-group-stopped';
+  return project.containers.some(c => canStop(c.state)) ? 'compose-project-group-running' : 'compose-project-group-stopped';
 }
 
+/** What the group's context menu actually offers, given its state and workspace trust. */
+export function composeGroupTooltip(project: ComposeProjectGroup, trusted: boolean): string {
+  const base = `Compose project ${project.projectName}`;
+  if (!trusted) return `${base} — compose actions are disabled until this workspace is trusted`;
+  return composeGroupContextValue(project) === 'compose-project-group-running'
+    ? `${base} — right-click for Up, Down, Restart`
+    : `${base} — right-click for Up`;
+}

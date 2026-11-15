@@ -144,6 +144,11 @@ export interface DashboardStateSnapshot {
   daemonConnected: boolean;
   resourceErrors?: Record<string, string>;
   lastRefresh: string | null;
+  /**
+   * Whether compose actions may run (false in an untrusted workspace, where the
+   * host refuses them). Optional: absent means allowed.
+   */
+  composeAllowed?: boolean;
 }
 
 // ─── Extension → Webview ────────────────────────────────────────────
@@ -194,5 +199,7 @@ export type WebviewMessage =
   | { type: 'requestRefresh' }
   | { type: 'selectComposeService'; projectName: string; serviceName: string | null }
   | { type: 'copyLogs'; text: string }
+  /** Copy arbitrary text (e.g. a sticky error toast); the host says "Copied", not "Logs copied". */
+  | { type: 'copyText'; text: string }
   | { type: 'toggleCompareItem'; itemId: string | null; panelId: string }
   | { type: 'retryConnect' };

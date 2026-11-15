@@ -20,7 +20,11 @@ export interface SidekickSettings {
   refreshIntervalMs: number;
   statusBarVisible: boolean;
   execShell: string;
-  /** The raw endpoint setting (trimmed; '' = default), for describing the endpoint in errors. */
+  /**
+   * The endpoint setting in effect (trimmed; '' = default), for describing the
+   * endpoint in errors. An invalid value is '' too: it is ignored, and the
+   * default socket is what actually gets used.
+   */
   socketPath: string;
 }
 
@@ -47,14 +51,17 @@ export function parseEndpointSetting(
   }
 }
 
+/**
+ * Read the settings. No side effects: this runs on every container change
+ * (the status bar describes the endpoint), so it must not show the invalid
+ * socketPath warning itself — see warnIfInvalidEndpoint.
+ */
 export function getSettings(): SidekickSettings {
   const config = vscode.workspace.getConfiguration('sidekick-docker');
   const socketPath = config.get<string>('socketPath', '');
   const refreshSeconds = config.get<number>('refreshIntervalSeconds', DEFAULT_REFRESH_SECONDS);
 
-  const clientOptions = parseEndpointSetting(socketPath, (message) => {
-    void vscode.window.showWarningMessage(message);
-  });
+  const clientOptions = parseEndpointSetting(socketPath, () => { /* reported by warnIfInvalidEndpoint */ });
 
   return {
     clientOptions,
@@ -64,8 +71,28 @@ export function getSettings(): SidekickSettings {
     refreshIntervalMs: Math.max(MIN_REFRESH_SECONDS, refreshSeconds) * 1000,
     statusBarVisible: config.get<boolean>('statusBar.visible', true),
     execShell: config.get<string>('exec.defaultShell', DEFAULT_EXEC_SHELL) || DEFAULT_EXEC_SHELL,
-    socketPath: socketPath.trim(),
+    socketPath: clientOptions ? socketPath.trim() : '',
   };
+}
+
+/** The invalid socketPath value already warned about, so each value warns once. */
+let warnedEndpoint: string | null = null;
+
+/**
+ * Warn once per invalid socketPath value. Called at activation, when the
+ * setting changes and when the workspace is trusted (which can change it).
+ */
+export function warnIfInvalidEndpoint(): void {
+  const raw = vscode.workspace.getConfiguration('sidekick-docker').get<string>('socketPath', '');
+  let message: string | undefined;
+  parseEndpointSetting(raw, (m) => { message = m; });
+  if (message === undefined) {
+    warnedEndpoint = null;
+    return;
+  }
+  if (raw === warnedEndpoint) return;
+  warnedEndpoint = raw;
+  void vscode.window.showWarningMessage(message);
 }
 
 /**

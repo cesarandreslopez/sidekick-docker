@@ -45,6 +45,8 @@ export const imagesPanel: PanelDefinition = {
           const sizeStr = l.size > 0 ? formatBytes(l.size) : '0 B';
           const sizeClass = l.size === 0 ? ' zero' : '';
           html += `<div class="layer-row"><span class="layer-num">${escapeHtml(num)}</span><span class="layer-size${sizeClass}">${escapeHtml(sizeStr)}</span><span class="layer-cmd" title="${escapeAttr(l.createdBy)}">${escapeHtml(truncate(l.createdBy, 80))}</span></div>`;
+          // The TUI shows the layer comment on its own line; it was dropped here.
+          if (l.comment) html += `<div class="layer-comment" title="${escapeAttr(l.comment)}">${escapeHtml(l.comment)}</div>`;
         }
 
         // Show largest layer
@@ -61,9 +63,14 @@ export const imagesPanel: PanelDefinition = {
   getItems(snapshot: DashboardStateSnapshot): PanelItem[] {
     return snapshot.images.map(img => {
       const tag = imageDisplayName(img);
+      // Split "registry/org/name:tag" so a narrow list ellipsizes the
+      // repository and keeps the tag (middle truncation).
+      const colon = img.isDangling ? -1 : tag.lastIndexOf(':');
+      const split = colon > tag.lastIndexOf('/') && colon > 0;
       return {
         id: img.id,
-        label: truncate(tag, 22),
+        label: split ? tag.slice(0, colon) : tag,
+        labelTail: split ? tag.slice(colon) : undefined,
         icon: img.isDangling ? '\u25CB' : '\u25CF',
         iconColor: img.isDangling ? 'var(--vscode-descriptionForeground)' : 'var(--vscode-foreground)',
         sortKey: img.isDangling ? 1 : 0,

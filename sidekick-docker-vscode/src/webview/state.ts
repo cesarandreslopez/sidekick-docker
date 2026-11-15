@@ -73,6 +73,8 @@ export interface WebviewState {
   /** Inspect details per container (env, restart policy, mounts, health, exit). */
   containerDetails: Map<string, SerializedContainerDetails>;
   containerChanges: Map<string, SerializedFilesystemChange[]>;
+  /** When each container's filesystem changes arrived (epoch ms), shown as "as of". */
+  containerChangesAt: Map<string, number>;
   imageLayers: Map<string, SerializedImageLayer[]>;
   composeLogs: Map<string, SerializedLogEntry[]>;
 
@@ -129,6 +131,7 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
     stats: new Map(),
     containerDetails: new Map(),
     containerChanges: new Map(),
+    containerChangesAt: new Map(),
     imageLayers: new Map(),
     composeLogs: new Map(),
     logSeverityCounts: new Map(),
@@ -158,4 +161,36 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
 /** Keep the visible selection and action target identical after filtering or refresh. */
 export function reconcileSelection(items: { id: string }[], selectedId: string | null): string | null {
   return items.some(item => item.id === selectedId) ? selectedId : items[0]?.id ?? null;
+}
+
+type LogKeyed = Pick<SerializedLogEntry, 'timestamp' | 'stream' | 'message'>;
+
+function logKey(e: LogKeyed): string {
+  return `${e.timestamp ?? ''}\u0000${e.stream}\u0000${e.message}`;
+}
+
+/**
+ * How many entries a log ring buffer dropped from its front between two
+ * snapshots, when `next` is `prev` minus that prefix plus appended lines — or
+ * null when the two do not line up that way (cleared, replaced, reordered).
+ *
+ * The host resends the whole buffer on every flush; once it is full the first
+ * line changes every time, so without this the pane re-rendered every line on
+ * every flush, losing the text selection and drifting the scroll position.
+ */
+export function droppedLogPrefix(prev: readonly LogKeyed[], next: readonly LogKeyed[]): number | null {
+  if (prev.length === 0 || next.length === 0) return null;
+  const first = logKey(next[0]);
+  for (let dropped = 0; dropped < prev.length; dropped++) {
+    const kept = prev.length - dropped;
+    if (kept > next.length || logKey(prev[dropped]) !== first) continue;
+    // Cheap rejection on the last kept line before checking the whole run.
+    if (logKey(prev[prev.length - 1]) !== logKey(next[kept - 1])) continue;
+    let aligned = true;
+    for (let i = 1; i < kept - 1; i++) {
+      if (logKey(prev[dropped + i]) !== logKey(next[i])) { aligned = false; break; }
+    }
+    if (aligned) return dropped;
+  }
+  return null;
 }

@@ -148,4 +148,173 @@ describe('dashboard DOM', () => {
     element('[data-retry-streams]').click();
     expect(sent.at(-1)).toEqual({ type: 'retryStreams' });
   });
+
+  it('keeps an "Open in Dashboard" target selected until a fresh snapshot settles it', () => {
+    receive({ type: 'focusContainer', containerId: 'gamma' });
+    expect(lastSelection()).toMatchObject({ itemId: 'gamma' });
+    receive({ type: 'connectionState', state: 'connected' });
+    expect(lastSelection()).toMatchObject({ itemId: 'gamma' });
+    receive({ type: 'updateState', snapshot: snapshot(['alpha', 'beta', 'gamma']) });
+    expect(lastSelection()).toMatchObject({ itemId: 'gamma' });
+    expect(element('.side-item.selected').dataset.id).toBe('gamma');
+  });
+
+  it('falls back to reconciling when the fresh snapshot lacks the target', () => {
+    receive({ type: 'focusContainer', containerId: 'ghost' });
+    receive({ type: 'updateState', snapshot: snapshot() });
+    expect(lastSelection()).toMatchObject({ itemId: 'alpha' });
+    expect(element('.side-item.selected').dataset.id).toBe('alpha');
+  });
+
+  it('applies log updates in place, keeping lines, the filter input and background refreshes cheap', () => {
+    const line = (n: number) => ({ timestamp: null, stream: 'stdout' as const, message: `line ${n}` });
+    const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => line(from + i));
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: range(0, 3) });
+    const input = element('#log-filter-input');
+    const first = element('[data-log-content] .log-line');
+
+    receive({ type: 'updateState', snapshot: snapshot() }); // background refresh: nothing rebuilt
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: range(0, 5) }); // appended
+    expect(element('#log-filter-input')).toBe(input);
+    expect(element('[data-log-content] .log-line')).toBe(first);
+    expect(element('[data-log-content]').children).toHaveLength(5);
+
+    // A full ring buffer drops lines from the front as it appends.
+    const third = element('[data-log-content]').children[2];
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: range(2, 7) });
+    const lines = [...element('[data-log-content]').children];
+    expect(lines[0]).toBe(third);
+    expect(lines.map(l => l.textContent)).toEqual(['line 2', 'line 3', 'line 4', 'line 5', 'line 6']);
+
+    // Filtered panes patch too, and keep the match count right.
+    (input as HTMLInputElement).value = 'line 6';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    expect(element('[data-log-match-count]').textContent).toBe('1 matches');
+    const match = element('[data-log-content] .log-line');
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: [...range(3, 7), { timestamp: null, stream: 'stdout', message: 'line 6 again' }] });
+    expect(element('[data-log-content] .log-line')).toBe(match);
+    expect(element('[data-log-match-count]').textContent).toBe('2 matches');
+  });
+
+  it('gives Services logs their own filter bar, indents services, and copies what is shown', () => {
+    receive({ type: 'updateState', snapshot: { ...snapshot(), composeProjects: [{ name: 'shop', status: 'partial', services: [{ name: 'web', projectName: 'shop', state: 'running', image: 'nginx', ports: [] }] }] } });
+    element('[data-panel="1"]').click();
+    expect(element('[data-id="service:shop:web"]').classList.contains('indented')).toBe(true);
+    element('[data-tab="1"]').click();
+    receive({ type: 'updateComposeLogs', projectName: 'shop', serviceName: null, entries: [
+      { timestamp: null, stream: 'stdout', message: 'GET /a' },
+      { timestamp: null, stream: 'stdout', message: 'POST /b' },
+    ] });
+    const input = element('#log-filter-input') as HTMLInputElement;
+    input.value = 'POST';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    expect(element('[data-log-content]').textContent).toBe('POST /b');
+    element('#copy-logs-btn').click();
+    expect(sent.at(-1)).toEqual({ type: 'copyLogs', text: 'POST /b' });
+  });
+
+  it('only applies the log filter to Copy Logs where its bar is on screen', () => {
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: [{ timestamp: null, stream: 'stdout', message: 'a' }, { timestamp: null, stream: 'stdout', message: 'b' }] });
+    const input = element('#log-filter-input') as HTMLInputElement;
+    input.value = 'b';
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    element('[data-tab="3"]').click();
+    element('#side-list').focus();
+    key('c');
+    expect(sent.at(-1)).toEqual({ type: 'copyLogs', text: 'a\nb' });
+  });
+
+  it('describes the confirm dialog by its message', () => {
+    key('d');
+    const dialog = element('[role="alertdialog"]');
+    const message = dom.window.document.getElementById(dialog.getAttribute('aria-describedby') ?? '');
+    expect(message?.textContent).toContain('alpha');
+  });
+
+  it('starts another item at the top of the detail pane', () => {
+    element('[data-tab="3"]').click();
+    const detail = element('#detail-content');
+    detail.scrollTop = 64;
+    element('[data-id="beta"]').click();
+    expect(detail.scrollTop).toBe(0);
+  });
+
+  it('moves into the details with l or the right arrow, and back with h', () => {
+    key('l');
+    expect(dom.window.document.activeElement).toBe(element('#detail-content'));
+    key('h');
+    expect(dom.window.document.activeElement).toBe(element('#side-list'));
+    key('ArrowRight');
+    expect(dom.window.document.activeElement).toBe(element('#detail-content'));
+  });
+
+  it('offers no compose actions in an untrusted workspace', () => {
+    const composeProjects = [{ name: 'shop', status: 'running' as const, services: [] }];
+    receive({ type: 'updateState', snapshot: { ...snapshot(), composeProjects, composeAllowed: false } });
+    element('[data-panel="1"]').click();
+    key('u');
+    expect(sent.some(m => m.type === 'action')).toBe(false);
+    expect(element('#detail-content').textContent).toContain('trusted');
+    receive({ type: 'updateState', snapshot: { ...snapshot(), composeProjects } });
+    key('u');
+    expect(sent.at(-1)).toEqual({ type: 'action', actionType: 'up', itemId: 'project:shop', panelId: 'services' });
+  });
+
+  it('makes the stale list inert behind the disconnected banner, without repeating its reason as a toast', () => {
+    receive({ type: 'connectionState', state: 'disconnected', reason: 'Docker socket not found' });
+    expect(element('#main-area').hasAttribute('inert')).toBe(true);
+    expect(dom.window.document.activeElement).toBe(element('#retry-connect'));
+    key('d');
+    expect(element('#confirm-overlay').classList.contains('visible')).toBe(false);
+    receive({ type: 'toast', message: 'Docker socket not found', severity: 'error' });
+    expect(element('#toast-container').children).toHaveLength(0);
+    receive({ type: 'connectionState', state: 'connected' });
+    expect(element('#main-area').hasAttribute('inert')).toBe(false);
+  });
+
+  it('shows a repeated error once and copies it as plain text', () => {
+    receive({ type: 'toast', message: 'boom', severity: 'error' });
+    receive({ type: 'toast', message: 'boom', severity: 'error' });
+    receive({ type: 'toast', message: 'other', severity: 'info' });
+    expect(element('#toast-container').querySelectorAll('.toast')).toHaveLength(2);
+    element('[data-toast-copy]').click();
+    expect(sent.at(-1)).toEqual({ type: 'copyText', text: 'boom' });
+  });
+
+  it('returns from the actions menu to the ⋯ button that opened it', () => {
+    const button = element('[data-menu-id="alpha"]');
+    expect(button.getAttribute('aria-haspopup')).toBe('menu');
+    button.focus();
+    button.click();
+    expect(element('#context-menu').classList.contains('visible')).toBe(true);
+    expect(element('[data-menu-id="alpha"]').getAttribute('aria-expanded')).toBe('true');
+    key('Escape');
+    expect(dom.window.document.activeElement?.getAttribute('data-menu-id')).toBe('alpha');
+    expect(element('[data-menu-id="alpha"]').getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('opens the sort menu on the field in effect', () => {
+    key('o');
+    key('j');
+    expect(element('.sort-item.selected').dataset.idx).toBe('1');
+    key('Escape');
+    key('o');
+    expect(element('.sort-item.selected').dataset.idx).toBe('0');
+  });
+
+  it('re-reads filesystem changes each time the Files tab is shown, and says when', () => {
+    element('[data-tab="5"]').click();
+    expect(sent.at(-1)).toEqual({ type: 'retryDetail', kind: 'changes', itemId: 'alpha' });
+    receive({ type: 'updateChanges', containerId: 'alpha', changes: [{ path: '/tmp/x', kind: 'added' }] });
+    expect(element('#detail-content').textContent).toMatch(/as of/);
+  });
+
+  it('leaves F5 to the host keybinding and keeps the status-bar buttons out of the ellipsized hints', () => {
+    const count = sent.length;
+    key('F5');
+    expect(sent).toHaveLength(count);
+    expect(element('.hints').querySelector('.hint-chip')).toBeNull();
+    expect(element('.hint-chips [data-hint-action="refresh"]')).toBeTruthy();
+  });
 });
+

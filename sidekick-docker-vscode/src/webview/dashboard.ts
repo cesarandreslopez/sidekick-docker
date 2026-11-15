@@ -8,7 +8,7 @@ declare const __VERSION__: string;
 import type { ExtensionMessage, WebviewMessage, SerializedLogEntry } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
 import type { WebviewState, SortField, ToastSeverity, PersistedViewState } from './state';
-import { createInitialState, reconcileSelection, SORT_OPTIONS } from './state';
+import { createInitialState, reconcileSelection, droppedLogPrefix, SORT_OPTIONS } from './state';
 import { containersPanel } from './panels/containers';
 import { servicesPanel } from './panels/services';
 import { imagesPanel } from './panels/images';
@@ -33,6 +33,7 @@ import { handleGlobalKeydown } from './keyboard';
 import { parseComposeItemId } from '../types/composeItemId';
 import type { KeyboardContext } from './keyboard';
 import { filterLine } from 'sidekick-docker-shared/log';
+import type { FilterMode } from 'sidekick-docker-shared/log';
 
 const vscode = acquireVsCodeApi();
 // TUI-aligned lifetimes; errors are sticky, so their entry is a fallback only.
@@ -70,6 +71,12 @@ function readPersistedState(): Partial<PersistedViewState> | undefined {
 const restoredViewState = readPersistedState();
 const state: WebviewState = createInitialState(restoredViewState);
 let toastIdCounter = 0;
+/**
+ * A container "Open in Dashboard" asked for. The host posts it right after
+ * revealing a hidden dashboard, before its refresh: until the next snapshot
+ * arrives the target may be missing, and reconciling would select another row.
+ */
+let pendingFocusId: string | null = null;
 
 function persistViewState(): void {
   const persisted: PersistedViewState = {
@@ -171,19 +178,21 @@ function getFilteredItems(): PanelItem[] {
     });
   } else {
     items.sort((a, b) => {
-      const val = a.sortKey - b.sortKey || a.label.localeCompare(b.label);
+      const val = a.sortKey - b.sortKey || fullLabel(a).localeCompare(fullLabel(b));
       return state.sortReversed && getPanel().id === 'containers' ? -val : val;
     });
   }
   return items;
 }
 
+function fullLabel(item: PanelItem): string {
+  return item.label + (item.labelTail ?? '');
+}
+
 function containerSortCompare(a: PanelItem, b: PanelItem, field: SortField): number {
   const sa = state.stats.get(a.id);
   const sb = state.stats.get(b.id);
   switch (field) {
-    // Full names: labels are truncated to 22 characters, so names sharing a
-    // long prefix compared equal.
     case 'name': return containerName(a).localeCompare(containerName(b));
     case 'cpu': return (sb?.stats?.cpuPercent ?? 0) - (sa?.stats?.cpuPercent ?? 0);
     case 'mem': return (sb?.stats?.memoryPercent ?? 0) - (sa?.stats?.memoryPercent ?? 0);
@@ -204,6 +213,7 @@ function getSelectedItem(items: PanelItem[]): PanelItem | undefined {
 
 function reconcileVisibleSelection(items: PanelItem[]): boolean {
   if (!state.snapshot) return false;
+  if (pendingFocusId !== null && state.selectedItemId === pendingFocusId) return false;
   const id = reconcileSelection(items, state.selectedItemId);
   if (id === state.selectedItemId) return false;
   state.selectedItemId = id;
@@ -211,9 +221,19 @@ function reconcileVisibleSelection(items: PanelItem[]): boolean {
   return true;
 }
 
+/**
+ * The markup each root was last given. Comparing against root.innerHTML never
+ * matched — the browser re-serializes it (`<input …>` for `<input … />`,
+ * `data-x=""` for `data-x`, entities) — so every render rebuilt every root,
+ * dropping text selection and scroll. Code that patches a root's subtree in
+ * place must delete its entry.
+ */
+const lastHtml = new WeakMap<HTMLElement, string>();
+
 /** Preserve the focused control when background updates replace its markup. */
 function replaceContent(root: HTMLElement, html: string): boolean {
-  if (root.innerHTML === html) return false;
+  if (lastHtml.get(root) === html) return false;
+  lastHtml.set(root, html);
   const active = document.activeElement instanceof HTMLElement && root.contains(document.activeElement)
     ? document.activeElement : null;
   const attrs = ['id', 'data-panel', 'data-tab', 'data-pin-id', 'data-menu-id', 'data-hint-action', 'data-retry-detail', 'data-retry-streams'];
@@ -239,12 +259,16 @@ interface RenderDetailOptions {
   restoreLogFocus?: boolean;
 }
 
-function getLogEntryKey(entry: { timestamp: string | null; stream: string; message: string } | undefined): string {
-  return entry ? `${entry.timestamp ?? ''}:${entry.stream}:${entry.message}` : '';
-}
-
 function isNearBottom(el: HTMLElement, threshold = 24): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold;
+}
+
+/**
+ * What scrolls the detail pane: in compare mode the primary log pane (the
+ * pane itself does not overflow then, so j/k and paging did nothing).
+ */
+function activeScroller(): HTMLElement {
+  return $detailContent.querySelector<HTMLElement>('[data-compare="primary"] .log-shell') ?? $detailContent;
 }
 
 function getSelectedComposeLogKey(item: PanelItem | undefined): string | null {
@@ -258,12 +282,12 @@ function getSelectedComposeLogKey(item: PanelItem | undefined): string | null {
 function dismissToast(id: number): void {
   const toast = state.toasts.find(t => t.id === id);
   if (toast && toast.timer !== null) window.clearTimeout(toast.timer);
+  const el = $toastContainer.querySelector(`[data-toast-id="${id}"]`);
   const finalize = (): void => {
     state.toasts = state.toasts.filter(t => t.id !== id);
-    renderToasts();
+    el?.remove();
   };
   // Start dismiss animation
-  const el = $toastContainer.querySelector(`[data-toast-id="${id}"]`);
   if (el) {
     el.classList.add('dismissing');
     window.setTimeout(finalize, 200);
@@ -272,13 +296,30 @@ function dismissToast(id: number): void {
   }
 }
 
+function toastHtml(t: { id: number; message: string; severity: ToastSeverity; sticky: boolean }): string {
+  const actions = t.sticky
+    ? `<span class="toast-actions"><button class="toast-copy" data-toast-copy="${t.id}" title="Copy message">Copy</button><button class="toast-dismiss" data-toast-dismiss="${t.id}" title="Dismiss">\u00D7</button></span>`
+    : '';
+  // No role="alert" here: the container is already a polite live region,
+  // and nesting the two makes assistive tech announce the toast twice.
+  return `<div class="toast ${t.severity}${t.sticky ? ' sticky' : ''}" data-toast-id="${t.id}">${escapeHtml(t.message)}${actions}</div>`;
+}
+
 function addToast(message: string, severity: ToastSeverity): void {
+  // Errors are sticky, so a repeated failure (each Retry while Docker is down)
+  // used to stack identical toasts; and the banner already shows the
+  // connection failure's reason.
+  if (severity === 'error' && (state.toasts.some(t => t.sticky && t.message === message)
+    || (state.connState === 'disconnected' && message === state.connReason))) return;
   const id = ++toastIdCounter;
   // Errors stay until explicitly dismissed (with a copy affordance).
   const sticky = severity === 'error';
   const timer = sticky ? null : window.setTimeout(() => dismissToast(id), TOAST_DURATIONS[severity]);
-  state.toasts.push({ id, message, severity, timer, sticky });
-  renderToasts();
+  const toast = { id, message, severity, timer, sticky };
+  state.toasts.push(toast);
+  // Add just this node: rebuilding the container re-announced every toast in
+  // the live region and replayed every slide-in animation.
+  $toastContainer.insertAdjacentHTML('beforeend', toastHtml(toast));
 }
 
 // ─── Empty state helpers ──────────────────────────────────────────────
@@ -321,10 +362,23 @@ function renderAll(): void {
 }
 
 const DEFAULT_DISCONNECTED_HINT = 'Is Docker running? Check the sidekick-docker.socketPath setting.';
+let lastConnState = state.connState;
 
 function renderConnectionBanner(): void {
   const $banner = document.getElementById('disconnected-banner')!;
-  $banner.classList.toggle('visible', state.connState === 'disconnected');
+  const disconnected = state.connState === 'disconnected';
+  $banner.classList.toggle('visible', disconnected);
+  // The banner only covers the stale list and details; make them inert too, so
+  // Tab cannot reach controls behind it. Retry gets focus when it appears.
+  const $main = document.getElementById('main-area')!;
+  $main.toggleAttribute('inert', disconnected);
+  if (disconnected && lastConnState !== 'disconnected') {
+    const active = document.activeElement;
+    if (!active || active === document.body || $main.contains(active)) {
+      document.getElementById('retry-connect')?.focus({ preventScroll: true });
+    }
+  }
+  lastConnState = state.connState;
   // The extension says why it could not connect (permission, missing socket,
   // refused, bad host); textContent, so the reason is never parsed as HTML.
   const $subtitle = $banner.querySelector('.banner-subtitle');
@@ -340,8 +394,10 @@ function renderConnectionBanner(): void {
     });
   }
   const errors = Object.entries(state.snapshot?.resourceErrors ?? {});
-  warning.hidden = !errors.length || state.connState === 'disconnected';
-  warning.innerHTML = errors.length ? `${errors.map(([kind, message]) => escapeHtml(`${kind}: ${message}`)).join(' · ')} <button>Retry refresh</button>` : '';
+  const hidden = !errors.length || disconnected;
+  if (warning.hidden !== hidden) warning.hidden = hidden;
+  // A live region: write only when the text changes, or it re-announces on every render.
+  replaceContent(warning, errors.length ? `${errors.map(([kind, message]) => escapeHtml(`${kind}: ${message}`)).join(' · ')} <button>Retry refresh</button>` : '');
 }
 
 function renderTabBar(): void {
@@ -353,6 +409,8 @@ function renderTabBar(): void {
   }
   html += `<div class="phrase">${escapeHtml(state.phrase)}</div>`;
   if (!replaceContent($tabBar, html)) return;
+  // The bar scrolls when narrow; keep the active tab in view.
+  $tabBar.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
   // Tab click handlers
   $tabBar.querySelectorAll('.tab').forEach(el => {
@@ -364,6 +422,8 @@ function renderTabBar(): void {
 }
 
 const HEALTH_GLYPHS: Record<string, string> = { healthy: '\u2713', unhealthy: '\u2717', starting: '\u25CC' };
+/** What the side list last scrolled to: only a new selection (or filter) may move it. */
+let sideScrollKey = '';
 
 function renderSideList(items: PanelItem[]): void {
   $sideList.setAttribute('aria-label', `${getPanel().title} items`);
@@ -372,15 +432,15 @@ function renderSideList(items: PanelItem[]): void {
   // instead of a misleading "No containers" empty state.
   if (state.connState === 'connecting' && !state.snapshot) {
     $sideList.removeAttribute('aria-activedescendant');
-    $sideList.innerHTML = '<div class="skeleton-row"></div>'.repeat(5);
+    replaceContent($sideList, '<div class="skeleton-row"></div>'.repeat(5));
     return;
   }
 
   if (items.length === 0) {
     $sideList.removeAttribute('aria-activedescendant');
-    $sideList.innerHTML = state.filterString || (getPanel().id === 'containers' && !state.showAllContainers)
+    replaceContent($sideList, state.filterString || (getPanel().id === 'containers' && !state.showAllContainers)
       ? renderEmptyState('⌕', 'No matching items', 'Clear the filter or show all containers to see more')
-      : renderEmptyStateSide(getPanel().id);
+      : renderEmptyStateSide(getPanel().id));
     return;
   }
 
@@ -405,10 +465,15 @@ function renderSideList(items: PanelItem[]): void {
       : '';
     const badgeHtml = item.badge ? `<span class="side-badge">${escapeHtml(item.badge)}</span>` : '';
     const pinBtnHtml = (panelId === 'containers' || panelId === 'services')
-      ? `<button type="button" class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeAttr(item.label)} for comparison" aria-pressed="${isPinned}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}" tabindex="${isSelected ? 0 : -1}">\u{1F4CC}</button>`
+      ? `<button type="button" class="pin-btn${isPinned ? ' active' : ''}" data-pin-id="${escapeAttr(item.id)}" aria-label="${isPinned ? 'Unpin' : 'Pin'} ${escapeAttr(fullLabel(item))} for comparison" aria-pressed="${isPinned}" title="${isPinned ? 'Unpin comparison' : 'Pin for comparison'}" tabindex="${isSelected ? 0 : -1}">\u{1F4CC}</button>`
       : '';
-    const actionsBtnHtml = `<button type="button" class="row-actions-btn" data-menu-id="${escapeAttr(item.id)}" aria-label="Actions for ${escapeAttr(item.label)}" title="Actions" tabindex="${isSelected ? 0 : -1}">\u22EF</button>`;
-    html += `<div class="side-item${isSelected ? ' selected' : ''}${pinClass}" role="option" id="${rowId}" aria-selected="${isSelected}" aria-label="${escapeAttr(optionAccessibleName(item, isPinned))}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || item.label)}">${iconHtml}<span class="side-label">${escapeHtml(item.label)}</span>${healthHtml}${pinBtnHtml}${actionsBtnHtml}${badgeHtml}</div>`;
+    const name = fullLabel(item);
+    const actionsBtnHtml = `<button type="button" class="row-actions-btn" data-menu-id="${escapeAttr(item.id)}" aria-label="Actions for ${escapeAttr(name)}" aria-haspopup="menu" aria-expanded="${state.contextMenuVisible && isSelected}" title="Actions" tabindex="${isSelected ? 0 : -1}">\u22EF</button>`;
+    // Full names: CSS ellipsizes; an image's tag stays visible (middle truncation).
+    const labelHtml = item.labelTail
+      ? `<span class="side-label split"><span class="side-label-head">${escapeHtml(item.label)}</span><span class="side-label-tail">${escapeHtml(item.labelTail)}</span></span>`
+      : `<span class="side-label">${escapeHtml(item.label)}</span>`;
+    html += `<div class="side-item${isSelected ? ' selected' : ''}${pinClass}${item.indent ? ' indented' : ''}" role="option" id="${rowId}" aria-selected="${isSelected}" aria-label="${escapeAttr(optionAccessibleName(item, isPinned))}" data-id="${escapeAttr(item.id)}" title="${escapeAttr(item.tooltip || name)}">${iconHtml}${labelHtml}${healthHtml}${pinBtnHtml}${actionsBtnHtml}${badgeHtml}</div>`;
   }
   if (!replaceContent($sideList, html)) return;
   if (selectedRowId) {
@@ -445,9 +510,14 @@ function renderSideList(items: PanelItem[]): void {
     });
   });
 
-  // Scroll selected into view
-  const selectedEl = $sideList.querySelector('.side-item.selected');
-  selectedEl?.scrollIntoView({ block: 'nearest' });
+  // Scroll the selection into view only when it (or the filter) changed: a
+  // background refresh rebuilds rows ("Up 5 minutes" ticks) and used to yank
+  // the list back while you were scrolling it.
+  const scrollKey = `${getPanel().id}\u0000${state.selectedItemId ?? ''}\u0000${state.filterString}\u0000${state.showAllContainers}`;
+  if (scrollKey !== sideScrollKey) {
+    sideScrollKey = scrollKey;
+    $sideList.querySelector('.side-item.selected')?.scrollIntoView({ block: 'nearest' });
+  }
 }
 
 function renderDetailTabBar(): void {
@@ -459,6 +529,7 @@ function renderDetailTabBar(): void {
     html += `<div class="detail-tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="${active ? 0 : -1}" data-tab="${i}">${t.label}</div>`;
   }
   if (!replaceContent($detailTabBar, html)) return;
+  $detailTabBar.querySelector('.detail-tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
   $detailTabBar.querySelectorAll('.detail-tab').forEach(el => {
     el.addEventListener('click', () => {
@@ -468,6 +539,108 @@ function renderDetailTabBar(): void {
   });
 }
 
+interface RenderedLog { entries: SerializedLogEntry[]; query: string; mode: FilterMode; matched: number }
+/** The entries (and filter) each mounted log pane shows, so updates can be applied in place. */
+const renderedLogs = new WeakMap<HTMLElement, RenderedLog>();
+/** Identity of the last full Logs render; while it holds, log updates are patched in. */
+let lastLogShellKey = '';
+
+function logEntriesFor(root: HTMLElement): SerializedLogEntry[] | undefined {
+  const id = root.dataset.itemId ?? '';
+  return root.dataset.logRoot?.startsWith('compose') ? state.composeLogs.get(id) : state.logs.get(id);
+}
+
+function recordMountedLogs(): void {
+  for (const root of $detailContent.querySelectorAll<HTMLElement>('[data-log-root]')) {
+    const entries = logEntriesFor(root);
+    if (!entries) continue;
+    const matched = root.querySelectorAll('[data-log-content] > .log-line').length;
+    renderedLogs.set(root, { entries, query: state.logFilterString, mode: state.logFilterMode, matched });
+  }
+}
+
+/** Bring one mounted log pane up to date in place; false when it needs a full render. */
+function patchLogRoot(root: HTMLElement, entries: SerializedLogEntry[] | undefined): boolean {
+  const rendered = renderedLogs.get(root);
+  const content = root.querySelector<HTMLElement>('[data-log-content]');
+  if (!rendered || !content || !entries || entries.length === 0) return false;
+  const { query, mode } = rendered;
+  if (query !== state.logFilterString || mode !== state.logFilterMode) return false;
+  if (entries !== rendered.entries) {
+    // A full ring buffer drops lines from the front as it appends: remove
+    // those and append the new ones, rather than re-render every line.
+    const dropped = droppedLogPrefix(rendered.entries, entries);
+    if (dropped === null) return false;
+    const removed = query
+      ? rendered.entries.slice(0, dropped).filter(e => filterLine(e.message, query, mode).matched).length
+      : dropped;
+    let addedHtml = '';
+    let added = 0;
+    for (const e of entries.slice(rendered.entries.length - dropped)) {
+      if (query) {
+        const result = filterLine(e.message, query, mode);
+        if (!result.matched) continue;
+        addedHtml += colorizeLogEntry(e, result.matches);
+      } else {
+        addedHtml += colorizeLogEntry(e);
+      }
+      added++;
+    }
+    const matched = rendered.matched - removed + added;
+    // "No matching logs" is not a line: showing or clearing it takes a full render.
+    if (query && (rendered.matched === 0) !== (matched === 0)) return false;
+    if (removed > 0 || added > 0) {
+      const scroller = root.closest('[data-compare]') ? root : $detailContent;
+      const stick = isNearBottom(scroller);
+      let removedHeight = 0;
+      if (removed > 0) {
+        const first = content.firstElementChild as HTMLElement | null;
+        const keep = content.children[removed] as HTMLElement | undefined;
+        removedHeight = first && keep ? keep.offsetTop - first.offsetTop : 0;
+        for (let i = 0; i < removed; i++) content.firstElementChild?.remove();
+      }
+      if (addedHtml) content.insertAdjacentHTML('beforeend', addedHtml);
+      // Following the tail: stay at the bottom. Reading older lines: hold
+      // them still while the buffer drops lines above.
+      if (stick) scroller.scrollTop = scroller.scrollHeight;
+      else if (removedHeight > 0) scroller.scrollTop = Math.max(0, scroller.scrollTop - removedHeight);
+    }
+    renderedLogs.set(root, { entries, query, mode, matched });
+    const count = root.querySelector('[data-log-match-count]');
+    if (count) count.textContent = query ? `${matched} matches` : '';
+  }
+  const severity = root.querySelector('[data-log-severity]');
+  if (severity) {
+    const counts = state.logSeverityCounts.get(root.dataset.itemId ?? '');
+    const badges = counts && counts.total > 0 ? renderSeverityBadges(counts) : '';
+    if (severity.innerHTML !== badges) severity.innerHTML = badges;
+  }
+  return true;
+}
+
+/** Apply log updates to every pane of the Logs tab in place; false when a full render is needed. */
+function patchLogPanes(item: PanelItem, compareId: string | null): boolean {
+  const compose = getPanel().id === 'services';
+  const panes: [string, string | null][] = [[compose ? 'compose' : 'container', compose ? getSelectedComposeLogKey(item) : item.id]];
+  if (compareId) {
+    panes.push([compose ? 'compose-compare' : 'container-compare', compose ? getSelectedComposeLogKey({ id: compareId } as PanelItem) : compareId]);
+  }
+  for (const [role, id] of panes) {
+    if (!id) return false;
+    const entries = compose ? state.composeLogs.get(id) : state.logs.get(id);
+    const root = $detailContent.querySelector<HTMLElement>(`[data-log-root="${role}"]`);
+    if (!root) {
+      // Still the "No logs yet" state, unless the first lines just arrived.
+      if (entries && entries.length > 0) return false;
+      continue;
+    }
+    if (root.dataset.itemId !== id || !patchLogRoot(root, entries)) return false;
+  }
+  // The subtree no longer matches the last full markup.
+  lastHtml.delete($detailContent);
+  return true;
+}
+
 function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = {}): void {
   const panel = getPanel();
   const item = getSelectedItem(items);
@@ -475,7 +648,38 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
   const animate = options.animate ?? true;
   const preserveScroll = options.preserveScroll ?? false;
   const restoreLogFocus = options.restoreLogFocus ?? false;
-  const shouldStickToBottom = tab?.autoScrollBottom ? isNearBottom($detailContent) : false;
+
+  if (!item || !tab) {
+    lastLogShellKey = '';
+    replaceContent($detailContent, renderEmptyState('\u{1F449}', 'No item selected', 'Select an item from the list'));
+    return;
+  }
+
+  const streamKind = tab.label === 'Stats' ? 'stats' : ['Logs', 'Patterns'].includes(tab.label)
+    ? panel.id === 'services' ? 'composeLogs' : 'logs' : undefined;
+  const streamId = panel.id === 'services' ? getSelectedComposeLogKey(item) : item.id;
+  const stream = streamKind ? state.streamStates.get(`${streamKind}:${streamId}`) : undefined;
+  let streamHtml = '';
+  if (stream && stream.state !== 'live') {
+    // A stream that has delivered nothing yet used to say "Connecting…"
+    // forever with no way out; it offers Retry in every state now.
+    const labels = { loading: streamKind === 'stats' ? 'Waiting for stats…' : 'Waiting for output…', empty: 'No output received.', ended: 'Stream ended.', reconnecting: 'Reconnecting…', error: 'Stream unavailable.' };
+    const message = stream.message ? ` ${stream.message}` : '';
+    streamHtml = `<div role="status" class="stream-status">${escapeHtml(labels[stream.state] + message)} <button data-retry-streams>Retry</button></div>`;
+  }
+
+  // Logs: while the pane around the lines is unchanged, apply updates in place
+  // (keeps the text selection, horizontal scroll and the reading position).
+  const compareId = state.compareItemIds[panel.id] ?? null;
+  const logShellKey = tab.label === 'Logs'
+    ? [panel.id, item.id, compareId ?? '', streamHtml, state.logFilterString, state.logFilterMode].join('\u0000')
+    : '';
+  if (logShellKey && preserveScroll && logShellKey === lastLogShellKey && patchLogPanes(item, compareId)) {
+    renderScrollIndicators();
+    return;
+  }
+
+  const shouldStickToBottom = tab.autoScrollBottom ? isNearBottom(activeScroller()) : false;
   const previousScrollTop = $detailContent.scrollTop;
   const compareScroll = [...$detailContent.querySelectorAll<HTMLElement>('[data-compare] .log-shell')].map(el => ({
     pane: el.closest<HTMLElement>('[data-compare]')?.dataset.compare, top: el.scrollTop, bottom: isNearBottom(el),
@@ -487,11 +691,6 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
       }
     : null;
 
-  if (!item || !tab) {
-    $detailContent.innerHTML = renderEmptyState('\u{1F449}', 'No item selected', 'Select an item from the list');
-    return;
-  }
-
   let html = tab.render(item, state);
   const kind = panel.id === 'containers' ? ({ Env: 'inspect', Config: 'inspect', Files: 'changes' } as const)[tab.label as 'Env' | 'Config' | 'Files']
     : panel.id === 'images' && tab.label === 'Layers' ? 'layers' : undefined;
@@ -499,21 +698,14 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
   if (load?.state === 'error') {
     html = `<div role="alert" class="load-error">${escapeHtml(load.message ?? 'Could not load this detail.')} <button data-retry-detail="${kind}" data-item-id="${escapeAttr(item.id)}">Retry</button></div>`;
   }
-  const streamKind = tab.label === 'Stats' ? 'stats' : ['Logs', 'Patterns'].includes(tab.label)
-    ? panel.id === 'services' ? 'composeLogs' : 'logs' : undefined;
-  const streamId = panel.id === 'services' ? getSelectedComposeLogKey(item) : item.id;
-  const stream = streamKind ? state.streamStates.get(`${streamKind}:${streamId}`) : undefined;
-  if (stream && stream.state !== 'live') {
-    const labels = { loading: 'Connecting…', empty: 'No output received.', ended: 'Stream ended.', reconnecting: 'Reconnecting…', error: 'Stream unavailable.' };
-    const message = stream.message ? ` ${stream.message}` : '';
-    html = `<div role="status" class="stream-status">${escapeHtml(labels[stream.state] + message)}${stream.state !== 'loading' ? ' <button data-retry-streams>Retry</button>' : ''}</div>` + html;
-  }
-  replaceContent($detailContent, html);
-  if (preserveScroll) {
-    for (const previous of compareScroll) {
-      const el = $detailContent.querySelector<HTMLElement>(`[data-compare="${previous.pane}"] .log-shell`);
-      if (el) el.scrollTop = previous.bottom ? el.scrollHeight : previous.top;
-    }
+  if (replaceContent($detailContent, streamHtml + html)) recordMountedLogs();
+  lastLogShellKey = logShellKey;
+  // Compare panes keep their position, and start at the newest lines (they
+  // used to start at the top and never follow).
+  for (const el of $detailContent.querySelectorAll<HTMLElement>('[data-compare] .log-shell')) {
+    const pane = el.closest<HTMLElement>('[data-compare]')?.dataset.compare;
+    const previous = preserveScroll ? compareScroll.find(p => p.pane === pane) : undefined;
+    el.scrollTop = !previous || previous.bottom ? el.scrollHeight : previous.top;
   }
 
   if (animate) {
@@ -528,21 +720,30 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
     $detailContent.scrollTop = $detailContent.scrollHeight;
   } else if (preserveScroll) {
     $detailContent.scrollTop = previousScrollTop;
+  } else {
+    // Another item or tab starts at the top, not at the last one's offset.
+    $detailContent.scrollTop = 0;
   }
 
   if (activeLogInput) {
     const replacement = document.getElementById('log-filter-input') as HTMLInputElement | null;
     if (replacement) {
-      replacement.focus();
+      replacement.focus({ preventScroll: true });
       replacement.setSelectionRange(activeLogInput.selectionStart, activeLogInput.selectionEnd);
     }
   }
+  renderScrollIndicators();
 }
 
 function setDetailTab(idx: number): void {
   if (idx === state.detailTabIndex) return;
   state.detailTabIndex = idx;
   post({ type: 'switchDetailTab', tabIndex: idx });
+  // Filesystem changes were fetched once per container and cached for its
+  // lifetime; re-read them each time the tab is shown.
+  if (isViewingTab('containers', 'Files') && state.selectedItemId) {
+    post({ type: 'retryDetail', kind: 'changes', itemId: state.selectedItemId });
+  }
   renderDetailTabBar();
   renderDetailContent(getFilteredItems());
   persistViewState();
@@ -592,31 +793,17 @@ function renderStatusBar(items: PanelItem[]): void {
   const focusIndicator = `<span class="status-indicator">${state.focusTarget === 'detail' ? 'Detail' : 'List'}</span>`;
   const layoutIndicator = state.layoutMode !== 'normal' ? `<span class="status-indicator">${state.layoutMode}</span>` : '';
 
-  // Everything except the connection indicator is rebuilt each render. That
-  // indicator is a live region and must persist across renders to announce.
-  $statusBarMain.innerHTML = `
-    <span class="brand">\u26A1 SIDEKICK Docker v${__VERSION__}</span>
-    <span class="hints">${escapeHtml(hints)}  ${chipsHtml}</span>
-    ${filterHtml}
-    ${layoutIndicator}
-    ${focusIndicator}
-  `;
-  $connectionStatus.innerHTML = `${connDot}<span class="conn-text">${connText}</span>`;
-}
-
-function renderToasts(): void {
-  $toastContainer.innerHTML = state.toasts.map(t => {
-    const actions = t.sticky
-      ? `<span class="toast-actions"><button class="toast-copy" data-toast-copy="${t.id}" title="Copy message">Copy</button><button class="toast-dismiss" data-toast-dismiss="${t.id}" title="Dismiss">\u00D7</button></span>`
-      : '';
-    // No role="alert" here: the container is already a polite live region,
-    // and nesting the two makes assistive tech announce the toast twice.
-    return `<div class="toast ${t.severity}${t.sticky ? ' sticky' : ''}" data-toast-id="${t.id}">${escapeHtml(t.message)}${actions}</div>`;
-  }).join('');
+  // Replaced only when it changes, keeping a focused chip focused. The chips
+  // sit outside .hints, whose ellipsis used to clip them. The connection
+  // indicator is a live region: written only when its text changes.
+  replaceContent($statusBarMain, `<span class="brand">\u26A1 SIDEKICK Docker v${__VERSION__}</span>`
+    + `<span class="hints">${escapeHtml(hints)}</span><span class="hint-chips">${chipsHtml}</span>`
+    + `${filterHtml}${layoutIndicator}${focusIndicator}`);
+  replaceContent($connectionStatus, `${connDot}<span class="conn-text">${connText}</span>`);
 }
 
 function renderScrollIndicators(): void {
-  const el = $detailContent;
+  const el = activeScroller();
   const $indicators = document.getElementById('scroll-indicators')!;
   if (el.scrollHeight <= el.clientHeight) {
     $indicators.innerHTML = '';
@@ -630,105 +817,21 @@ function renderScrollIndicators(): void {
   $indicators.innerHTML = parts.join(' ');
 }
 
+/** Logs arrived for a container: re-render its pane (in place when possible) if on screen. */
 function patchActiveContainerLogs(containerId: string): void {
-  if (getPanel().id !== 'containers' || state.detailTabIndex !== 0) return;
-  const compareId = state.compareItemIds.containers;
-  if (state.selectedItemId !== containerId && compareId !== containerId) return;
-  if (compareId) {
-    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
-    return;
-  }
-
-  const entries = state.logs.get(containerId);
-  if (!entries || entries.length === 0) {
-    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
-    return;
-  }
-
-  const root = $detailContent.querySelector('[data-log-root="container"]') as HTMLElement | null;
-  const logContent = $detailContent.querySelector('[data-log-content]') as HTMLElement | null;
-  const severityEl = $detailContent.querySelector('[data-log-severity]') as HTMLElement | null;
-  const matchCountEl = $detailContent.querySelector('[data-log-match-count]') as HTMLElement | null;
-  if (!root || !logContent || !severityEl || !matchCountEl || root.dataset.itemId !== containerId) {
-    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
-    return;
-  }
-
-  const counts = state.logSeverityCounts.get(containerId);
-  severityEl.innerHTML = counts ? renderSeverityBadges(counts) : '';
-
-  if (state.logFilterString) {
-    renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
-    return;
-  }
-
-  const previousCount = Number(root.dataset.renderedCount ?? '0');
-  const previousFirstKey = root.dataset.firstKey ?? '';
-  const currentFirstKey = getLogEntryKey(entries[0]);
-  const canAppend = entries.length >= previousCount && previousFirstKey === currentFirstKey;
-  const shouldStickToBottom = isNearBottom($detailContent);
-
-  if (!canAppend) {
-    logContent.innerHTML = entries.map(e => colorizeLogEntry(e)).join('');
-  } else if (entries.length > previousCount) {
-    logContent.insertAdjacentHTML('beforeend', entries.slice(previousCount).map(e => colorizeLogEntry(e)).join(''));
-  }
-
-  root.dataset.renderedCount = String(entries.length);
-  root.dataset.firstKey = currentFirstKey;
-  matchCountEl.textContent = '';
-
-  if (shouldStickToBottom) {
-    $detailContent.scrollTop = $detailContent.scrollHeight;
-  }
-  renderScrollIndicators();
+  if (!isViewingTab('containers', 'Logs')) return;
+  if (state.selectedItemId !== containerId && state.compareItemIds.containers !== containerId) return;
+  renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true, restoreLogFocus: true });
 }
 
-function patchActiveComposeLogs(projectName: string, serviceName: string | null): void {
-  if (getPanel().id !== 'services' || state.detailTabIndex !== 1) return;
-  const key = serviceName ? `${projectName}:${serviceName}` : projectName;
+/** Compose logs arrived for a project/service key: same, for the Services Logs tab. */
+function patchActiveComposeLogs(key: string): void {
+  if (!isViewingTab('services', 'Logs')) return;
   const items = getFilteredItems();
-  const selected = getSelectedItem(items);
   const compareId = state.compareItemIds.services;
   const compareKey = compareId ? getSelectedComposeLogKey({ id: compareId } as PanelItem) : null;
-  if (getSelectedComposeLogKey(selected) !== key && compareKey !== key) return;
-  if (compareId) {
-    renderDetailContent(items, { animate: false, preserveScroll: true });
-    return;
-  }
-
-  const entries = state.composeLogs.get(key);
-  if (!entries || entries.length === 0) {
-    renderDetailContent(items, { animate: false, preserveScroll: true });
-    return;
-  }
-
-  const root = $detailContent.querySelector('[data-log-root="compose"]') as HTMLElement | null;
-  const logContent = $detailContent.querySelector('[data-log-content]') as HTMLElement | null;
-  if (!root || !logContent || root.dataset.itemId !== key) {
-    renderDetailContent(items, { animate: false, preserveScroll: true });
-    return;
-  }
-
-  const previousCount = Number(root.dataset.renderedCount ?? '0');
-  const previousFirstKey = root.dataset.firstKey ?? '';
-  const currentFirstKey = getLogEntryKey(entries[0]);
-  const canAppend = entries.length >= previousCount && previousFirstKey === currentFirstKey;
-  const shouldStickToBottom = isNearBottom($detailContent);
-
-  if (!canAppend) {
-    logContent.innerHTML = entries.map(e => colorizeLogEntry(e)).join('');
-  } else if (entries.length > previousCount) {
-    logContent.insertAdjacentHTML('beforeend', entries.slice(previousCount).map(e => colorizeLogEntry(e)).join(''));
-  }
-
-  root.dataset.renderedCount = String(entries.length);
-  root.dataset.firstKey = currentFirstKey;
-
-  if (shouldStickToBottom) {
-    $detailContent.scrollTop = $detailContent.scrollHeight;
-  }
-  renderScrollIndicators();
+  if (getSelectedComposeLogKey(getSelectedItem(items)) !== key && compareKey !== key) return;
+  renderDetailContent(items, { animate: false, preserveScroll: true, restoreLogFocus: true });
 }
 
 function patchActiveStats(containerId: string): void {
@@ -742,6 +845,7 @@ function patchActiveStats(containerId: string): void {
     return;
   }
   statsRoot.outerHTML = tab.render(item, state);
+  lastHtml.delete($detailContent);
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────
@@ -751,6 +855,7 @@ function switchPanel(idx: number): void {
   state.selectedItemId = null;
   state.detailTabIndex = 0;
   state.filterString = '';
+  pendingFocusId = null;
   hideFilter();
   hideContextMenu();
   post({ type: 'switchPanel', panelIndex: idx });
@@ -763,6 +868,7 @@ function switchPanel(idx: number): void {
 function selectItem(id: string, items: PanelItem[]): void {
   if (id === state.selectedItemId) return;
   state.selectedItemId = id;
+  pendingFocusId = null;
   post({ type: 'selectItem', panelId: getPanel().id, itemId: id });
 
   // Notify extension about compose service selection for log streaming
@@ -811,7 +917,9 @@ function copyCurrentLogs(): void {
     addToast('No logs to copy', 'warning');
     return;
   }
-  const query = state.logFilterString;
+  // Copy what is on screen: the log filter applies only where its bar is
+  // shown (the Logs tab), not from another tab where it is invisible.
+  const query = isViewingTab(getPanel().id, 'Logs') ? state.logFilterString : '';
   const mode = state.logFilterMode;
   let lines: string[];
   if (query) {
@@ -857,7 +965,7 @@ function executeContextAction(idx: number, actions: ActionDefinition[]): void {
 
 // ─── Detail pane scrolling helper ────────────────────────────────────
 function scrollDetail(delta: number): void {
-  $detailContent.scrollTop += delta * 24;
+  activeScroller().scrollTop += delta * 24;
   renderScrollIndicators();
 }
 
@@ -869,10 +977,19 @@ function scrollComparePane(delta: number): void {
 
 /** Toggle the compare pin for an item on the active panel (pin button + m key). */
 function toggleComparePin(itemId: string): void {
-  const panelId = getPanel().id;
-  const current = state.compareItemIds[panelId] ?? null;
-  state.compareItemIds[panelId] = current === itemId ? null : itemId;
-  post({ type: 'toggleCompareItem', itemId: state.compareItemIds[panelId], panelId });
+  const panel = getPanel();
+  const pinning = (state.compareItemIds[panel.id] ?? null) !== itemId;
+  state.compareItemIds[panel.id] = pinning ? itemId : null;
+  post({ type: 'toggleCompareItem', itemId: state.compareItemIds[panel.id], panelId: panel.id });
+  if (pinning) {
+    const item = getFilteredItems().find(it => it.id === itemId);
+    addToast(`Pinned ${item ? fullLabel(item) : itemId} for comparison`, 'info');
+    // The split view only renders on the Logs tab (TUI parity): go there.
+    const logsTab = panel.detailTabs.findIndex(t => t.autoScrollBottom);
+    if (logsTab >= 0) setDetailTab(logsTab);
+  } else {
+    addToast('Unpinned comparison', 'info');
+  }
   renderAll();
 }
 
@@ -909,14 +1026,15 @@ const keyboardContext: KeyboardContext = {
   navigateSide,
   scrollDetail,
   scrollDetailToTop: () => {
-    $detailContent.scrollTop = 0;
+    activeScroller().scrollTop = 0;
     renderScrollIndicators();
   },
   scrollDetailToBottom: () => {
-    $detailContent.scrollTop = $detailContent.scrollHeight;
+    const scroller = activeScroller();
+    scroller.scrollTop = scroller.scrollHeight;
     renderScrollIndicators();
   },
-  getDetailPageRows: () => Math.max(1, Math.floor($detailContent.clientHeight / 24)),
+  getDetailPageRows: () => Math.max(1, Math.floor(activeScroller().clientHeight / 24)),
   scrollComparePane,
   toggleComparePin,
   executeAction,
@@ -979,6 +1097,8 @@ $sideList.addEventListener('contextmenu', (e: MouseEvent) => {
 $statusBar.addEventListener('click', (e: Event) => {
   const chip = (e.target as HTMLElement).closest('.hint-chip') as HTMLElement | null;
   if (!chip) return;
+  // While disconnected the list is stale and behind the banner.
+  if (state.connState === 'disconnected' && (chip.dataset.hintAction === 'filter' || chip.dataset.hintAction === 'actions')) return;
   switch (chip.dataset.hintAction) {
     case 'filter':
       showFilter();
@@ -1045,15 +1165,15 @@ $toastContainer.addEventListener('click', (e: Event) => {
   }
   if (target.dataset.toastCopy !== undefined) {
     const toast = state.toasts.find(t => t.id === Number(target.dataset.toastCopy));
-    if (toast) post({ type: 'copyLogs', text: toast.message });
+    if (toast) post({ type: 'copyText', text: toast.message });
   }
 });
 
 // Rotate phrase on mouse interaction
 document.addEventListener('mousedown', () => rotatePhrase());
 
-// Scroll indicators for detail pane
-$detailContent.addEventListener('scroll', () => renderScrollIndicators());
+// Scroll indicators for detail pane (capture: compare panes scroll themselves)
+$detailContent.addEventListener('scroll', () => renderScrollIndicators(), true);
 
 // ─── Message handling ────────────────────────────────────────────────
 window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
@@ -1063,6 +1183,9 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'updateState': {
       state.snapshot = msg.snapshot;
       state.connState = msg.snapshot.daemonConnected ? 'connected' : 'disconnected';
+      // The first snapshot after "Open in Dashboard" settles it: the target is
+      // there (kept) or it is gone (reconciled like any other selection).
+      pendingFocusId = null;
       renderAll();
       break;
     }
@@ -1155,6 +1278,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
         post({ type: 'toggleCompareItem', panelId: 'containers', itemId: state.compareItemIds.containers ?? null });
       }
       state.selectedItemId = msg.containerId;
+      pendingFocusId = msg.containerId;
       state.detailTabIndex = 0;
       post({ type: 'switchDetailTab', tabIndex: 0 });
       post({ type: 'selectItem', panelId: 'containers', itemId: msg.containerId });
@@ -1164,9 +1288,10 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 
     case 'updateChanges': {
       state.containerChanges.set(msg.containerId, msg.changes);
-      // Re-render if viewing this container's Files tab
+      state.containerChangesAt.set(msg.containerId, Date.now());
+      // Re-render if viewing this container's Files tab (a refetch keeps the scroll)
       if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Files')) {
-        renderDetailContent(getFilteredItems());
+        renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true });
       }
       break;
     }
@@ -1175,7 +1300,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
       state.imageLayers.set(msg.imageId, msg.layers);
       // Re-render if viewing this image's Layers tab
       if (state.selectedItemId === msg.imageId && isViewingTab('images', 'Layers')) {
-        renderDetailContent(getFilteredItems());
+        renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true });
       }
       break;
     }
@@ -1183,9 +1308,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'updateComposeLogs': {
       const key = msg.serviceName ? `${msg.projectName}:${msg.serviceName}` : msg.projectName;
       state.composeLogs.set(key, msg.entries);
-      if (isViewingTab('services', 'Logs')) {
-        patchActiveComposeLogs(msg.projectName, msg.serviceName);
-      }
+      patchActiveComposeLogs(key);
       break;
     }
   }

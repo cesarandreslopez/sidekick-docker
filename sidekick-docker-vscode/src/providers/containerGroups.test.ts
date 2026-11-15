@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { buildContainerGroups, composeGroupContextValue } from './containerGroups';
+import { buildContainerGroups, composeGroupContextValue, composeGroupTooltip } from './containerGroups';
 
 function makeContainer(overrides: Partial<ContainerInfo> & { id: string }): ContainerInfo {
   return {
@@ -88,6 +88,29 @@ describe('composeGroupContextValue', () => {
     const stopped = { id: 'g/q', projectName: 'old', containers: [makeContainer({ id: 'c', state: 'exited' })] };
     expect(composeGroupContextValue(running)).toBe('compose-project-group-running');
     expect(composeGroupContextValue(stopped)).toBe('compose-project-group-stopped');
+  });
+
+  it('counts paused and restarting containers as live, so such a project still offers Down', () => {
+    const paused = { id: 'g/p', projectName: 'shop', containers: [makeContainer({ id: 'a', state: 'paused' })] };
+    const restarting = { id: 'g/r', projectName: 'loop', containers: [makeContainer({ id: 'b', state: 'restarting' })] };
+    const dead = { id: 'g/d', projectName: 'gone', containers: [makeContainer({ id: 'c', state: 'dead' }), makeContainer({ id: 'd', state: 'created' })] };
+    expect(composeGroupContextValue(paused)).toBe('compose-project-group-running');
+    expect(composeGroupContextValue(restarting)).toBe('compose-project-group-running');
+    expect(composeGroupContextValue(dead)).toBe('compose-project-group-stopped');
+  });
+});
+
+describe('composeGroupTooltip', () => {
+  const live = { id: 'g/p', projectName: 'shop', containers: [makeContainer({ id: 'a' })] };
+  const stopped = { id: 'g/q', projectName: 'old', containers: [makeContainer({ id: 'c', state: 'exited' })] };
+
+  it('names only the actions the menu offers', () => {
+    expect(composeGroupTooltip(live, true)).toBe('Compose project shop — right-click for Up, Down, Restart');
+    expect(composeGroupTooltip(stopped, true)).toBe('Compose project old — right-click for Up');
+  });
+
+  it('says compose is disabled in an untrusted workspace', () => {
+    expect(composeGroupTooltip(live, false)).toBe('Compose project shop — compose actions are disabled until this workspace is trusted');
   });
 });
 

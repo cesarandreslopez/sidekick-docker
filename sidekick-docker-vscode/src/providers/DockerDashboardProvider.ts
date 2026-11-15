@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { getRandomPhrase, errorMessage, shortId, ComposeFileReader, publishedPortUrls, browserHostForEndpoint } from 'sidekick-docker-shared';
+import { getRandomPhrase, errorMessage, shortId, ComposeFileReader, publishedPortUrls, browserHostForEndpoint, actionFailedText } from 'sidekick-docker-shared';
+import type { ActionType } from 'sidekick-docker-shared';
 import { getNonce } from '../utils/nonce';
 import { DockerService } from '../services/DockerService';
 import type { DashboardViewState } from '../services/DockerService';
@@ -9,9 +10,12 @@ import { getDashboardHtml } from './dashboardHtml';
 import { ACTION_META, runDockerAction } from './actionRegistry';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import { WebviewMessageSchema } from '../types/messageSchemas';
-import { parseComposeItemId } from '../types/composeItemId';
+import { parseComposeItemId, composeProjectNameOf } from '../types/composeItemId';
 
 type PanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
+
+/** Index of the Containers panel's Files tab (webview/panels/containers.ts). */
+const FILES_TAB_INDEX = 5;
 
 const PANEL_IDS: PanelId[] = ['containers', 'services', 'images', 'volumes', 'networks'];
 const DEFAULT_VIEW_STATE = {
@@ -47,13 +51,19 @@ export class DockerDashboardProvider implements vscode.Disposable {
     });
   }
 
-  open(containerId?: string, viewColumn?: vscode.ViewColumn): void {
+  /**
+   * @param viewColumn Where to show it; only moves an open dashboard when given.
+   * @param preserveFocus Keep focus where it is (a tree row click, so arrowing
+   *   through the tree keeps working).
+   */
+  open(containerId?: string, viewColumn?: vscode.ViewColumn, preserveFocus = false): void {
     if (containerId) {
       this.pendingFocusContainerId = containerId;
     }
 
     if (this.panel) {
-      this.panel.reveal();
+      // reveal(undefined) keeps the current column; "Open to the Side" moves it.
+      this.panel.reveal(viewColumn, preserveFocus);
       // If webview is already ready, send focus immediately
       if (this.webviewReady && this.pendingFocusContainerId) {
         this._postMessage({ type: 'focusContainer', containerId: this.pendingFocusContainerId });
@@ -65,7 +75,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
     const panel = vscode.window.createWebviewPanel(
       'sidekick-docker.dashboard',
       'Sidekick Docker',
-      viewColumn ?? vscode.ViewColumn.One,
+      { viewColumn: viewColumn ?? vscode.ViewColumn.One, preserveFocus },
       {
         enableScripts: true,
         retainContextWhenHidden: true,
@@ -196,13 +206,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
         break;
 
       case 'requestRefresh':
-        if (this.service) {
-          await this.service.forceRefresh();
-        } else {
-          // No live service (e.g. the initial connect failed): treat F5 as
-          // a retry instead of a silent no-op.
-          await this._initializeService();
-        }
+        await this.refresh();
         break;
 
       case 'retryConnect':
@@ -212,6 +216,11 @@ export class DockerDashboardProvider implements vscode.Disposable {
       case 'copyLogs':
         await vscode.env.clipboard.writeText(message.text);
         this._postMessage({ type: 'toast', message: 'Logs copied to clipboard', severity: 'info' });
+        break;
+
+      case 'copyText':
+        await vscode.env.clipboard.writeText(message.text);
+        this._postMessage({ type: 'toast', message: 'Copied to clipboard', severity: 'info' });
         break;
 
       case 'toggleCompareItem': {
@@ -230,6 +239,34 @@ export class DockerDashboardProvider implements vscode.Disposable {
         this._syncServiceViewState();
         break;
       }
+    }
+  }
+
+  /**
+   * F5 in the dashboard (the sidekick-docker.refreshDashboard keybinding; the
+   * webview no longer handles F5 itself, or it refreshed twice).
+   */
+  async refreshFromKeybinding(): Promise<void> {
+    if (!this.panel) return;
+    this._postMessage({ type: 'toast', message: 'Refreshing\u2026', severity: 'info' });
+    await this.refresh();
+  }
+
+  /**
+   * Re-list everything, and re-read a Files tab that is on screen (filesystem
+   * changes are otherwise cached). With no live service — the initial connect
+   * failed — this is a retry rather than a silent no-op.
+   */
+  private async refresh(): Promise<void> {
+    if (!this.service) {
+      await this._initializeService();
+      return;
+    }
+    const service = this.service;
+    await service.forceRefresh();
+    const v = this.viewState;
+    if (v.activePanelId === 'containers' && v.detailTabIndex === FILES_TAB_INDEX && v.selectedItemId) {
+      await service.loadDetail('changes', v.selectedItemId, true);
     }
   }
 
@@ -360,8 +397,11 @@ export class DockerDashboardProvider implements vscode.Disposable {
     }
 
     const meta = ACTION_META[actionType];
-    // Prune acts on the whole resource type, not the selected item.
-    const itemName = actionType === 'prune' ? panelId : service.getItemDisplayName(panelId, itemId);
+    // Prune acts on the whole resource type, not the selected item; compose
+    // Up/Down act on the whole project even from a service row, so name it.
+    const itemName = actionType === 'prune' ? panelId
+      : panelId === 'services' && (actionType === 'up' || actionType === 'down') ? composeProjectNameOf(itemId) ?? itemId
+      : service.getItemDisplayName(panelId, itemId);
 
     // Resolves to an outcome string when the action has something more
     // specific to report than its generic success message (e.g. prune).
@@ -431,11 +471,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
         this._postMessage({ type: 'toast', message: actionType, severity: 'success' });
       }
     } catch (err: unknown) {
-      this._postMessage({
-        type: 'toast',
-        message: `${actionType} ${itemName} failed: ${errorMessage(err)}`,
-        severity: 'error',
-      });
+      // ACTION_META has an entry for exactly the shared ActionTypes.
+      const message = meta ? actionFailedText(actionType as ActionType, itemName, errorMessage(err)) : `${actionType} ${itemName} failed: ${errorMessage(err)}`;
+      this._postMessage({ type: 'toast', message, severity: 'error' });
     }
   }
 

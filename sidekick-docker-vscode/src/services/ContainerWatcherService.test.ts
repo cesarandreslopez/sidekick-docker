@@ -81,10 +81,14 @@ describe('ContainerWatcherService', () => {
   });
 
   it('ignores a refresh result that arrives after disposal', async () => {
-    let resolve!: (value: ContainerInfo[]) => void;
-    listContainersMock.mockReturnValue(new Promise<ContainerInfo[]>(r => { resolve = r; }));
+    pingMock.mockResolvedValue(true);
+    listContainersMock.mockResolvedValue([]);
     const callbacks = createCallbacks();
     service = new ContainerWatcherService(callbacks);
+    await service.start();
+    callbacks.onContainersChanged.mockClear();
+    let resolve!: (value: ContainerInfo[]) => void;
+    listContainersMock.mockReturnValue(new Promise<ContainerInfo[]>(r => { resolve = r; }));
     const pending = service.forceRefresh();
     service.dispose(); resolve([makeContainer()]);
     await pending;
@@ -173,5 +177,33 @@ describe('ContainerWatcherService', () => {
     expect(callbacks.onConnectionChanged).toHaveBeenCalledWith(false, 'Connection refused at tcp://10.0.0.9:2375. Is the Docker daemon running?');
     expect(service.getDisconnectReason()).toMatch(/Connection refused/);
   });
-});
 
+  it('keeps the explained reason when Retry runs while Docker is down', async () => {
+    pingMock.mockResolvedValue(false);
+    listContainersMock.mockRejectedValue(Object.assign(new Error('connect ECONNREFUSED /var/run/docker.sock'), { code: 'ECONNREFUSED' }));
+    const callbacks = createCallbacks();
+    service = new ContainerWatcherService(callbacks, { endpoint: 'tcp://10.0.0.9:2375' });
+    await service.start();
+    await service.forceRefresh();
+    for (const [, reason] of callbacks.onConnectionChanged.mock.calls) {
+      expect(reason).toBe('Connection refused at tcp://10.0.0.9:2375. Is the Docker daemon running?');
+    }
+    expect(service.getDisconnectReason()).toMatch(/^Connection refused/);
+  });
+
+  it('explains a daemon lost mid-session instead of reporting the raw listing error', async () => {
+    pingMock.mockResolvedValue(true);
+    listContainersMock.mockResolvedValue([makeContainer()]);
+    const callbacks = createCallbacks();
+    service = new ContainerWatcherService(callbacks, { endpoint: 'tcp://10.0.0.9:2375' });
+    await service.start();
+
+    pingMock.mockResolvedValue(false);
+    listContainersMock.mockRejectedValue(new Error('connect ECONNREFUSED 10.0.0.9:2375'));
+    await service.forceRefresh();
+    expect(callbacks.onContainersChanged).toHaveBeenLastCalledWith([], false);
+    expect(callbacks.onConnectionChanged).toHaveBeenLastCalledWith(false, 'Connection refused at tcp://10.0.0.9:2375. Is the Docker daemon running?');
+    expect(callbacks.onConnectionChanged).not.toHaveBeenCalledWith(false, 'connect ECONNREFUSED 10.0.0.9:2375');
+    expect(service.isConnected()).toBe(false);
+  });
+});

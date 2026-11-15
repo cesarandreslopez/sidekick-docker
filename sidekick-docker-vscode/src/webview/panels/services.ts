@@ -3,7 +3,8 @@ import type { DashboardStateSnapshot } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { parseComposeItemId, composeProjectNameOf } from '../../types/composeItemId';
 import { composeDownConfirmMessage } from 'sidekick-docker-shared/formatters';
-import { stateIcon, stateColor, escapeHtml, escapeAttr, colorizeState, colorizeId, renderKvGrid, colorizeLogEntry } from '../formatters';
+import { stateIcon, stateColor, escapeHtml, escapeAttr, colorizeState, colorizeId, renderKvGrid } from '../formatters';
+import { renderLogFilterBar, renderLogLines, NO_MATCHING_LOGS } from './logPane';
 
 function getComposeLogKey(itemId: string): string {
   const ref = parseComposeItemId(itemId);
@@ -20,9 +21,14 @@ function renderComposeLogPane(itemId: string, state: WebviewState, logRoot: stri
   if (!entries || entries.length === 0) {
     return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the service produces output</div></div>';
   }
-  const first = entries[0];
-  return `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeAttr(key)}" data-rendered-count="${entries.length}" data-first-key="${escapeAttr(`${first?.timestamp ?? ''}:${first?.stream ?? ''}:${first?.message ?? ''}`)}"><div class="log-content" data-log-content>${entries.map(e => colorizeLogEntry(e)).join('')}</div></div>`;
+  const lines = renderLogLines(entries, state);
+  // The primary pane gets the same filter bar as Containers (the TUI filters
+  // Services logs too); Copy Logs applies the filter that is on screen.
+  const bar = logRoot === 'compose' ? renderLogFilterBar(state, lines.matched) : '';
+  return `<div class="log-shell" data-log-root="${logRoot}" data-item-id="${escapeAttr(key)}">${bar}<div class="log-content" data-log-content>${lines.html || NO_MATCHING_LOGS}</div></div>`;
 }
+
+const COMPOSE_UNTRUSTED_NOTE = '<div class="detail-note">Compose actions are disabled until this workspace is trusted.</div>';
 
 export const servicesPanel: PanelDefinition = {
   id: 'services',
@@ -48,12 +54,14 @@ export const servicesPanel: PanelDefinition = {
             html += `<div>${stateIcon(s.state)} ${escapeHtml(s.name)} (${escapeHtml(s.image)})</div>`;
           }
           html += '</div>';
+          if (state.snapshot.composeAllowed === false) html += COMPOSE_UNTRUSTED_NOTE;
           return html;
         }
         if (ref.kind === 'service') {
           const project = state.snapshot.composeProjects.find(p => p.name === ref.projectName);
           const service = project?.services.find(s => s.name === ref.serviceName);
           if (!service) return 'Service not found.';
+          const note = state.snapshot.composeAllowed === false ? COMPOSE_UNTRUSTED_NOTE : '';
           return renderKvGrid([
             ['Service', escapeHtml(service.name)],
             ['Project', escapeHtml(service.projectName)],
@@ -62,7 +70,7 @@ export const servicesPanel: PanelDefinition = {
             ['Replicas', `${service.runningReplicas ?? (service.state === 'running' ? 1 : 0)}/${service.totalReplicas ?? (service.containerId ? 1 : 0)} running`],
             ['Container', service.containerId ? colorizeId(service.containerId) : 'not created'],
             ['Ports', escapeHtml(service.ports.join(', ') || 'none')],
-          ]);
+          ]) + note;
         }
         return '';
       },
@@ -77,7 +85,7 @@ export const servicesPanel: PanelDefinition = {
         }
 
         // Compare mode: side-by-side
-        const primaryLabel = item.label.trim();
+        const primaryLabel = item.label;
         const secondaryLabel = compareItemId.replace(/^(project|service):/, '').replace(/:/g, '/');
 
         return `<div class="log-compare-container">
@@ -106,7 +114,8 @@ export const servicesPanel: PanelDefinition = {
         id: `project:${project.name}`,
         label: project.name,
         icon: statusIcon,
-        iconColor: project.status === 'running' ? stateColor('running') : stateColor('exited'),
+        // Partial is a warning (some services down), as in the TUI — not an error.
+        iconColor: project.status === 'running' ? stateColor('running') : project.status === 'partial' ? stateColor('paused') : stateColor('exited'),
         sortKey: sortKey++,
         tooltip: project.name,
       });
@@ -114,7 +123,8 @@ export const servicesPanel: PanelDefinition = {
       for (const service of project.services) {
         items.push({
           id: `service:${project.name}:${service.name}`,
-          label: `  ${service.name}`,
+          label: service.name,
+          indent: true,
           icon: stateIcon(service.state),
           iconColor: stateColor(service.state),
           sortKey: sortKey++,
@@ -127,15 +137,19 @@ export const servicesPanel: PanelDefinition = {
     return items;
   },
 
-  getActions(item: PanelItem): ActionDefinition[] {
-    // Compose actions target the whole project, even from a service row.
-    const projectName = composeProjectNameOf(item.id) ?? item.label.trim();
+  getActions(item: PanelItem, snapshot: DashboardStateSnapshot): ActionDefinition[] {
+    const copyLogs: ActionDefinition = { key: 'c', label: 'Copy Logs', actionType: 'copyLogs' };
+    // The host refuses compose in an untrusted workspace; do not offer what
+    // would only fail after the confirm.
+    if (snapshot.composeAllowed === false) return [copyLogs];
+    // Up/Down target the whole project, even from a service row.
+    const projectName = composeProjectNameOf(item.id) ?? item.label;
     return [
       { key: 'u', label: 'Up', actionType: 'up' },
       { key: 'D', label: 'Down', actionType: 'down', confirm: true, confirmMessage: composeDownConfirmMessage(projectName), confirmSeverity: 'high' },
       { key: 'r', label: 'Restart', actionType: 'restart' },
       { key: 'S', label: 'Stop', actionType: 'stop' },
-      { key: 'c', label: 'Copy Logs', actionType: 'copyLogs' },
+      copyLogs,
     ];
   },
 

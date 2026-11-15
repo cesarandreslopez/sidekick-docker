@@ -26,12 +26,16 @@ export const __mock = {
   openedExternal: [] as string[],
   /** What window.showQuickPick resolves to next (undefined = dismissed). */
   quickPickResult: undefined as string | undefined,
+  /** Text written through env.clipboard.writeText. */
+  clipboard: [] as string[],
   reset(): void {
     this.configValues.clear();
     this.warningMessages.length = 0;
     this.progressCalls.length = 0;
     this.openedExternal.length = 0;
     this.quickPickResult = undefined;
+    this.clipboard.length = 0;
+    workspace.isTrusted = true;
   },
 };
 
@@ -86,5 +90,32 @@ export const env = {
     __mock.openedExternal.push(uri.toString());
     return Promise.resolve(true);
   },
+  clipboard: {
+    writeText(text: string): Promise<void> {
+      __mock.clipboard.push(text);
+      return Promise.resolve();
+    },
+  },
 };
+
+/* Tree items: just enough to construct the tree's item classes. */
+export enum TreeItemCollapsibleState { None = 0, Collapsed = 1, Expanded = 2 }
+
+export class TreeItem {
+  id?: string;
+  description?: string;
+  contextValue?: string;
+  tooltip?: unknown;
+  iconPath?: unknown;
+  command?: { command: string; title: string; arguments?: unknown[] };
+  constructor(public label: string, public collapsibleState?: TreeItemCollapsibleState) {}
+}
+
+export class ThemeColor {
+  constructor(public id: string) {}
+}
+
+export class ThemeIcon {
+  constructor(public id: string, public color?: ThemeColor) {}
+}
 

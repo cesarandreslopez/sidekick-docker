@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { ContainerInfo } from 'sidekick-docker-shared';
-import { buildContainerGroups, composeGroupContextValue } from './containerGroups';
+import { buildContainerGroups, composeGroupContextValue, composeGroupTooltip } from './containerGroups';
 import type { ContainerGroup, ComposeProjectGroup } from './containerGroups';
 
 type TreeElement = ContainerGroupItem | ComposeProjectGroupItem | ContainerTreeItem;
@@ -28,7 +28,7 @@ export class ComposeProjectGroupItem extends vscode.TreeItem {
     this.description = String(project.containers.length);
     this.iconPath = new vscode.ThemeIcon('layers');
     this.contextValue = composeGroupContextValue(project);
-    this.tooltip = `Compose project ${project.projectName} — right-click for Up, Down, Restart`;
+    this.tooltip = composeGroupTooltip(project, vscode.workspace.isTrusted);
   }
 }
 
@@ -46,10 +46,13 @@ export class ContainerTreeItem extends vscode.TreeItem {
     // A TreeItem with no command does nothing on click, which is not how any
     // other VS Code tree behaves — you had to right-click or hit the inline
     // icon just to look at a container.
+    // A row click keeps focus in the tree (so arrowing through rows keeps
+    // working); the inline button and context menu pass no options and focus
+    // the dashboard.
     this.command = {
       command: 'sidekick-docker.openContainerInDashboard',
       title: 'Open in Dashboard',
-      arguments: [this],
+      arguments: [this, { preserveFocus: true } satisfies OpenInDashboardOptions],
     };
 
     // State-specific icon
@@ -84,6 +87,29 @@ export class ContainerTreeItem extends vscode.TreeItem {
         break;
     }
   }
+}
+
+/** Second argument of openContainerInDashboard when a row is clicked. */
+export interface OpenInDashboardOptions { preserveFocus?: boolean }
+
+/**
+ * The container a tree command was invoked on. Group headers and compose
+ * groups also reach container commands through menus, and the commands used
+ * to read `arg.container.id` off them and throw.
+ */
+export function containerIdFromArg(arg: unknown): string | undefined {
+  if (typeof arg === 'string') return arg || undefined;
+  return arg instanceof ContainerTreeItem ? arg.container.id : undefined;
+}
+
+/**
+ * The options a row click passes. Context-menu invocations pass the selected
+ * items as the second argument instead, which must not count.
+ */
+export function openOptionsFromArg(arg: unknown): OpenInDashboardOptions {
+  return arg !== null && typeof arg === 'object' && !Array.isArray(arg) && (arg as OpenInDashboardOptions).preserveFocus === true
+    ? { preserveFocus: true }
+    : {};
 }
 
 export class ContainerTreeProvider implements vscode.TreeDataProvider<TreeElement> {

@@ -77,6 +77,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "sidekick-docker.refreshDashboard",
+        "title": "Refresh Dashboard",
+        "category": "Sidekick Docker",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "sidekick-docker.startContainer",
         "title": "Start",
         "category": "Sidekick Docker",
@@ -192,6 +198,11 @@
         "key": "ctrl+alt+r",
         "mac": "cmd+alt+r",
         "when": "focusedView == sidekick-docker.containers"
+      },
+      {
+        "command": "sidekick-docker.refreshDashboard",
+        "key": "f5",
+        "when": "activeWebviewPanelId == 'sidekick-docker.dashboard'"
       }
     ],
     "configuration": {
@@ -200,7 +211,7 @@
         "sidekick-docker.socketPath": {
           "type": "string",
           "default": "",
-          "description": "Docker endpoint: a socket path (e.g. /var/run/docker.sock), unix://, or tcp://host:port. Leave empty to use the platform default socket (or the DOCKER_HOST environment variable if set)."
+          "description": "Docker endpoint: a socket path (e.g. /var/run/docker.sock), unix://, or tcp://host:port. Leave empty to use the platform default socket (or the DOCKER_HOST environment variable if set). ssh:// is not accepted here; it works only through DOCKER_HOST."
         },
         "sidekick-docker.refreshIntervalSeconds": {
           "type": "number",
@@ -251,6 +262,10 @@
           "when": "false"
         },
         {
+          "command": "sidekick-docker.refreshDashboard",
+          "when": "false"
+        },
+        {
           "command": "sidekick-docker.composeUp",
           "when": "false"
         },
@@ -283,22 +298,22 @@
       "view/item/context": [
         {
           "command": "sidekick-docker.startContainer",
-          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created|dead)$/",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created)$/",
           "group": "inline@1"
         },
         {
           "command": "sidekick-docker.stopContainer",
-          "when": "view == sidekick-docker.containers && viewItem == container-running",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(running|paused|restarting)$/",
           "group": "inline@1"
         },
         {
           "command": "sidekick-docker.openContainerInDashboard",
-          "when": "view == sidekick-docker.containers && viewItem =~ /^container-/",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(running|paused|restarting|exited|created|dead|removing)$/",
           "group": "inline@9"
         },
         {
           "command": "sidekick-docker.startContainer",
-          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created|dead)$/",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created)$/",
           "group": "1_lifecycle@1"
         },
         {
@@ -323,12 +338,12 @@
         },
         {
           "command": "sidekick-docker.openContainerInDashboard",
-          "when": "view == sidekick-docker.containers && viewItem =~ /^container-/",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(running|paused|restarting|exited|created|dead|removing)$/",
           "group": "2_open@1"
         },
         {
           "command": "sidekick-docker.removeContainer",
-          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(exited|created|dead)$/",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(running|paused|restarting|exited|created|dead)$/",
           "group": "3_danger@1"
         },
         {
@@ -338,7 +353,7 @@
         },
         {
           "command": "sidekick-docker.showContainerLogs",
-          "when": "view == sidekick-docker.containers && viewItem =~ /^container-/",
+          "when": "view == sidekick-docker.containers && viewItem =~ /^container-(running|paused|restarting|exited|created|dead|removing)$/",
           "group": "2_open@3"
         },
         {

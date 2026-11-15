@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createInitialState } from './state';
+import { createInitialState, droppedLogPrefix } from './state';
 
 describe('createInitialState', () => {
   it('uses defaults when nothing is restored', () => {
@@ -46,5 +46,37 @@ describe('createInitialState', () => {
     expect(state.confirmVisible).toBe(false);
     expect(state.contextMenuVisible).toBe(false);
     expect(state.focusTarget).toBe('side');
+  });
+});
+
+describe('droppedLogPrefix', () => {
+  const line = (message: string, timestamp: string | null = null) => ({ timestamp, stream: 'stdout' as const, message });
+  const lines = (...messages: string[]) => messages.map(m => line(m));
+
+  it('is 0 when lines were only appended', () => {
+    expect(droppedLogPrefix(lines('a', 'b'), lines('a', 'b', 'c'))).toBe(0);
+    expect(droppedLogPrefix(lines('a', 'b'), lines('a', 'b'))).toBe(0);
+  });
+
+  it('counts lines a full ring buffer dropped from the front', () => {
+    expect(droppedLogPrefix(lines('a', 'b', 'c', 'd'), lines('c', 'd', 'e', 'f'))).toBe(2);
+    expect(droppedLogPrefix(lines('a', 'b', 'c'), lines('c', 'd', 'e'))).toBe(2);
+  });
+
+  it('tells repeated messages apart by their position, not just the first match', () => {
+    // "x" first appears at 0, but only dropping 2 lines up the rest.
+    expect(droppedLogPrefix(lines('x', 'y', 'x', 'z'), lines('x', 'z', 'w'))).toBe(2);
+  });
+
+  it('is null when the lists do not line up as drop-then-append', () => {
+    expect(droppedLogPrefix(lines('a', 'b'), lines('q', 'r'))).toBeNull();
+    expect(droppedLogPrefix(lines('a', 'b', 'c'), lines('a', 'x', 'c', 'd'))).toBeNull();
+    expect(droppedLogPrefix([], lines('a'))).toBeNull();
+    expect(droppedLogPrefix(lines('a'), [])).toBeNull();
+  });
+
+  it('keys on timestamp and stream as well as text', () => {
+    expect(droppedLogPrefix([line('a', 't1'), line('a', 't2')], [line('a', 't2'), line('b', 't3')])).toBe(1);
+    expect(droppedLogPrefix([line('a', 't1')], [{ timestamp: 't1', stream: 'stderr', message: 'a' }])).toBeNull();
   });
 });

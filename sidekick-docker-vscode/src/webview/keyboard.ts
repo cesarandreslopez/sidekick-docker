@@ -53,7 +53,12 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
   const { state } = ctx;
   if (e.defaultPrevented || e.isComposing || e.metaKey || e.altKey) return;
   if (e.ctrlKey && !['d', 'u'].includes(e.key)) return;
-  if (e.key === 'Tab') return; // Native traversal; modal boundaries are handled by overlays.
+  if (e.key === 'Tab') {
+    // Native traversal; modal boundaries are handled by overlays. The context
+    // menu is not modal: Tab leaves it, so close it rather than strand it open.
+    if (state.contextMenuVisible) ctx.hideContextMenu();
+    return;
+  }
   const navigationKeys = ['j', 'k', 'J', 'K', 'ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'];
   if (e.repeat && !navigationKeys.includes(e.key) && !(e.ctrlKey && ['d', 'u'].includes(e.key))) return;
 
@@ -62,25 +67,23 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
   // global shortcut may fire (fixes actions triggering from the log filter).
   const active = document.activeElement;
   if (isTypingTarget(active)) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      (active as HTMLElement).blur();
-      if (state.filterVisible) {
-        // Preserve item-filter Escape semantics: clear + close.
-        state.filterString = '';
-        ctx.hideFilter();
-        ctx.renderAll();
-      }
-      return;
-    }
-    if (e.key === 'Enter') {
+    if (e.key === 'Escape' || e.key === 'Enter') {
       e.preventDefault();
       if (state.filterVisible) {
-        // Preserve item-filter Enter semantics: commit + close.
-        ctx.hideFilter();
+        // Item filter: Escape clears + closes, Enter commits + closes; either
+        // way focus returns to where it was.
+        if (e.key === 'Escape') {
+          (active as HTMLElement).blur();
+          state.filterString = '';
+          ctx.hideFilter();
+          ctx.renderAll();
+        } else {
+          ctx.hideFilter();
+        }
       } else {
-        // Log filter input: commit by blurring.
-        (active as HTMLElement).blur();
+        // Log filter: commit and hand focus to the log it filters (blur()
+        // alone dropped it on <body>, where no key reached the pane).
+        document.getElementById('detail-content')?.focus({ preventScroll: true });
       }
       return;
     }
@@ -264,6 +267,10 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     return;
   }
 
+  // While the daemon is unreachable the banner covers a stale list: actions,
+  // navigation and filters would act on rows that may no longer exist.
+  if (state.connState === 'disconnected') return;
+
   // Panel switching: 1-5
   const num = parseInt(e.key, 10);
   if (num >= 1 && num <= ctx.panelCount) {
@@ -297,18 +304,17 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     const logFilterInput = document.getElementById('log-filter-input') as HTMLInputElement | null;
     if (logFilterInput) {
       e.preventDefault();
-      logFilterInput.focus();
+      // The bar is sticky, so it is on screen; scrolling to it jumped to the
+      // top of the log and broke follow mode.
+      logFilterInput.focus({ preventScroll: true });
       return;
     }
   }
 
-  // Manual refresh (F5)
-  if (e.key === 'F5') {
-    e.preventDefault();
-    ctx.post({ type: 'requestRefresh' });
-    ctx.addToast('Refreshing\u2026', 'info');
-    return;
-  }
+  // F5 is not handled here: the webview host forwards every keydown to the
+  // workbench, where a keybinding runs sidekick-docker.refreshDashboard (and
+  // keeps F5 from also starting the debugger). Handling it here as well
+  // refreshed twice.
 
   // Secondary compare pane scrolling (Shift+J/K)
   if (e.key === 'J' || e.key === 'K') {
@@ -345,6 +351,8 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
   // Sort overlay (o key, containers only)
   if (e.key === 'o' && ctx.getPanel().id === 'containers') {
     e.preventDefault();
+    // Open on the field in effect, not wherever the cursor was left last time.
+    state.sortMenuIndex = Math.max(0, SORT_OPTIONS.findIndex(o => o.field === state.sortField));
     state.sortOverlayVisible = true;
     ctx.renderSortOverlay();
     return;
@@ -414,7 +422,8 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
       ctx.navigateSide(Infinity);
       return;
     }
-    if (e.key === 'Enter') {
+    // Enter, l or → move into the detail pane (h/← come back), as in the TUI.
+    if (e.key === 'Enter' || e.key === 'l' || e.key === 'ArrowRight') {
       e.preventDefault();
       state.focusTarget = 'detail';
       document.getElementById('detail-content')?.focus({ preventScroll: true });

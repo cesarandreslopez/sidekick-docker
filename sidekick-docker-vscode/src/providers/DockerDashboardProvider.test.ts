@@ -207,3 +207,65 @@ describe('DockerDashboardProvider requestRefresh', () => {
     expect(__mock.openedExternal.at(-1)).toBe('https://localhost:8443');
   });
 });
+
+describe('DockerDashboardProvider feedback', () => {
+  let provider: DockerDashboardProvider;
+  let posted: unknown[];
+
+  beforeEach(async () => {
+    const { __mock } = await import('../test/vscode');
+    __mock.reset();
+    serviceInstances.length = 0;
+    provider = new DockerDashboardProvider({} as vscode.Uri);
+    posted = [];
+    (provider as unknown as { _postMessage(m: unknown): void })._postMessage = (m: unknown) => { posted.push(m); };
+    const p = internals(provider);
+    const run = p._initializeService();
+    await tick();
+    serviceInstances[0].resolveInitialize(true);
+    await run;
+    posted.length = 0;
+  });
+
+  afterEach(() => {
+    provider.dispose();
+  });
+
+  const handle = (a: string, i: string, panel: string) =>
+    (provider as unknown as { _handleAction(a: string, i: string, panel: string): Promise<void> })._handleAction(a, i, panel);
+
+  it('copies a toast with copyText and says "Copied", not "Logs copied"', async () => {
+    const { __mock } = await import('../test/vscode');
+    await internals(provider)._handleMessage({ type: 'copyText', text: 'boom' } as { type: string });
+    expect(__mock.clipboard).toEqual(['boom']);
+    expect(posted).toContainEqual({ type: 'toast', message: 'Copied to clipboard', severity: 'info' });
+  });
+
+  it('names the project, not the service row, for compose Up and Down', async () => {
+    const svc = serviceInstances[0] as unknown as Record<string, unknown>;
+    svc.getItemDisplayName = () => 'shop/web';
+    svc.composeUp = vi.fn(async () => { /* ok */ });
+    svc.composeDown = vi.fn(async () => { throw new Error('no such project'); });
+    await handle('up', 'service:shop:web', 'services');
+    expect(posted).toContainEqual({ type: 'toast', message: 'shop is up', severity: 'success' });
+    await handle('down', 'service:shop:web', 'services');
+    expect(posted).toContainEqual({ type: 'toast', message: 'Failed to take shop down: no such project', severity: 'error' });
+  });
+
+  it('words failures with the shared actionFailedText', async () => {
+    const svc = serviceInstances[0] as unknown as Record<string, unknown>;
+    svc.getItemDisplayName = () => 'web';
+    svc.stopContainer = vi.fn(async () => { throw new Error('is not running'); });
+    await handle('stop', 'abc', 'containers');
+    expect(posted).toContainEqual({ type: 'toast', message: 'Failed to stop web: is not running', severity: 'error' });
+  });
+
+  it('refreshes once from the F5 keybinding, with a toast', async () => {
+    (provider as unknown as { panel: unknown }).panel = {};
+    await provider.refreshFromKeybinding();
+    expect(serviceInstances[0].forceRefresh).toHaveBeenCalledTimes(1);
+    expect(posted).toEqual([{ type: 'toast', message: 'Refreshing\u2026', severity: 'info' }]);
+    (provider as unknown as { panel: unknown }).panel = undefined;
+  });
+});
+
