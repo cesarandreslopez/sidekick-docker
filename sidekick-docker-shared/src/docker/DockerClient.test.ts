@@ -146,6 +146,8 @@ describe('DockerClient', () => {
     expect(volumePruneScope('1.41')).toBe('all');
     expect(volumePruneScope('1.9')).toBe('all');
     expect(volumePruneScope(null)).toBe('unknown');
+    expect(volumePruneScope('garbage')).toBe('unknown');
+    expect(volumePruneScope('1.x')).toBe('unknown');
   });
 
   it('listImages detects untagged images however the daemon reports them', async () => {
@@ -156,21 +158,33 @@ describe('DockerClient', () => {
       { Id: 'sha256:bbbbbbbbbbbb1', RepoTags: ['<none>:<none>'], Size: 1, Created: 0 },
       { Id: 'sha256:cccccccccccc1', RepoTags: null, Size: 1, Created: 0 },
       { Id: 'sha256:dddddddddddd1', RepoTags: ['app:1'], Size: 1, Created: 0 },
+      { Id: 'sha256:eeeeeeeeeeee1', RepoTags: [], RepoDigests: ['nginx@sha256:abc'], Size: 1, Created: 0 },
+      { Id: 'sha256:ffffffffffff1', RepoTags: [], RepoDigests: ['<none>@<none>'], Size: 1, Created: 0 },
     ]);
     const images = await c.listImages();
-    expect(images.map(i => i.isDangling)).toEqual([true, true, true, false]);
+    // Digest-only images are kept by `docker image prune`, so not dangling.
+    expect(images.map(i => i.isDangling)).toEqual([true, true, true, false, false, true]);
     expect(images[0].repoTags).toEqual(['<none>:<none>']);
   });
 
   describe('removeImage', () => {
-    function setup(repoTags: string[] | null, containers: unknown[] = []) {
+    const notFound = () => Object.assign(new Error('no such image'), { statusCode: 404 });
+
+    function setup(repoTags: string[] | null, containers: unknown[] = [], failOn: Record<string, Error> = {}) {
       const c = new DockerClient();
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const d = (c as any).docker;
       const removed: string[] = [];
+      let deleted = false;
       d.getImage = vi.fn((name: string) => ({
         inspect: vi.fn().mockResolvedValue({ Id: 'sha256:full', RepoTags: repoTags }),
-        remove: vi.fn(async () => { removed.push(name); }),
+        remove: vi.fn(async () => {
+          if (failOn[name]) throw failOn[name];
+          // Removing the image by full ID after its last tag went: already deleted.
+          if (name === 'sha256:full' && deleted) throw notFound();
+          removed.push(name);
+          if (repoTags && removed.filter(n => repoTags.includes(n)).length === repoTags.length) deleted = true;
+        }),
       }));
       d.listContainers = vi.fn().mockResolvedValue(containers);
       return { c, d, removed };
@@ -191,14 +205,33 @@ describe('DockerClient', () => {
 
     it('refuses before untagging when a container uses the image', async () => {
       const { c, removed } = setup(['app:latest', 'app:1.2'], [{ Id: 'c1', Names: ['/web'], ImageID: 'sha256:full' }]);
-      await expect(c.removeImage('abc')).rejects.toThrow('Image is used by container web. Remove it first.');
+      await expect(c.removeImage('abc')).rejects.toThrow('Image is used by container web (directly or through an image built from it). Remove it first.');
       expect(removed).toEqual([]);
     });
 
-    it('ignores containers of child images matched by the ancestor filter', async () => {
+    it('also refuses when a container of a child image would block the final delete', async () => {
       const { c, removed } = setup(['base:1', 'base:latest'], [{ Id: 'c1', Names: ['/kid'], ImageID: 'sha256:child' }]);
+      await expect(c.removeImage('abc')).rejects.toThrow(/used by container kid/);
+      expect(removed).toEqual([]);
+    });
+
+    it('says which tags went when a later untag fails', async () => {
+      const conflict = Object.assign(new Error('image has dependent child images'), { statusCode: 409 });
+      const { c, removed } = setup(['app:latest', 'app:1.2'], [], { 'app:1.2': conflict });
+      await expect(c.removeImage('abc')).rejects.toThrow('Removed tags app:latest; image kept: image has dependent child images');
+      expect(removed).toEqual(['app:latest']);
+    });
+
+    it('treats a tag that is already gone as removed', async () => {
+      const { c, removed } = setup(['app:latest', 'app:1.2'], [], { 'app:latest': notFound() });
       await c.removeImage('abc');
-      expect(removed).toEqual(['base:1', 'base:latest']);
+      expect(removed).toEqual(['app:1.2', 'sha256:full']);
+    });
+
+    it('finishes by id so a digest reference cannot keep the image alive', async () => {
+      const { c, removed } = setup(['app:latest', 'app:1.2']);
+      await c.removeImage('abc');
+      expect(removed).toEqual(['app:latest', 'app:1.2']);
     });
   });
 

@@ -78,7 +78,7 @@ A read that outlives `requestTimeoutMs` rejects with `DockerTimeoutError`; strea
 |--------|-----------|-------------|
 | `listVolumes` | `() => Promise<VolumeInfo[]>` | List volumes (includes usage detection) |
 | `removeVolume` | `(name: string) => Promise<void>` | Remove a volume |
-| `pruneVolumes` | `() => Promise<{ spaceReclaimed: number }>` | Remove unused volumes |
+| `pruneVolumes` | `() => Promise<{ spaceReclaimed: number }>` | Remove unused volumes — on Engine 23+ only anonymous ones (see `VolumeInfo.pruneScope`) |
 
 #### Network Methods
 

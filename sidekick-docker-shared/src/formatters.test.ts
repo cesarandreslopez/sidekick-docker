@@ -30,7 +30,9 @@ describe('prune wording', () => {
   it('names the count, with a fallback when it is unknown', () => {
     expect(pruneConfirmMessage('containers', 1)).toBe('Remove 1 stopped container?');
     expect(pruneConfirmMessage('images', 3)).toBe('Prune 3 dangling images?');
-    expect(pruneConfirmMessage('volumes', 0)).toBe('Prune all unused volumes?');
+    expect(pruneConfirmMessage('volumes', 0, 'all')).toBe('Prune all unused volumes?');
+    // Without a scope it names no count rather than overstate on Engine 23+.
+    expect(pruneConfirmMessage('volumes', 3)).toBe('Prune unused volumes?');
   });
 
   it('counts only anonymous volumes where the daemon prunes only those (Engine 23+)', () => {

@@ -116,6 +116,7 @@ export type NetworkIpamConfigRaw = z.infer<typeof NetworkIpamConfigRawSchema>;
 export const ImageItemRawSchema = z.object({
   Id: z.string(),
   RepoTags: z.array(z.string()).nullable().optional(),
+  RepoDigests: z.array(z.string()).nullable().optional(),
   Size: z.number().default(0),
   Created: z.number().default(0),
 });

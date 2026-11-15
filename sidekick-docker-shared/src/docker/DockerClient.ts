@@ -36,7 +36,7 @@ import {
   ImageHistoryResponseSchema,
 } from './schemas';
 import type { DockerStatsRaw } from './schemas';
-import { shortId } from './utils';
+import { shortId, realImageTags, UNTAGGED_IMAGE } from './utils';
 
 export interface DockerClientOptions {
   socketPath?: string;
@@ -443,12 +443,15 @@ export class DockerClient {
       // older daemons as `["<none>:<none>"]` or null. Normalise all three, or
       // dangling images go undetected and the image prune count reads 0.
       const tags = realImageTags(validated.RepoTags);
+      // An image pulled by digest has no tags but still a digest reference;
+      // `docker image prune` keeps it, so it is not dangling.
+      const digests = (validated.RepoDigests ?? []).filter(d => d && d !== '<none>@<none>');
       return {
         id: shortId(validated.Id.replace('sha256:', '')),
         repoTags: tags.length > 0 ? tags : [UNTAGGED_IMAGE],
         size: validated.Size,
         created: new Date(validated.Created * 1000),
-        isDangling: tags.length === 0,
+        isDangling: tags.length === 0 && digests.length === 0,
       };
     });
   }
@@ -465,23 +468,44 @@ export class DockerClient {
    */
   async removeImage(id: string): Promise<void> {
     const image = this.docker.getImage(id);
-    const info = await this.request(abortSignal => image.inspect({ abortSignal } as object));
+    // Image.inspect does not forward an abort signal; request()'s race still
+    // enforces the deadline.
+    const info = await this.request(() => image.inspect());
     const tags = realImageTags(info.RepoTags);
     if (tags.length <= 1) {
       await image.remove();
       return;
     }
-    const candidates = await this.request(abortSignal =>
+    // Any container whose image descends from this one blocks the final
+    // delete — directly, or through a child image built from it — so refuse
+    // before the first untag rather than strip the names and then fail.
+    const users = await this.request(abortSignal =>
       this.docker.listContainers({ all: true, filters: { ancestor: [info.Id] }, abortSignal }));
-    // `ancestor` also matches containers of images built FROM this one; only
-    // containers of this exact image block the removal.
-    const users = candidates.filter(c => c.ImageID === info.Id);
     if (users.length > 0) {
       const names = users.map(c => (c.Names?.[0] ?? shortId(c.Id)).replace(/^\//, ''));
-      throw new Error(`Image is used by ${names.length === 1 ? 'container' : 'containers'} ${names.join(', ')}. Remove ${names.length === 1 ? 'it' : 'them'} first.`);
+      const one = names.length === 1;
+      throw new Error(`Image is used by ${one ? 'container' : 'containers'} ${names.join(', ')} (directly or through an image built from it). Remove ${one ? 'it' : 'them'} first.`);
     }
+    const removed: string[] = [];
+    const fail = (err: unknown): never => {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(removed.length > 0 ? `Removed tags ${removed.join(', ')}; image kept: ${reason}` : reason);
+    };
     for (const tag of tags) {
-      await this.docker.getImage(tag).remove();
+      try {
+        await this.docker.getImage(tag).remove();
+      } catch (err) {
+        // A tag removed meanwhile is already gone, which is what we wanted.
+        if (!isNotFound(err)) fail(err);
+      }
+      removed.push(tag);
+    }
+    // The last untag normally deletes the image; a digest reference (an image
+    // also pulled by digest) can keep it alive, so finish by ID.
+    try {
+      await this.docker.getImage(info.Id).remove();
+    } catch (err) {
+      if (!isNotFound(err)) fail(err);
     }
   }
 
@@ -675,12 +699,9 @@ export function toContainerInfo(c: RawContainer): ContainerInfo {
   };
 }
 
-/** Docker's placeholder for an image with no tags. */
-const UNTAGGED_IMAGE = '<none>:<none>';
-
-/** An image's tags without the `<none>:<none>` placeholder; empty when untagged. */
-function realImageTags(tags: readonly string[] | null | undefined): string[] {
-  return (tags ?? []).filter(t => t && t !== UNTAGGED_IMAGE);
+/** docker-modem rejects a 404 with `statusCode: 404`. */
+function isNotFound(err: unknown): boolean {
+  return typeof err === 'object' && err !== null && (err as { statusCode?: unknown }).statusCode === 404;
 }
 
 /** Set by Engine 23+ on volumes created without a name. */
@@ -701,7 +722,7 @@ function apiVersionAtLeast(version: string, min: string): boolean {
 
 /** What `docker volume prune` (no filters) removes on a daemon speaking `apiVersion`. */
 export function volumePruneScope(apiVersion: string | null): VolumePruneScope {
-  if (!apiVersion) return 'unknown';
+  if (!apiVersion || !/^\d+(\.\d+)*$/.test(apiVersion)) return 'unknown';
   return apiVersionAtLeast(apiVersion, '1.42') ? 'anonymous' : 'all';
 }
 

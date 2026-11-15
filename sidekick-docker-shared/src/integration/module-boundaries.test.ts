@@ -127,6 +127,10 @@ describe('Sub-path exports', () => {
     expect(barrel.formatBytes).toBe(fmt.formatBytes);
     expect(barrel.stateIcon).toBe(fmt.stateIcon);
     expect(barrel.truncate).toBe(fmt.truncate);
+    expect(barrel.pruneConfirmFor).toBe(fmt.pruneConfirmFor);
+    expect(barrel.actionFailedText).toBe(fmt.actionFailedText);
+    expect(barrel.imageDisplayName).toBe(fmt.imageDisplayName);
+    expect(barrel.matchesRunningOnly).toBe(fmt.matchesRunningOnly);
   });
 });
 

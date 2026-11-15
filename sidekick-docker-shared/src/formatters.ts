@@ -1,4 +1,5 @@
 import type { PortBinding, ContainerInfo, VolumePruneScope } from './types';
+import { realImageTags } from './docker/utils';
 
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -138,7 +139,7 @@ export function pruneCandidateCount(kind: PruneKind, items: readonly PruneCandid
  * only anonymous volumes, so the text says named ones are kept; when the
  * daemon version is unknown it names no count rather than guess.
  */
-export function pruneConfirmMessage(kind: PruneKind, count: number, volumeScope: VolumePruneScope = 'all'): string {
+export function pruneConfirmMessage(kind: PruneKind, count: number, volumeScope: VolumePruneScope = 'unknown'): string {
   switch (kind) {
     case 'containers': return count > 0 ? `Remove ${plural(count, 'stopped container')}?` : 'Remove all stopped containers?';
     case 'images': return count > 0 ? `Prune ${plural(count, 'dangling image')}?` : 'Prune all dangling images?';
@@ -172,21 +173,15 @@ export function pruneResultText(kind: PruneKind, result: { spaceReclaimed?: numb
   return `Pruned ${what} — ${formatBytes(result.spaceReclaimed ?? 0)} reclaimed`;
 }
 
-/** Docker's placeholder tag for an untagged image. */
-const UNTAGGED_IMAGE = '<none>:<none>';
-
-function imageTagsOf(img: { repoTags: readonly string[] }): string[] {
-  return img.repoTags.filter(t => t && t !== UNTAGGED_IMAGE);
-}
 
 /** "nginx:latest", or "<none> (abc123def456)" for an untagged image so it can be told apart. */
 export function imageDisplayName(img: { id: string; repoTags: readonly string[] }): string {
-  return imageTagsOf(img)[0] ?? `<none> (${img.id})`;
+  return realImageTags(img.repoTags)[0] ?? `<none> (${img.id})`;
 }
 
 /** Removing an image removes every tag it carries; say which. */
 export function removeImageConfirmMessage(img: { id: string; repoTags: readonly string[] }): string {
-  const tags = imageTagsOf(img);
+  const tags = realImageTags(img.repoTags);
   if (tags.length === 0) return `Remove untagged image ${img.id}?`;
   if (tags.length === 1) return `Remove image "${tags[0]}"?`;
   const others = tags.slice(1);
