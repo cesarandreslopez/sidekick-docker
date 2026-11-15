@@ -202,7 +202,7 @@
       {
         "command": "sidekick-docker.refreshDashboard",
         "key": "f5",
-        "when": "activeWebviewPanelId == 'sidekick-docker.dashboard'"
+        "when": "activeWebviewPanelId == 'sidekick-docker.dashboard' && debugState != 'stopped' && !sideBarFocus && !panelFocus && !auxiliaryBarFocus"
       }
     ],
     "configuration": {

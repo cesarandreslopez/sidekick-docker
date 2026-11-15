@@ -127,7 +127,8 @@ export class ContainerWatcherService {
           // The daemon went away mid-session. The listing only has a raw
           // message ("connect ENOENT …"); ping again for the explained reason
           // (no socket, permission, refused) that replaces the tree's message.
-          this.connected = false;
+          // Until that ping answers, say so rather than leave the tree blank.
+          this.setConnected(false, this.reason ?? 'Docker stopped responding; checking…');
           void this.tryConnect();
         }
         this.callbacks.onContainersChanged([], false);
