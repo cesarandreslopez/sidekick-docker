@@ -5,6 +5,33 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-15
+
+### Fixed
+
+- Log compare (`m`) works. Pinning no longer undoes itself, each pane follows and scrolls on its own, and `G` resumes either pane.
+- The selection stays on the same item across refreshes, sorts and filters, so actions no longer hit a different container from the one highlighted. The actions menu names its target.
+- The Patterns tab and the Stats log sparkline fill in, and switching tabs no longer drops the log buffer.
+- Mouse clicks and wheel scrolls are no longer typed into the filter prompts.
+- Reverse sort applies to Containers only, so Services no longer lists services under the wrong project.
+- Confirmations wrap instead of cutting off the target and the warning, and clicking Yes or No lands on the button.
+- List names that don't fit are shortened in the middle, so replicas (`-1`, `-2`) and image tags stay distinguishable. Health badges no longer misalign the list, and menu cursors and active tabs show under `NO_COLOR`.
+- "paused — G to resume" shows at any terminal width, and `G` resumes follow wherever focus is.
+- Removing an image with several tags no longer fails with "must be forced", and an image a container still uses is refused before any tag is touched. Untagged images are recognised on Docker Engine 24+ and listed as `<none> (id)`.
+- Volume prune counts and names only the anonymous volumes Engine 23+ actually removes.
+- Copy Logs no longer copies zero lines. Exec through `docker exec -it` no longer reports a normal non-zero shell exit as an error, and it explains a missing shell.
+- Services shows its real empty and disconnected states, and counts services, not project rows. With nothing running, the list says "No running containers — press a to show all". Created and dead containers are labelled as such, and an empty log pane says whether it is waiting for output, stopped, or lost.
+- The Expanded layout names the selected item. The help overlay fits the terminal and scrolls with the wheel, and `?:Help` stays visible on narrow terminals during an outage.
+
+### Added
+
+- `M` toggles mouse capture so the terminal can select and copy text; `--no-mouse` starts with it off.
+
+### Changed
+
+- Remove, Compose and prune toasts use the same wording as the VS Code extension (for example "Removed nginx:latest", "Failed to stop web: …"). Compose Down's confirmation says what it removes and that volumes are kept.
+- "Running only" (`a`) keeps running, paused and restarting containers.
+
 ## [0.5.0] - 2026-10-18
 
 ### Fixed
@@ -318,5 +345,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
 
+[0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1

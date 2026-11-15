@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-15
+
+A UI/UX audit of both dashboards and the VS Code tree, reviewed adversarially before release.
+
+### Fixed
+
+- Removing an image with several tags no longer fails with "must be forced". Every tag is removed, and an image a container still uses is refused before any tag is touched. Untagged images are recognised on Docker Engine 24+, which makes the image prune count right again, and they are listed as `<none> (id)`.
+- Volume prune counts what it actually removes. Since Engine 23 that is only unused anonymous volumes, so named ones are kept, and the confirmation says so.
+- TUI: log compare (`m`) works. Pinning no longer undoes itself, each pane follows and scrolls on its own, and `G` resumes either pane.
+- TUI: the selection stays on the same item across refreshes, sorts and filters, so actions no longer hit a different container from the one highlighted. The actions menu names its target.
+- TUI: the Patterns tab and the Stats log sparkline fill in, and switching tabs no longer drops the log buffer.
+- TUI: mouse clicks and wheel scrolls are no longer typed into the filter prompts.
+- TUI: reverse sort applies to Containers only, so Services no longer lists services under the wrong project.
+- TUI: confirmations wrap instead of cutting off the target and the warning, and clicking Yes or No lands on the button.
+- TUI: list names that don't fit are shortened in the middle, so replicas (`-1`, `-2`) and image tags stay distinguishable. Health badges no longer misalign the list, and menu cursors and active tabs show under `NO_COLOR`.
+- TUI: "paused — G to resume" shows at any terminal width, and `G` resumes follow wherever focus is.
+- TUI: Copy Logs no longer copies zero lines. Exec through `docker exec -it` no longer reports a normal non-zero shell exit as an error, and it explains a missing shell.
+- TUI: Services shows its real empty and disconnected states, and counts services, not project rows. With nothing running, the list says "No running containers — press a to show all". Created and dead containers are labelled as such, and an empty log pane says whether it is waiting for output, stopped, or lost.
+- TUI: the Expanded layout names the selected item. The help overlay fits the terminal and scrolls with the wheel, and `?:Help` stays visible on narrow terminals during an outage.
+- VS Code: log lines keep the spaces between highlighted words.
+- VS Code: on a busy container you can read older log lines without the text drifting away. Compare panes follow new output and scroll from the keyboard, and the log toolbar stays on screen.
+- VS Code: "Open in Dashboard" from the tree no longer selects the wrong container when the dashboard was in the background.
+- VS Code: F5 refreshes the dashboard without also starting the debugger, and still continues a paused debug session.
+- VS Code: at narrow widths, status-bar buttons and the panel and detail tabs are no longer clipped, and the filter bar no longer covers the list. Help, sort and version overlays have a solid, scrollable body.
+- VS Code: keyboard focus survives re-renders and returns to whatever opened a menu or overlay. Confirmation dialogs announce their message to screen readers, and the disconnected banner blocks the UI behind it.
+- VS Code: identical error toasts no longer pile up. Loading states offer Retry instead of waiting forever, the Files tab re-reads changes and shows when it read them, and Copy Logs on Services no longer applies a hidden filter.
+- VS Code: Compose actions are not offered in an untrusted workspace, and Up/Down toasts name the project.
+- VS Code tree:
+  - Start is not offered on dead containers, Stop shows for paused and restarting ones, and Remove is offered for running ones.
+  - Group headers no longer get container menus ("Open in Dashboard" on one failed).
+  - Retry and a lost daemon keep the explanation instead of showing a raw error, and the tree no longer flashes "No containers found" while connecting.
+  - An invalid `socketPath` warns once and is not shown as the endpoint.
+  - "Open Dashboard to the Side" moves an open dashboard, and clicking a row keeps focus in the tree.
+- The "socket not found" hint names the `socketPath` setting in VS Code instead of the CLI's `--socket`.
+
+### Added
+
+- TUI: `M` toggles mouse capture so the terminal can select and copy text; `--no-mouse` starts with it off.
+- VS Code: the Services logs have a filter. The dashboard also shows network labels and image layer comments, indents services under their project, and supports `l`/`→`; the help lists every key.
+
+### Changed
+
+- Confirmation, failure and prune-result wording is shared by both dashboards and the tree. For example: "Take compose project "shop" down? Its containers and networks are removed (volumes are kept).", or "Failed to stop web: …".
+- "Running only" (`a`) keeps running, paused and restarting containers on both surfaces.
+- The VS Code list shows full names, shortened by the layout and keeping the replica number or image tag.
+
 ## [0.5.0] - 2026-10-18
 
 ### Fixed
@@ -627,6 +673,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1
 [0.4.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.0

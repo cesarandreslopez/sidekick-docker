@@ -5,6 +5,39 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-11-15
+
+### Fixed
+
+- Log lines keep the spaces between highlighted words.
+- On a busy container you can read older log lines without the text drifting away. Compare panes follow new output and scroll from the keyboard, and the log toolbar stays on screen.
+- "Open in Dashboard" from the tree no longer selects the wrong container when the dashboard was in the background.
+- F5 refreshes the dashboard without also starting the debugger, and still continues a paused debug session.
+- At narrow widths, status-bar buttons and the panel and detail tabs are no longer clipped, and the filter bar no longer covers the list. Help, sort and version overlays have a solid, scrollable body.
+- Keyboard focus survives re-renders and returns to whatever opened a menu or overlay. Confirmation dialogs announce their message to screen readers, and the disconnected banner blocks the UI behind it.
+- Identical error toasts no longer pile up. Loading states offer Retry instead of waiting forever, the Files tab re-reads changes and shows when it read them, and Copy Logs on Services no longer applies a hidden filter.
+- Compose actions are not offered in an untrusted workspace, and Up/Down toasts name the project.
+- Removing an image with several tags no longer fails with "must be forced", and an image a container still uses is refused before any tag is touched. Untagged images are recognised on Docker Engine 24+ and listed as `<none> (id)`.
+- Volume prune counts and names only the anonymous volumes Engine 23+ actually removes.
+- Tree:
+  - Start is not offered on dead containers, Stop shows for paused and restarting ones, and Remove is offered for running ones.
+  - Group headers no longer get container menus ("Open in Dashboard" on one failed).
+  - Retry and a lost daemon keep the explanation instead of showing a raw error, and the tree no longer flashes "No containers found" while connecting.
+  - Compose group tooltips match the actions offered, and projects with only paused or restarting containers can be taken down.
+  - Clicking a row keeps focus in the tree.
+- An invalid `sidekick-docker.socketPath` warns once and is not shown as the endpoint, and the "socket not found" hint names that setting instead of the CLI's `--socket`.
+- "Open Dashboard to the Side" moves an already open dashboard.
+
+### Added
+
+- The Services logs have a filter. The dashboard also shows network labels and image layer comments, indents services under their project, and supports `l`/`→`; the help lists every key.
+
+### Changed
+
+- Confirmation, failure and prune-result wording is shared with the terminal dashboard and the tree (for example "Failed to stop web: …").
+- "Running only" (`a`) keeps running, paused and restarting containers.
+- The list shows full names, shortened by the layout and keeping the replica number or image tag.
+
 ## [0.5.0] - 2026-10-18
 
 ### Fixed
@@ -257,5 +290,6 @@ _No changes — CLI-only bugfix release._
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
 
+[0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1
