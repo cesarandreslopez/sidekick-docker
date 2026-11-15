@@ -489,7 +489,7 @@ export class DockerClient {
     const removed: string[] = [];
     const fail = (err: unknown): never => {
       const reason = err instanceof Error ? err.message : String(err);
-      throw new Error(removed.length > 0 ? `Removed tags ${removed.join(', ')}; image kept: ${reason}` : reason);
+      throw new Error(removed.length > 0 ? `Removed tags ${removed.join(', ')}; image kept: ${reason}` : reason, { cause: err });
     };
     for (const tag of tags) {
       try {
