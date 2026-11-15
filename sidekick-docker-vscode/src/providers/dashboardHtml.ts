@@ -1106,6 +1106,10 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       display: flex;
       gap: 8px;
     }
+    /* In compare mode they describe the primary (left) pane, so sit over it. */
+    #detail-pane:has([data-compare="primary"]) #scroll-indicators {
+      right: calc(50% + 20px);
+    }
     .scroll-up, .scroll-down {
       background: var(--vscode-editor-background);
       padding: 1px 4px;
