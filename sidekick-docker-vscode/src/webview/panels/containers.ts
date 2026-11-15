@@ -246,7 +246,9 @@ export const containersPanel: PanelDefinition = {
   getItems(snapshot: DashboardStateSnapshot): PanelItem[] {
     return snapshot.containers.map(c => ({
       id: c.id,
-      label: c.name,
+      // Split off a replica suffix ("-2") so a narrow list ellipsizes the
+      // stem and replicas stay distinguishable (middle truncation).
+      ...splitReplicaSuffix(c.name),
       icon: stateIcon(c.state),
       iconColor: stateColor(c.state),
       sortKey: c.state === 'running' ? 0 : 1,
@@ -302,3 +304,9 @@ export const containersPanel: PanelDefinition = {
     return c ? `${c.name} ${c.image} ${c.state}` : item.label;
   },
 };
+
+/** "shop-worker-2" → { label: "shop-worker", labelTail: "-2" }; other names unchanged. */
+export function splitReplicaSuffix(name: string): { label: string; labelTail?: string } {
+  const m = /^(.+?)(-\d+)$/.exec(name);
+  return m ? { label: m[1], labelTail: m[2] } : { label: name };
+}

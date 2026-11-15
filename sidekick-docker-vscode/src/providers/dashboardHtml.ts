@@ -279,6 +279,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      position: relative; /* anchors #scroll-indicators to the pane, wherever it sits */
     }
     #detail-tab-bar {
       display: flex;
@@ -464,7 +465,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       top: -10px;
       padding-top: 14px;
       z-index: 2;
-      background: var(--vscode-editor-background);
+      background: var(--vscode-editor-background, Canvas);
     }
     .log-filter-bar input {
       flex: 1;
@@ -1097,7 +1098,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     #scroll-indicators {
       position: absolute;
       right: 20px;
-      top: calc(var(--tab-height) + var(--detail-tab-height) + 4px);
+      top: calc(var(--detail-tab-height) + 4px);
       z-index: 50;
       font-size: 10px;
       color: var(--vscode-descriptionForeground);
@@ -1242,6 +1243,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     <div id="side-list"></div>
     <div id="detail-pane">
       <div id="detail-tab-bar"></div>
+      <div id="scroll-indicators"></div>
       <div id="detail-content" tabindex="0" role="region" aria-label="Item details"></div>
     </div>
   </div>
@@ -1269,7 +1271,6 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
   <div id="sort-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Sort options"></div>
   <div id="help-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Keyboard help"></div>
   <div id="version-overlay" class="overlay-panel" role="dialog" aria-modal="true" aria-label="Version info"></div>
-  <div id="scroll-indicators"></div>
   <div id="toast-container" role="status" aria-live="polite"></div>
 
   <script type="module" nonce="${nonce}" src="${scriptUri}"></script>
