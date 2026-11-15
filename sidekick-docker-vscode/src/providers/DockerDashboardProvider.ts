@@ -11,11 +11,9 @@ import { ACTION_META, runDockerAction } from './actionRegistry';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import { WebviewMessageSchema } from '../types/messageSchemas';
 import { parseComposeItemId, composeProjectNameOf } from '../types/composeItemId';
+import { CONTAINER_FILES_TAB_INDEX } from '../types/detailTabs';
 
 type PanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
-
-/** Index of the Containers panel's Files tab (webview/panels/containers.ts). */
-const FILES_TAB_INDEX = 5;
 
 const PANEL_IDS: PanelId[] = ['containers', 'services', 'images', 'volumes', 'networks'];
 const DEFAULT_VIEW_STATE = {
@@ -265,7 +263,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
     const service = this.service;
     await service.forceRefresh();
     const v = this.viewState;
-    if (v.activePanelId === 'containers' && v.detailTabIndex === FILES_TAB_INDEX && v.selectedItemId) {
+    if (v.activePanelId === 'containers' && v.detailTabIndex === CONTAINER_FILES_TAB_INDEX && v.selectedItemId) {
       await service.loadDetail('changes', v.selectedItemId, true);
     }
   }
@@ -313,8 +311,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
       onDetailsLoaded: (containerId, details) => {
         post({ type: 'updateInspect', containerId, details });
       },
-      onChangesLoaded: (containerId, changes) => {
-        post({ type: 'updateChanges', containerId, changes });
+      onChangesLoaded: (containerId, changes, fetchedAt) => {
+        post({ type: 'updateChanges', containerId, changes, fetchedAt });
       },
       onLayersLoaded: (imageId, layers) => {
         post({ type: 'updateLayers', imageId, layers });

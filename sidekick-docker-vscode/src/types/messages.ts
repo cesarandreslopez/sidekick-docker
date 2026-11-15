@@ -180,7 +180,8 @@ export type ExtensionMessage =
   | { type: 'toast'; message: string; severity: 'error' | 'warning' | 'info' | 'success' }
   | { type: 'focusContainer'; containerId: string }
   | { type: 'updateComposeLogs'; projectName: string; serviceName: string | null; entries: SerializedLogEntry[] }
-  | { type: 'updateChanges'; containerId: string; changes: SerializedFilesystemChange[] }
+  /** `fetchedAt` (ISO): when the daemon was asked, so a cached list is not shown as fresh. */
+  | { type: 'updateChanges'; containerId: string; changes: SerializedFilesystemChange[]; fetchedAt: string }
   | { type: 'updateLayers'; imageId: string; layers: SerializedImageLayer[] }
   | { type: 'connectionState'; state: 'connected' | 'disconnected'; reason?: string };
 

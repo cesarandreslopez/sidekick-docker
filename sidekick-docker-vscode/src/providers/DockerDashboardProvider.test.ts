@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type * as vscode from 'vscode';
 import { DockerDashboardProvider } from './DockerDashboardProvider';
+import { CONTAINER_FILES_TAB_INDEX } from '../types/detailTabs';
 
 interface MockService {
   disposed: boolean;
@@ -258,6 +259,20 @@ describe('DockerDashboardProvider feedback', () => {
     svc.stopContainer = vi.fn(async () => { throw new Error('is not running'); });
     await handle('stop', 'abc', 'containers');
     expect(posted).toContainEqual({ type: 'toast', message: 'Failed to stop web: is not running', severity: 'error' });
+  });
+
+  it('re-reads filesystem changes on refresh while the Files tab is showing', async () => {
+    const svc = serviceInstances[0] as unknown as Record<string, unknown>;
+    const loadDetail = vi.fn(async () => { /* ok */ });
+    svc.loadDetail = loadDetail;
+    const p = internals(provider);
+    await p._handleMessage({ type: 'selectItem', panelId: 'containers', itemId: 'abc' } as { type: string });
+    await p._handleMessage({ type: 'switchDetailTab', tabIndex: 1 } as { type: string });
+    await p._handleMessage({ type: 'requestRefresh' });
+    expect(loadDetail).not.toHaveBeenCalled();
+    await p._handleMessage({ type: 'switchDetailTab', tabIndex: CONTAINER_FILES_TAB_INDEX } as { type: string });
+    await p._handleMessage({ type: 'requestRefresh' });
+    expect(loadDetail).toHaveBeenCalledWith('changes', 'abc', true);
   });
 
   it('refreshes once from the F5 keybinding, with a toast', async () => {

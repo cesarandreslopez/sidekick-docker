@@ -76,7 +76,8 @@ export interface DockerServiceCallbacks {
   onStatsChange: (data: StatsChangeData) => void;
   onComposeLogs: (projectName: string, serviceName: string | null, entries: SerializedLogEntry[]) => void;
   onDetailsLoaded: (containerId: string, details: SerializedContainerDetails) => void;
-  onChangesLoaded: (containerId: string, changes: SerializedFilesystemChange[]) => void;
+  /** `fetchedAt` (ISO) is when the list was read from the daemon, also for a cached reply. */
+  onChangesLoaded: (containerId: string, changes: SerializedFilesystemChange[], fetchedAt: string) => void;
   onLayersLoaded: (imageId: string, layers: SerializedImageLayer[]) => void;
   onStreamState?: (update: StreamStateUpdate) => void;
   onDetailLoad?: (update: DetailLoadUpdate) => void;
@@ -151,7 +152,7 @@ export class DockerService {
 
   private detailPending = new Map<string, Promise<void>>();
   private inspectedDetails = new Map<string, ContainerDetails>();
-  private inspectedChanges = new Map<string, FilesystemChange[]>();
+  private inspectedChanges = new Map<string, { changes: FilesystemChange[]; fetchedAt: string }>();
   private inspectedLayers = new Map<string, ImageLayer[]>();
   private logSeverityTimeSeries = new Map<string, LogSeverityTimeSeries>();
 
@@ -550,10 +551,11 @@ export class DockerService {
           this.inspectedDetails.set(itemId, value);
           this.callbacks.onDetailsLoaded(itemId, serializeDetails(value));
         } else if (kind === 'changes') {
-          const value = (!retry && this.inspectedChanges.get(itemId)) || await this.client.getContainerChanges(itemId);
+          const cached = !retry ? this.inspectedChanges.get(itemId) : undefined;
+          const value = cached ?? { fetchedAt: new Date().toISOString(), changes: await this.client.getContainerChanges(itemId) };
           if (this.disposed) return;
           this.inspectedChanges.set(itemId, value);
-          this.callbacks.onChangesLoaded(itemId, value.map(serializeFilesystemChange));
+          this.callbacks.onChangesLoaded(itemId, value.changes.map(serializeFilesystemChange), value.fetchedAt);
         } else {
           const value = (!retry && this.inspectedLayers.get(itemId)) || await this.client.getImageHistory(itemId);
           if (this.disposed) return;

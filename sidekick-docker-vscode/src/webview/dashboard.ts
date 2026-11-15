@@ -100,9 +100,9 @@ function rotatePhrase(): void {
   if (phraseBank.length === 0) return;
   state.phrase = phraseBank[phraseIndex % phraseBank.length];
   phraseIndex++;
-  // Update phrase text without rebuilding tab bar (which would destroy click handlers)
-  const phraseEl = $tabBar.querySelector('.phrase');
-  if (phraseEl) phraseEl.textContent = state.phrase;
+  // The phrase is a static sibling of the tab strip: updating it never makes
+  // the next render rebuild the tabs.
+  $phrase.textContent = state.phrase;
   // Reset 7s fallback timer
   if (phraseFallbackTimer !== undefined) clearTimeout(phraseFallbackTimer);
   phraseFallbackTimer = setTimeout(rotatePhrase, 7000);
@@ -119,6 +119,13 @@ const $statusBar = document.getElementById('status-bar')!;
 const $statusBarMain = document.getElementById('status-bar-main')!;
 const $connectionStatus = document.getElementById('connection-status')!;
 const $toastContainer = document.getElementById('toast-container')!;
+// The tab bar holds the tab strip (re-rendered) and the phrase (text only).
+const $panelTabs = document.createElement('div');
+$panelTabs.className = 'panel-tabs';
+$panelTabs.setAttribute('role', 'none');
+const $phrase = document.createElement('div');
+$phrase.className = 'phrase';
+$tabBar.replaceChildren($panelTabs, $phrase);
 
 // Static ARIA wiring (per-render attributes are set in the renderers)
 $tabBar.setAttribute('role', 'tablist');
@@ -218,7 +225,19 @@ function reconcileVisibleSelection(items: PanelItem[]): boolean {
   if (id === state.selectedItemId) return false;
   state.selectedItemId = id;
   post({ type: 'selectItem', panelId: getPanel().id, itemId: id });
+  refetchFilesIfShowing();
   return true;
+}
+
+/**
+ * The host caches filesystem changes per container (selecting one replays the
+ * cached list), so re-read them whenever the Files tab comes to show a
+ * container: the tab is opened, or another container is selected on it.
+ */
+function refetchFilesIfShowing(): void {
+  if (isViewingTab('containers', 'Files') && state.selectedItemId) {
+    post({ type: 'retryDetail', kind: 'changes', itemId: state.selectedItemId });
+  }
 }
 
 /**
@@ -372,10 +391,14 @@ function renderConnectionBanner(): void {
   // Tab cannot reach controls behind it. Retry gets focus when it appears.
   const $main = document.getElementById('main-area')!;
   $main.toggleAttribute('inert', disconnected);
+  const $retry = document.getElementById('retry-connect');
+  const active = document.activeElement;
   if (disconnected && lastConnState !== 'disconnected') {
-    const active = document.activeElement;
-    if (!active || active === document.body || $main.contains(active)) {
-      document.getElementById('retry-connect')?.focus({ preventScroll: true });
+    if (!active || active === document.body || $main.contains(active)) $retry?.focus({ preventScroll: true });
+  } else if (!disconnected && lastConnState === 'disconnected') {
+    // Hand focus back from the (now hidden) Retry button to the pane the user was in.
+    if (!active || active === document.body || active === $retry) {
+      document.getElementById(state.focusTarget === 'detail' ? 'detail-content' : 'side-list')?.focus({ preventScroll: true });
     }
   }
   lastConnState = state.connState;
@@ -407,13 +430,13 @@ function renderTabBar(): void {
     const active = i === state.activePanelIndex;
     html += `<div class="tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="${active ? 0 : -1}" data-panel="${i}"><span class="shortcut">${p.shortcutKey}</span>${p.title}</div>`;
   }
-  html += `<div class="phrase">${escapeHtml(state.phrase)}</div>`;
-  if (!replaceContent($tabBar, html)) return;
+  if ($phrase.textContent !== state.phrase) $phrase.textContent = state.phrase;
+  if (!replaceContent($panelTabs, html)) return;
   // The bar scrolls when narrow; keep the active tab in view.
-  $tabBar.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $panelTabs.querySelector('.tab.active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
   // Tab click handlers
-  $tabBar.querySelectorAll('.tab').forEach(el => {
+  $panelTabs.querySelectorAll('.tab').forEach(el => {
     el.addEventListener('click', () => {
       const idx = parseInt((el as HTMLElement).dataset.panel!, 10);
       switchPanel(idx);
@@ -510,10 +533,10 @@ function renderSideList(items: PanelItem[]): void {
     });
   });
 
-  // Scroll the selection into view only when it (or the filter) changed: a
+  // Scroll the selection into view only when it, the filter or the sort changed: a
   // background refresh rebuilds rows ("Up 5 minutes" ticks) and used to yank
   // the list back while you were scrolling it.
-  const scrollKey = `${getPanel().id}\u0000${state.selectedItemId ?? ''}\u0000${state.filterString}\u0000${state.showAllContainers}`;
+  const scrollKey = [getPanel().id, state.selectedItemId ?? '', state.filterString, state.showAllContainers, state.sortField, state.sortReversed].join('\u0000');
   if (scrollKey !== sideScrollKey) {
     sideScrollKey = scrollKey;
     $sideList.querySelector('.side-item.selected')?.scrollIntoView({ block: 'nearest' });
@@ -739,11 +762,7 @@ function setDetailTab(idx: number): void {
   if (idx === state.detailTabIndex) return;
   state.detailTabIndex = idx;
   post({ type: 'switchDetailTab', tabIndex: idx });
-  // Filesystem changes were fetched once per container and cached for its
-  // lifetime; re-read them each time the tab is shown.
-  if (isViewingTab('containers', 'Files') && state.selectedItemId) {
-    post({ type: 'retryDetail', kind: 'changes', itemId: state.selectedItemId });
-  }
+  refetchFilesIfShowing();
   renderDetailTabBar();
   renderDetailContent(getFilteredItems());
   persistViewState();
@@ -870,6 +889,7 @@ function selectItem(id: string, items: PanelItem[]): void {
   state.selectedItemId = id;
   pendingFocusId = null;
   post({ type: 'selectItem', panelId: getPanel().id, itemId: id });
+  refetchFilesIfShowing();
 
   // Notify extension about compose service selection for log streaming
   if (getPanel().id === 'services') {
@@ -1288,7 +1308,9 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
 
     case 'updateChanges': {
       state.containerChanges.set(msg.containerId, msg.changes);
-      state.containerChangesAt.set(msg.containerId, Date.now());
+      // The host's fetch time, not ours: a cached list replayed on selection
+      // must not read as fresh.
+      state.containerChangesAt.set(msg.containerId, Date.parse(msg.fetchedAt));
       // Re-render if viewing this container's Files tab (a refetch keeps the scroll)
       if (state.selectedItemId === msg.containerId && isViewingTab('containers', 'Files')) {
         renderDetailContent(getFilteredItems(), { animate: false, preserveScroll: true });

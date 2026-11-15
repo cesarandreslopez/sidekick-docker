@@ -212,3 +212,17 @@ describe('DockerService lifecycle', () => {
     expect(await service.initialize()).toEqual({ ok: false, reason: expect.stringMatching(/Permission denied on unix:\/\/\/nope\.sock/) });
   });
 });
+
+describe('DockerService filesystem changes', () => {
+  it('reports when the list was read, also for a cached reply, and a new time on retry', async () => {
+    vi.setSystemTime(new Date('2026-01-01T10:00:00Z'));
+    mocks.changes.mockResolvedValue([{ path: '/tmp/x', kind: 'added' }]);
+    await service.loadDetail('changes', 'abc');
+    vi.setSystemTime(new Date('2026-01-01T10:30:00Z'));
+    await service.loadDetail('changes', 'abc'); // selecting it again replays the cache
+    await service.loadDetail('changes', 'abc', true); // the Files tab asks for a fresh read
+    const times = vi.mocked(callbacks.onChangesLoaded).mock.calls.map(call => call[2]);
+    expect(times).toEqual(['2026-01-01T10:00:00.000Z', '2026-01-01T10:00:00.000Z', '2026-01-01T10:30:00.000Z']);
+    expect(mocks.changes).toHaveBeenCalledTimes(2);
+  });
+});

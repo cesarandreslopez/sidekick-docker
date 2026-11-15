@@ -72,10 +72,22 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       /* Scroll rather than clip the panel tabs in a narrow editor. */
       overflow-x: auto;
       overflow-y: hidden;
-      scrollbar-width: none;
     }
+    /*
+     * A thin, themed scrollbar is the overflow cue for mouse users (thumb
+     * colours come from the ::-webkit-scrollbar-thumb rules below). Not the
+     * standard scrollbar-width: in Chromium, which webviews run on, setting it
+     * switches these ::-webkit-scrollbar rules off.
+     */
     #tab-bar::-webkit-scrollbar,
-    #detail-tab-bar::-webkit-scrollbar { display: none; }
+    #detail-tab-bar::-webkit-scrollbar { height: 3px; }
+    /* The re-rendered tab strip; the phrase beside it is updated as text. */
+    #tab-bar .panel-tabs {
+      display: flex;
+      align-items: center;
+      height: 100%;
+      flex-shrink: 0;
+    }
     #tab-bar .tab {
       flex-shrink: 0;
       padding: 0 14px;
@@ -278,7 +290,6 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       gap: 4px;
       overflow-x: auto;
       overflow-y: hidden;
-      scrollbar-width: none;
     }
     #detail-tab-bar .detail-tab {
       flex-shrink: 0;
@@ -443,13 +454,17 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       gap: 8px;
       padding: 4px 8px;
       border-bottom: 1px solid var(--vscode-panel-border, rgba(128,128,128,0.2));
-      /* Stays on screen while you read older lines, so f never has to scroll. */
+      /*
+       * Stays on screen while you read older lines, so f never has to scroll.
+       * top: -10px with 10px of extra (opaque) top padding: stuck, it also
+       * covers #detail-content's 10px top padding band, so no line shows
+       * above it; at rest it is only spacing and overlaps nothing.
+       */
       position: sticky;
-      top: 0;
+      top: -10px;
+      padding-top: 14px;
       z-index: 2;
       background: var(--vscode-editor-background);
-      /* Paints over the scroller's top padding, should a line show through it. */
-      box-shadow: 0 -10px 0 var(--vscode-editor-background);
     }
     .log-filter-bar input {
       flex: 1;

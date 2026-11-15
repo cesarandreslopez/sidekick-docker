@@ -270,6 +270,8 @@ describe('dashboard DOM', () => {
     expect(element('#toast-container').children).toHaveLength(0);
     receive({ type: 'connectionState', state: 'connected' });
     expect(element('#main-area').hasAttribute('inert')).toBe(false);
+    // Focus comes back from the hidden Retry button to the list.
+    expect(dom.window.document.activeElement).toBe(element('#side-list'));
   });
 
   it('shows a repeated error once and copies it as plain text', () => {
@@ -302,11 +304,38 @@ describe('dashboard DOM', () => {
     expect(element('.sort-item.selected').dataset.idx).toBe('0');
   });
 
-  it('re-reads filesystem changes each time the Files tab is shown, and says when', () => {
+  it('re-reads filesystem changes whenever the Files tab shows a container, and says when they were read', () => {
     element('[data-tab="5"]').click();
     expect(sent.at(-1)).toEqual({ type: 'retryDetail', kind: 'changes', itemId: 'alpha' });
-    receive({ type: 'updateChanges', containerId: 'alpha', changes: [{ path: '/tmp/x', kind: 'added' }] });
-    expect(element('#detail-content').textContent).toMatch(/as of/);
+    // Selecting another container on the tab would otherwise replay the host's cache.
+    element('[data-id="beta"]').click();
+    expect(sent.slice(-2)).toEqual([
+      { type: 'selectItem', panelId: 'containers', itemId: 'beta' },
+      { type: 'retryDetail', kind: 'changes', itemId: 'beta' },
+    ]);
+    // The host's fetch time is shown, not the time the reply arrived.
+    const fetchedAt = '2026-01-01T10:00:00.000Z';
+    const asOf = new Date(fetchedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    receive({ type: 'updateChanges', containerId: 'beta', changes: [{ path: '/tmp/x', kind: 'added' }], fetchedAt });
+    expect(element('#detail-content').textContent).toContain(`as of ${asOf}`);
+  });
+
+  it('scrolls the selected row into view after a sort change, not on a background refresh', () => {
+    let scrolls = 0;
+    dom.window.HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) { if (this.classList.contains('side-item')) scrolls++; };
+    receive({ type: 'updateState', snapshot: { ...snapshot(), containers: snapshot().containers.map(c => ({ ...c, status: 'Up 2 minutes' })) } });
+    expect(scrolls).toBe(0);
+    key('R');
+    expect(scrolls).toBe(1);
+  });
+
+  it('does not rebuild the tab bar when the phrase rotates', () => {
+    receive({ type: 'phraseBank', phrases: ['one', 'two', 'three'] });
+    const tab = element('[data-panel="0"]');
+    key('z'); // every keydown rotates the phrase
+    expect(element('#tab-bar .phrase').textContent).not.toBe('one');
+    receive({ type: 'updateState', snapshot: snapshot() });
+    expect(element('[data-panel="0"]')).toBe(tab);
   });
 
   it('leaves F5 to the host keybinding and keeps the status-bar buttons out of the ellipsized hints', () => {
