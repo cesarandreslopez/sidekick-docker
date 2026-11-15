@@ -131,8 +131,9 @@ dashboard for the same list. Where the two differ:
 | `V` | Version |
 | `?` | Help |
 
-Item actions keep their TUI letters (`s` Start, `S` Stop, `r` Restart, `p` Pause/Unpause, `e` Exec,
-`d` Remove, `P` Prune, `u` Up, `D` Down, `c` Copy Logs, `b` Open in Browser). Destructive ones ask
+Item actions keep their TUI letters (`s` Start, `S` Stop, `r` Restart, `p` Pause, `u` Unpause
+(containers) or Up (Compose), `e` Exec, `d` Remove, `P` Prune, `D` Down, `c` Copy Logs, `b` Open in
+Browser). Destructive ones ask
 for confirmation, and `Enter` on the dialog cancels.
 
 ## Keyboard focus and recovery

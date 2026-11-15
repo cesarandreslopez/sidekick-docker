@@ -91,7 +91,7 @@ Exec runs `/bin/sh` unless you pick another shell with `--shell` or `SIDEKICK_DO
 | `j` / `Down` | Move down |
 | `k` / `Up` | Move up |
 | `g` | Jump to top |
-| `G` | Jump to bottom (resumes log follow) |
+| `G` | Jump to bottom. While log follow is paused, `G` resumes it first, wherever focus is |
 | `PgUp` / `PgDn` | Page up / down |
 | `Ctrl+U` / `Ctrl+D` | Half page up / down |
 | `Tab` | Toggle focus between side list and detail pane |
@@ -117,8 +117,9 @@ Exec runs `/bin/sh` unless you pick another shell with `--shell` or `SIDEKICK_DO
 | `o` | Open sort menu (Containers panel) |
 | `R` | Reverse sort direction (Containers panel) |
 | `m` | Pin/unpin item for log comparison (Containers/Services) |
-| `J` / `K` | Scroll compare pane (when in detail focus) |
+| `J` / `K` | Scroll the pinned comparison pane (while comparing) |
 | `z` | Cycle layout (Normal → Wide → Expanded) |
+| `M` | Toggle mouse capture (off lets the terminal select and copy text) |
 | `Ctrl+R` | Refresh now |
 | `?` | Show help overlay (scroll with `j`/`k`, `PgUp`/`PgDn`, `g`/`G`) |
 | `V` | Show version |

@@ -51,7 +51,7 @@ A full-featured Docker management dashboard that runs in your terminal and in VS
 - **Mouse support** — click to select, scroll to navigate, right-click for the actions menu
 - **Scriptable CLI** — `ps`, `logs`, `images`, `volumes`, `networks`, `stats`, `df` and `inspect`, each with `--format json` and `-q` where it makes sense, for scripts and pipes, with `--no-color`/`NO_COLOR` support
 - **Disk usage** — `df` reports images, containers, volumes and build cache, the last of which is usually the biggest surprise
-- **Prune everything** — reclaim space from stopped containers, dangling images, unused volumes and networks, with the reclaimed total reported back
+- **Prune everything** — reclaim space from stopped containers, dangling images, unused anonymous volumes and unused networks, with the reclaimed total reported back
 - **Flexible endpoints** — `--socket` accepts a socket path, `unix://` URL, or `tcp://host:port` for remote daemons
 - **VS Code extension** — the same dashboard, embedded as a webview panel (works in VS Code, VSCodium, and compatible editors)
 
