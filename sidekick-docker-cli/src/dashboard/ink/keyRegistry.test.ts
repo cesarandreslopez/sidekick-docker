@@ -147,6 +147,23 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
     expect(following.dispatch).toHaveBeenCalledWith({ type: 'SELECT_ITEM', index: 1, id: 'c2' });
   });
 
+  it('G also resumes a compare pane paused by K, and is not taken as "select last"', () => {
+    const items = [
+      { id: 'c1', label: 'web', sortKey: 0, data: {} },
+      { id: 'c2', label: 'db', sortKey: 1, data: {} },
+    ];
+    const ctx = makeCtx({ currentItems: items, secondaryDetailLineCount: 40, state: makeState({ focusTarget: 'side', logFollow: true, secondaryFollow: false }) });
+    findMatch('G')!.run(ctx, 'G', bareKey());
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'RESUME_SECONDARY_FOLLOW' });
+    expect(ctx.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SELECT_ITEM' }));
+
+    // Nothing paused: no resume dispatch, G selects the last item.
+    const following = makeCtx({ currentItems: items, secondaryDetailLineCount: 40, state: makeState({ focusTarget: 'side' }) });
+    findMatch('G')!.run(following, 'G', bareKey());
+    expect(following.dispatch).not.toHaveBeenCalledWith({ type: 'RESUME_SECONDARY_FOLLOW' });
+    expect(following.dispatch).toHaveBeenCalledWith({ type: 'SELECT_ITEM', index: 1, id: 'c2' });
+  });
+
   it('g with the list focused still selects the first item while follow is paused', () => {
     const ctx = makeCtx({ state: makeState({ focusTarget: 'side', logFollow: false }) });
     findMatch('g')!.run(ctx, 'g', bareKey());

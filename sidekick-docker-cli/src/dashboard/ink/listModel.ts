@@ -50,19 +50,23 @@ export function orderItems(items: readonly PanelItem[], opts: OrderOptions): Pan
  * Otherwise (no id yet, or the item is gone) the old index, clamped, and that
  * row's id becomes the selection. An empty list keeps both, so the selection
  * comes back when the items do (e.g. after a reconnect).
+ *
+ * `replaced` is true when the selected item is gone and a neighbour takes
+ * over: that is a new selection (scroll offsets and a paused follow belong to
+ * the old item), unlike the same item moving or a row's id being adopted.
  */
 export function resolveSelection(
   items: readonly PanelItem[],
   index: number,
   id: string | null,
-): { index: number; id: string | null } {
-  if (items.length === 0) return { index, id };
+): { index: number; id: string | null; replaced: boolean } {
+  if (items.length === 0) return { index, id, replaced: false };
   if (id !== null) {
     const found = items.findIndex(it => it.id === id);
-    if (found >= 0) return { index: found, id };
+    if (found >= 0) return { index: found, id, replaced: false };
   }
   const clamped = Math.max(0, Math.min(index, items.length - 1));
-  return { index: clamped, id: items[clamped].id };
+  return { index: clamped, id: items[clamped].id, replaced: id !== null };
 }
 
 /**

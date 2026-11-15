@@ -59,6 +59,8 @@ export function clampWindowOffset(offset: number, selectedIndex: number, totalIt
 export interface ColumnRow {
   text: string;
   indicator: boolean;
+  /** The ▼ row of a column whose follow is paused (it carries the resume hint). */
+  paused?: boolean;
 }
 
 /**
@@ -67,12 +69,12 @@ export interface ColumnRow {
  * The columns used to share one budget, so a ▼ row in the scrolled-back
  * column hid the newest line of the column that was following.
  */
-export function compareColumnRows(lines: string[], scrollOffset: number, viewportHeight: number, downSuffix = ''): ColumnRow[] {
+export function compareColumnRows(lines: string[], scrollOffset: number, viewportHeight: number, pausedSuffix = ''): ColumnRow[] {
   const win = windowLines(lines, scrollOffset, viewportHeight);
   const rows: ColumnRow[] = [];
   if (win.hasUp) rows.push({ text: `▲ (${win.above} more)`, indicator: true });
   for (const line of win.visible) rows.push({ text: line, indicator: false });
-  if (win.hasDown) rows.push({ text: `▼ (${win.below} more)${downSuffix}`, indicator: true });
+  if (win.hasDown) rows.push({ text: `▼ (${win.below} more)${pausedSuffix}`, indicator: true, paused: pausedSuffix !== '' });
   while (rows.length < viewportHeight) rows.push({ text: '', indicator: false });
   return rows.slice(0, Math.max(0, viewportHeight));
 }

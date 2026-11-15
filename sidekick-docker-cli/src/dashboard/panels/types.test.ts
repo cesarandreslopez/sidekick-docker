@@ -51,6 +51,19 @@ describe('copyLogsAction refuses to copy nothing (T12)', () => {
   });
 });
 
+describe('copyLogsAction off the Logs tab (Services)', () => {
+  it('says to open the Logs tab when nothing is streaming the buffer', () => {
+    const copy = vi.fn(() => true);
+    const idle = { selectedComposeLogs: [], logFilterString: '', logFilterMode: 'exact', composeLogStreamState: null } as unknown as DockerDashboardMetrics;
+    const action = copyLogsAction(() => idle, m => m.selectedComposeLogs, () => copy, m => m.composeLogStreamState);
+    expect(() => action.handler({ id: 'x', label: '', sortKey: 0, data: null })).toThrow('open the Logs tab first');
+    const live = { ...idle, composeLogStreamState: 'loading' } as unknown as DockerDashboardMetrics;
+    const onLogs = copyLogsAction(() => live, m => m.selectedComposeLogs, () => copy, m => m.composeLogStreamState);
+    expect(() => onLogs.handler({ id: 'x', label: '', sortKey: 0, data: null })).toThrow('no log lines to copy yet');
+    expect(copy).not.toHaveBeenCalled();
+  });
+});
+
 describe('emptyLogMessage (T20)', () => {
   it('describes the stream instead of asking to select what is selected', () => {
     expect(emptyLogMessage(null, 'container')).toBe('Waiting for log output…');

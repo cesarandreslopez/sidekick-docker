@@ -9,6 +9,7 @@ import {
   detailTabSuffix,
   DETAIL_TAB_CYCLE_HINT,
   DETAIL_TAB_FOLLOW_PAUSED,
+  DETAIL_TAB_NAME_MIN,
 } from './tabLayout';
 
 /** The real panel set, which is what actually overflows at 80 columns. */
@@ -154,15 +155,42 @@ describe('detailTabWindow', () => {
 });
 
 describe('detailTabSuffix (T15)', () => {
+  const tabs = ['Logs', 'Stats', 'Env', 'Config', 'Labels', 'Files', 'Patterns'];
+  const tabsWidth = tabs.reduce((n, l) => n + detailTabWidth(l), 0);
+
   it('names the item in Expanded, else reports a paused follow, else the cycle hint', () => {
-    expect(detailTabSuffix({ followPaused: true, itemName: 'web' })).toEqual({ text: 'web', kind: 'name' });
-    expect(detailTabSuffix({ followPaused: true })).toEqual({ text: DETAIL_TAB_FOLLOW_PAUSED, kind: 'paused' });
-    expect(detailTabSuffix({ followPaused: false })).toEqual({ text: DETAIL_TAB_CYCLE_HINT, kind: 'hint' });
+    expect(detailTabSuffix({ followPaused: true, itemName: 'web', paneWidth: 120, tabLabels: tabs })).toEqual({ text: 'web', kind: 'name', reserved: true });
+    expect(detailTabSuffix({ followPaused: true, paneWidth: 120, tabLabels: tabs })).toEqual({ text: DETAIL_TAB_FOLLOW_PAUSED, kind: 'paused', reserved: false });
+    expect(detailTabSuffix({ followPaused: false, paneWidth: 120, tabLabels: tabs })).toEqual({ text: DETAIL_TAB_CYCLE_HINT, kind: 'hint', reserved: false });
   });
 
-  it('caps a long name, keeping its distinguishing end', () => {
-    const s = detailTabSuffix({ followPaused: false, itemName: 'an-extremely-long-compose-project-service-name-7' });
+  it('caps a long name at 40 when there is room, keeping its distinguishing end', () => {
+    const s = detailTabSuffix({ followPaused: false, itemName: 'an-extremely-long-compose-project-service-name-7', paneWidth: 200, tabLabels: tabs });
     expect(s.text.length).toBe(40);
     expect(s.text.endsWith('-7')).toBe(true);
+  });
+
+  it('fits a 30-character name beside the Containers tabs at 80 columns instead of dropping it', () => {
+    expect(tabsWidth).toBe(58);
+    const name = 'shop-production-api-gateway-12';
+    expect(name).toHaveLength(30);
+    const s = detailTabSuffix({ followPaused: false, itemName: name, paneWidth: 80, tabLabels: tabs });
+    expect(s.text).toHaveLength(80 - 58 - 1);
+    expect(s.text.endsWith('-12')).toBe(true);
+    // The window agrees: every tab and the name are drawn.
+    const win = detailTabWindow(tabs, 0, 80, s.text.length, s.reserved);
+    expect(win).toMatchObject({ start: 0, count: tabs.length, showSuffix: true });
+  });
+
+  it('below the floor keeps a short name and windows the tabs around it', () => {
+    const s = detailTabSuffix({ followPaused: false, itemName: 'shop-production-api-gateway-12', paneWidth: 62, tabLabels: tabs });
+    expect(s.text).toHaveLength(DETAIL_TAB_NAME_MIN);
+    const win = detailTabWindow(tabs, 6, 62, s.text.length, s.reserved);
+    expect(win.showSuffix).toBe(true);
+    expect(win.count).toBeLessThan(tabs.length);
+    expect(win.start + win.count).toBe(tabs.length); // the active (last) tab stays visible
+    // Drawn width: markers + windowed tabs + 1 + name fits the pane.
+    const drawn = (win.hasLeftMarker ? 1 : 0) + tabs.slice(win.start, win.start + win.count).reduce((n, l) => n + detailTabWidth(l), 0) + 1 + s.text.length;
+    expect(drawn).toBeLessThanOrEqual(62);
   });
 });

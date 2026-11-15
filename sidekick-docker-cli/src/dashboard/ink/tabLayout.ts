@@ -76,24 +76,44 @@ export const DETAIL_TAB_FOLLOW_PAUSED = '⏸ follow paused — G to resume';
 export const DETAIL_TAB_SUFFIX_LENGTH = DETAIL_TAB_CYCLE_HINT.length;
 /** Longest item name the strip shows (Expanded layout). */
 const DETAIL_TAB_NAME_MAX = 40;
+/** Shortest: below this the tabs are windowed to make room instead. */
+export const DETAIL_TAB_NAME_MIN = 8;
 
 export interface DetailTabSuffix {
   text: string;
   kind: 'name' | 'paused' | 'hint';
+  /**
+   * Always drawn: the tabs are windowed around it rather than it being
+   * dropped (the item name in Expanded, which nothing else on screen shows).
+   */
+  reserved: boolean;
 }
 
 /**
  * The detail strip's trailing text. In Expanded the list is hidden and
  * nothing else said which item was on screen, so the strip names it (the ▼
- * row reports a paused follow). Otherwise: follow paused, else the cycle hint.
+ * row reports a paused follow), shortened in the middle to the room the tabs
+ * leave. Otherwise: follow paused, else the cycle hint.
  *
- * DetailTabBar and the mouse handler must both use this: the tab window
- * depends on the suffix length, and a mismatch moved the click targets.
+ * Compute it once and give the same value to DetailTabBar and the mouse
+ * handler: the tab window depends on it, and a mismatch moved the click
+ * targets.
  */
-export function detailTabSuffix(opts: { followPaused: boolean; itemName?: string }): DetailTabSuffix {
-  if (opts.itemName) return { text: truncateMiddle(opts.itemName, DETAIL_TAB_NAME_MAX), kind: 'name' };
-  if (opts.followPaused) return { text: DETAIL_TAB_FOLLOW_PAUSED, kind: 'paused' };
-  return { text: DETAIL_TAB_CYCLE_HINT, kind: 'hint' };
+export function detailTabSuffix(opts: {
+  followPaused: boolean;
+  itemName?: string;
+  paneWidth: number;
+  tabLabels: readonly string[];
+}): DetailTabSuffix {
+  if (opts.itemName) {
+    const tabs = opts.tabLabels.reduce((sum, l) => sum + detailTabWidth(l), 0);
+    // A fixed 40 was then dropped whole whenever tabs + name overflowed: at
+    // 80 columns on Containers any name past ~21 characters vanished.
+    const room = Math.min(DETAIL_TAB_NAME_MAX, opts.paneWidth - tabs - 1);
+    return { text: truncateMiddle(opts.itemName, Math.max(DETAIL_TAB_NAME_MIN, room)), kind: 'name', reserved: true };
+  }
+  if (opts.followPaused) return { text: DETAIL_TAB_FOLLOW_PAUSED, kind: 'paused', reserved: false };
+  return { text: DETAIL_TAB_CYCLE_HINT, kind: 'hint', reserved: false };
 }
 
 /** Rendered width of one detail tab: " {label} " plus its separator. */
@@ -127,9 +147,11 @@ export function detailTabWindow(
   activeIndex: number,
   paneWidth: number,
   suffixLength: number,
+  /** Keep the suffix and window the tabs instead (DetailTabSuffix.reserved). */
+  reserveSuffix = false,
 ): DetailTabWindow {
   const total = labels.reduce((sum, l) => sum + detailTabWidth(l), 0);
-  const showSuffix = total + suffixLength + 1 <= paneWidth;
+  const showSuffix = reserveSuffix || total + suffixLength + 1 <= paneWidth;
   const fullBudget = showSuffix ? paneWidth - suffixLength - 1 : paneWidth;
 
   if (total <= fullBudget) {

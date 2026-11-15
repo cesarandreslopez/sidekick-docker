@@ -54,7 +54,7 @@ export function ContextMenuOverlay({ actions, selectedIndex, title, maxWidth }: 
           </Box>
         );
       })}
-      <Text>{''}</Text>
+      <Text>{' '}</Text>
       <Text color="gray" dimColor wrap="truncate">{CONTEXT_MENU_HINT}</Text>
     </Box>
   );

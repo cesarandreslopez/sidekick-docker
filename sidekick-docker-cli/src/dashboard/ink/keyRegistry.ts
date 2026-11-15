@@ -361,10 +361,14 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
       const top = input === 'g';
       // G resumes a paused follow whatever has focus — the wheel pauses it
       // without moving focus, and the paused hint says "G to resume", yet
-      // with the list focused G used to select the last item instead. A
-      // second G (follow back on) selects the last item as before.
-      const followPaused = isAutoScrollTab(ctx) && !ctx.state.logFollow;
-      if (ctx.state.focusTarget === 'side' && !(followPaused && !top)) {
+      // with the list focused G used to select the last item instead. That
+      // includes the compare pane's own follow (K pauses it). A second G
+      // (everything following again) selects the last item as before.
+      const comparing = ctx.secondaryDetailLineCount > 0;
+      const primaryPaused = isAutoScrollTab(ctx) && !ctx.state.logFollow;
+      const secondaryPaused = comparing && !ctx.state.secondaryFollow;
+      if (!top && secondaryPaused) ctx.dispatch({ type: 'RESUME_SECONDARY_FOLLOW' });
+      if (ctx.state.focusTarget === 'side' && !(!top && (primaryPaused || secondaryPaused))) {
         if (top) {
           selectIndex(ctx, 0);
           ctx.sideScroll.selectFirst();

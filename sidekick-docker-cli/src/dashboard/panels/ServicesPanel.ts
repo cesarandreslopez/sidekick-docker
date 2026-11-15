@@ -204,7 +204,8 @@ export class ServicesPanel implements SidePanel {
         actionType: 'stop',
         targetName: (item) => getTargetName(panelData<ServiceItemData>(item)),
       },
-      copyLogsAction(() => this.lastMetrics, m => m.selectedComposeLogs, () => this.onCopyLogs),
+      // Compose logs stream only on the Logs tab; Info is the default.
+      copyLogsAction(() => this.lastMetrics, m => m.selectedComposeLogs, () => this.onCopyLogs, m => m.composeLogStreamState),
     ];
   }
 

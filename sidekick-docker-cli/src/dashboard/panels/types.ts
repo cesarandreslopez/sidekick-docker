@@ -106,12 +106,15 @@ export function collectLogText(logs: readonly LogEntry[], query: string, mode: F
 
 /**
  * The shared "Copy Logs" action: copies what the Logs tab shows (respecting
- * the log filter) from whichever buffer `getLogs` picks.
+ * the log filter) from whichever buffer `getLogs` picks. `getStreamState`
+ * tells a buffer that is empty because nothing streams it (Services only
+ * streams compose logs on its Logs tab) from one that is just quiet.
  */
 export function copyLogsAction(
   getMetrics: () => DockerDashboardMetrics | null,
   getLogs: (metrics: DockerDashboardMetrics) => readonly LogEntry[],
   copy: () => ((text: string) => boolean) | undefined,
+  getStreamState?: (metrics: DockerDashboardMetrics) => FollowStreamState | null,
 ): PanelAction {
   return {
     key: 'c',
@@ -125,7 +128,9 @@ export function copyLogsAction(
       if (count === 0) {
         throw new Error(metrics.logFilterString
           ? `no log lines match "${metrics.logFilterString}"`
-          : 'no log lines to copy yet');
+          : getStreamState && getStreamState(metrics) === null
+            ? 'no log lines loaded — open the Logs tab first'
+            : 'no log lines to copy yet');
       }
       if (!onCopy(text)) {
         throw new Error('no clipboard tool found (install xclip, xsel, or wl-copy)');

@@ -213,6 +213,8 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
       const next = Math.max(0, Math.min(base + action.delta, maxOffset));
       return { ...state, secondaryDetailScrollOffset: next, secondaryFollow: next >= maxOffset };
     }
+    case 'RESUME_SECONDARY_FOLLOW':
+      return { ...state, secondaryFollow: true };
     case 'TOGGLE_MOUSE':
       return { ...state, mouseEnabled: !state.mouseEnabled };
     default:
@@ -458,9 +460,13 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   }, [panel, metrics, enrichedMetrics, state.showAllContainers, state.filterString, state.sortField, state.sortReversed]);
 
   // Keep the selection on the same item when the list reorders or shrinks.
+  // If the item is gone, its neighbour is a fresh selection (SELECT_ITEM
+  // resets the old item's scroll and paused follow).
   const resolved = resolveSelection(currentItems, state.selectedItemIndex, state.selectedItemId);
   if (currentItems.length > 0 && (resolved.index !== state.selectedItemIndex || resolved.id !== state.selectedItemId)) {
-    dispatch({ type: 'RESOLVE_SELECTION', index: resolved.index, id: resolved.id });
+    dispatch(resolved.replaced
+      ? { type: 'SELECT_ITEM', index: resolved.index, id: resolved.id }
+      : { type: 'RESOLVE_SELECTION', index: resolved.index, id: resolved.id });
   }
   const clampedSelection = Math.min(resolved.index, Math.max(0, currentItems.length - 1));
 
@@ -595,6 +601,8 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const detailSuffix = detailTabSuffix({
     followPaused,
     itemName: state.layoutMode === 'expanded' && selectedItem ? itemName(selectedItem) : undefined,
+    paneWidth: columns - sideWidth,
+    tabLabels: detailTabs.map(t => t.label),
   });
   const menuTitle = contextMenuTitle(selectedItem ? itemName(selectedItem) : undefined);
 
@@ -615,7 +623,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     state, dispatch, panels, panelCounts, currentItems, clampedSelection,
     selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines,
     detailViewportHeight: scrollViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast,
-    detailSuffixLength: detailSuffix.text.length, menuTitle, helpMaxScroll,
+    detailSuffix, menuTitle, helpMaxScroll,
   });
 
   // Full context for key handlers — adds dispatch/addToast/exit, which close
@@ -708,6 +716,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                   primaryLabel={selectedItem ? itemName(selectedItem) : ''}
                   secondaryLabel={compareItemLabel}
                   followPaused={followPaused}
+                  secondaryPaused={!state.secondaryFollow}
                 />
               ) : (
                 <DetailPane

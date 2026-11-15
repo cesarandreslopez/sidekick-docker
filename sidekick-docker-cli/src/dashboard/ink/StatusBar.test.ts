@@ -57,8 +57,12 @@ describe('buildStatusSegments under pressure (T23, A1)', () => {
     expect(plain(buildStatusSegments(disconnected, 200))).toContain('containers, images, volumes, networks unavailable');
   });
 
-  it('says when mouse capture is off, and drops that before the action hints', () => {
+  it('says when mouse capture is off, and keeps saying it after the action hints are dropped', () => {
     expect(plain(buildStatusSegments({ ...base, mouseEnabled: false }, 200))).toContain('mouse off');
     expect(plain(buildStatusSegments(base, 200))).not.toContain('mouse off');
+    const narrow = plain(buildStatusSegments({ ...base, mouseEnabled: false }, 45));
+    expect(narrow).not.toContain('s:Start');
+    expect(narrow).toContain('mouse off (M)');
+    expect(narrow).toContain('?:Help');
   });
 });

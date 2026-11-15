@@ -24,7 +24,9 @@ export function DetailPane({ lines, scrollOffset, viewportHeight, focused, follo
         <Text color="gray" wrap="truncate">{`▲ (${win.above} more)`}</Text>
       )}
       {win.visible.map((line, i) => (
-        <Text key={i} wrap="truncate">{line}</Text>
+        // ' ' for a blank line: Ink gives an empty Text no height, which
+        // collapsed section spacing and drew fewer rows than budgeted.
+        <Text key={i} wrap="truncate">{line || ' '}</Text>
       ))}
       {win.hasDown && (
         <Text color={followPaused ? 'yellow' : 'gray'} wrap="truncate">{`▼ (${win.below} more)${followPaused ? FOLLOW_PAUSED_ROW_HINT : ''}`}</Text>

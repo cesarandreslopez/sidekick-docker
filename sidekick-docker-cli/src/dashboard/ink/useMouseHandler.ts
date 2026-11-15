@@ -6,6 +6,7 @@ import { executeAction } from './executeAction';
 import { contextMenuHit, confirmHit, confirmLayout, sortHit } from './overlayHitTest';
 import { windowLines } from './windowLines';
 import { panelTabWidth, detailTabWidth, detailTabWindow, shouldCompactTabs } from './tabLayout';
+import type { DetailTabSuffix } from './tabLayout';
 import { SORT_FIELDS, sortFieldLabel } from './dashboardTypes';
 
 
@@ -34,8 +35,8 @@ interface MouseContext {
   rows: number;
   addToast: AddToast;
   removeToast: (id: number) => void;
-  /** Length of the detail strip's trailing text (detailTabSuffix), which sizes the tab window. */
-  detailSuffixLength: number;
+  /** The detail strip's trailing text (detailTabSuffix, as DetailTabBar got it), which sizes the tab window. */
+  detailSuffix: DetailTabSuffix;
   /** The context menu's title (contextMenuTitle), which can set its width. */
   menuTitle: string;
   /** How far the help overlay scrolls (the wheel scrolls it). */
@@ -43,7 +44,9 @@ interface MouseContext {
 }
 
 export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) => void {
-  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast, detailSuffixLength, menuTitle, helpMaxScroll } = ctx;
+  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast, detailSuffix, menuTitle, helpMaxScroll } = ctx;
+  const detailSuffixLength = detailSuffix.text.length;
+  const detailSuffixReserved = detailSuffix.reserved;
   // Read the individual fields outside the callback: closing over `state` itself would make
   // the whole object the dependency, which the compiler cannot reconcile with the field-level
   // dependency array below (react-hooks/preserve-manual-memoization).
@@ -186,7 +189,7 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
       if (y === 1 && detailTabs.length > 1) {
         // Only the windowed tabs are drawn, so hit-test that same slice.
         const paneWidth = columns - sideWidth;
-        const win = detailTabWindow(detailTabs.map(t => t.label), tabIdx, paneWidth, detailSuffixLength);
+        const win = detailTabWindow(detailTabs.map(t => t.label), tabIdx, paneWidth, detailSuffixLength, detailSuffixReserved);
         let col = sideWidth + (win.hasLeftMarker ? 1 : 0);
         for (let i = win.start; i < win.start + win.count && i < detailTabs.length; i++) {
           const tabWidth = detailTabWidth(detailTabs[i].label);
@@ -198,5 +201,5 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
       }
     }
-  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, confirmMessage, detailSuffixLength, menuTitle, helpMaxScroll, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, columns, layoutMode, addToast, removeToast, dispatch]);
+  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, confirmMessage, detailSuffixLength, detailSuffixReserved, menuTitle, helpMaxScroll, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, columns, layoutMode, addToast, removeToast, dispatch]);
 }

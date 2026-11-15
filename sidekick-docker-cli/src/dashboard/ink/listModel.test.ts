@@ -37,19 +37,22 @@ describe('resolveSelection (T3)', () => {
   const list = [item('a', 0), item('b', 1), item('c', 2)];
 
   it('follows the selected item to its new index after a reorder', () => {
-    expect(resolveSelection([list[2], list[0], list[1]], 0, 'a')).toEqual({ index: 1, id: 'a' });
+    expect(resolveSelection([list[2], list[0], list[1]], 0, 'a')).toEqual({ index: 1, id: 'a', replaced: false });
   });
 
   it('records the id of the row at the index when none is known yet', () => {
-    expect(resolveSelection(list, 1, null)).toEqual({ index: 1, id: 'b' });
+    expect(resolveSelection(list, 1, null)).toEqual({ index: 1, id: 'b', replaced: false });
   });
 
-  it('falls back to the clamped index when the item is gone', () => {
-    expect(resolveSelection([list[0], list[1]], 2, 'c')).toEqual({ index: 1, id: 'b' });
+  it('falls back to the clamped index when the item is gone, as a replacement', () => {
+    // replaced: the caller treats this as a new selection (SELECT_ITEM), so
+    // the old item's scroll offsets and paused follow do not carry over.
+    expect(resolveSelection([list[0], list[1]], 2, 'c')).toEqual({ index: 1, id: 'b', replaced: true });
+    expect(resolveSelection([list[0], list[2]], 1, 'b')).toEqual({ index: 1, id: 'c', replaced: true });
   });
 
   it('keeps everything while the list is empty, so the selection returns with the items', () => {
-    expect(resolveSelection([], 2, 'c')).toEqual({ index: 2, id: 'c' });
+    expect(resolveSelection([], 2, 'c')).toEqual({ index: 2, id: 'c', replaced: false });
   });
 });
 

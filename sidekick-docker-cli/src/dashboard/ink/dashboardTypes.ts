@@ -103,6 +103,8 @@ export type Action =
   | { type: 'CLEAR_COMPARE'; panelId: string }
   | { type: 'SCROLL_SECONDARY_DETAIL'; offset: number }
   | { type: 'SCROLL_SECONDARY_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number }
+  /** G while comparing: the compare pane tails again (its follow effect scrolls it down). */
+  | { type: 'RESUME_SECONDARY_FOLLOW' }
   | { type: 'HELP_SCROLL'; delta: number; max: number }
   | { type: 'TOGGLE_MOUSE' };
 

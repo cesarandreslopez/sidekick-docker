@@ -116,6 +116,13 @@ describe('compare pin (T1)', () => {
     expect(down.secondaryFollow).toBe(true);
   });
 
+  it('RESUME_SECONDARY_FOLLOW (G while comparing) tails the compare pane without touching the primary', () => {
+    const paused = { ...initialState, secondaryFollow: false, secondaryDetailScrollOffset: 12, logFollow: false, detailScrollOffset: 5 };
+    const next = reducer(paused, { type: 'RESUME_SECONDARY_FOLLOW' });
+    // The follow effect then scrolls it to the bottom.
+    expect(next).toMatchObject({ secondaryFollow: true, secondaryDetailScrollOffset: 12, logFollow: false, detailScrollOffset: 5 });
+  });
+
   it('a new pin or a new selection tails the compare pane again', () => {
     const paused = { ...initialState, secondaryFollow: false };
     expect(reducer(paused, { type: 'PIN_COMPARE', panelId: 'containers', itemId: 'c9' }).secondaryFollow).toBe(true);

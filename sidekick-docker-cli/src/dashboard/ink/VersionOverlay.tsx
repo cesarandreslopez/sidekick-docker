@@ -14,13 +14,13 @@ export function VersionOverlay({ version }: VersionOverlayProps): React.ReactEle
     <Box flexDirection="column" flexGrow={1} padding={1}>
       <Text bold color="magenta">{BRAND_INLINE}</Text>
       <Text color={ACCENT} bold>{`${BRAND_TAGLINE} v${version}`}</Text>
-      <Text>{''}</Text>
+      <Text>{' '}</Text>
       <Text color="gray" dimColor>{'\u2500'.repeat(40)}</Text>
-      <Text>{''}</Text>
+      <Text>{' '}</Text>
       <Text color="gray" italic>{`  "${phrase}"`}</Text>
-      <Text>{''}</Text>
+      <Text>{' '}</Text>
       <Text color="gray" dimColor>{'\u2500'.repeat(40)}</Text>
-      <Text>{''}</Text>
+      <Text>{' '}</Text>
       <Text color="gray" dimColor>{'Press V or Esc to close'}</Text>
     </Box>
   );

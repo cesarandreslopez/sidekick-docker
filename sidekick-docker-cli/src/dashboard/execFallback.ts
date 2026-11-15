@@ -40,7 +40,9 @@ export function execFallback(
       stderrTail = (stderrTail + chunk.toString()).slice(-STDERR_TAIL);
     });
     child.once('error', reject);
-    child.once('exit', (code) => {
+    // 'close', not 'exit': only 'close' guarantees the stderr pipe has been
+    // drained, and the message that explains the exit may arrive after it.
+    child.once('close', (code: number | null) => {
       const missing = describeExecExit({ exitCode: code, outputTail: stderrTail, shell, containerName });
       if (missing) { reject(new Error(missing)); return; }
       const dockerError = code !== 0 && code !== null ? lastErrorLine(stderrTail) : null;

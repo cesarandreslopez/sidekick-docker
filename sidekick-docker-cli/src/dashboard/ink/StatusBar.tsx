@@ -56,7 +56,8 @@ const COMPACT_ERRORS = '#compact-errors';
  * unavailable" warning is shortened to "⚠ 4 unavailable" instead, which used
  * to push ?:Help off narrow terminals during a disconnect.
  */
-const DROP_ORDER = ['tagline', 'version', 'brand', 'nav', COMPACT_ERRORS, 'context', 'mouse', 'ago', 'hints'];
+// 'mouse' goes last: with capture off, clicks do nothing, and this says why.
+const DROP_ORDER = ['tagline', 'version', 'brand', 'nav', COMPACT_ERRORS, 'context', 'ago', 'hints', 'mouse'];
 
 export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width: number): StatusSegment[] {
   const { daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh, contextHint, mouseEnabled = true } = props;

@@ -35,7 +35,7 @@ export function DetailTabBar({ tabs, activeIndex, suffix, width }: DetailTabBarP
     );
   }
 
-  const win = detailTabWindow(tabs.map(t => t.label), activeIndex, width, suffix.text.length);
+  const win = detailTabWindow(tabs.map(t => t.label), activeIndex, width, suffix.text.length, suffix.reserved);
   const visible = tabs
     .slice(win.start, win.start + win.count)
     .map((tab, i) => ({ tab, index: win.start + i }));

@@ -18,10 +18,12 @@ interface CompareDetailPaneProps {
   secondaryLabel: string;
   /** The primary column's follow is paused (shown in its ▼ row). */
   followPaused?: boolean;
+  /** The compare column's own follow is paused (K), likewise. */
+  secondaryPaused?: boolean;
 }
 
-function Cell({ row, width, paused }: { row: ColumnRow; width: number; paused?: boolean }): React.ReactElement {
-  const color = row.indicator ? (paused ? 'yellow' : 'gray') : undefined;
+function Cell({ row, width }: { row: ColumnRow; width: number }): React.ReactElement {
+  const color = row.paused ? 'yellow' : row.indicator ? 'gray' : undefined;
   return <Text color={color} wrap="truncate">{clipAnsi(row.text, width)}</Text>;
 }
 
@@ -36,6 +38,7 @@ export function CompareDetailPane({
   primaryLabel,
   secondaryLabel,
   followPaused,
+  secondaryPaused,
 }: CompareDetailPaneProps): React.ReactElement {
   // 3 chars for divider: space + │ + space
   const colWidth = Math.max(10, Math.floor((totalWidth - 5) / 2));
@@ -48,7 +51,7 @@ export function CompareDetailPane({
   // scrollViewportHeight so scroll clamps agree). Each column is windowed on
   // its own: the two follow independently, so they rarely need the same ▲/▼.
   const left = compareColumnRows(primaryLines, primaryScrollOffset, viewportHeight, followPaused ? FOLLOW_PAUSED_ROW_HINT : '');
-  const right = compareColumnRows(secondaryLines, secondaryScrollOffset, viewportHeight);
+  const right = compareColumnRows(secondaryLines, secondaryScrollOffset, viewportHeight, secondaryPaused ? FOLLOW_PAUSED_ROW_HINT : '');
 
   return (
     <Box flexDirection="column" flexGrow={1} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? ACCENT : 'gray'}>
@@ -60,7 +63,7 @@ export function CompareDetailPane({
       </Box>
       {left.map((row, i) => (
         <Box key={i}>
-          <Cell row={row} width={colWidth} paused={followPaused && row.text.startsWith('▼')} />
+          <Cell row={row} width={colWidth} />
           <Text color="gray" dimColor>{' │ '}</Text>
           <Cell row={right[i]} width={colWidth} />
         </Box>

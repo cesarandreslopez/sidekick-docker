@@ -10,7 +10,7 @@ it('hands the terminal and configured Docker endpoint to the shell until it exit
   const pending = execFallback('container-a', { DOCKER_HOST: 'ssh://test' }, abort.signal);
   // stderr is piped (and echoed) so a missing shell can be explained.
   expect(spawn).toHaveBeenCalledWith('docker', ['exec', '-it', 'container-a', '/bin/sh'], expect.objectContaining({ stdio: ['inherit', 'inherit', 'pipe'], signal: abort.signal, env: expect.objectContaining({ DOCKER_HOST: 'ssh://test' }) }));
-  child.emit('exit', 0, null);
+  child.emit('exit', 0, null); child.emit('close', 0, null);
   await expect(pending).resolves.toBeUndefined();
 });
 it('reports a missing docker executable', async () => {
@@ -20,7 +20,7 @@ it('reports a missing docker executable', async () => {
 });
 it('treats a non-zero shell exit as an ordinary end of the session', async () => {
   // A shell exits with its last command's status; that is not a dashboard error.
-  const failed = execFallback('a'); child.emit('exit', 1, null);
+  const failed = execFallback('a'); child.emit('exit', 1, null); child.emit('close', 1, null);
   await expect(failed).resolves.toBeUndefined();
 });
 it('explains a missing shell from docker\'s own stderr, and still shows it', async () => {
@@ -30,6 +30,7 @@ it('explains a missing shell from docker\'s own stderr, and still shows it', asy
     const pending = execFallback('a', {}, undefined, '/bin/sh', 'web');
     child.stderr.emit('data', Buffer.from('OCI runtime exec failed: exec failed: unable to start container process: exec: "/bin/sh": stat /bin/sh: no such file or directory: unknown\n'));
     child.emit('exit', 126, null);
+    child.emit('close', 126, null);
     await expect(pending).rejects.toThrow('No /bin/sh in web');
     expect(write).toHaveBeenCalled();
   } finally {
@@ -43,12 +44,26 @@ it('reports docker\'s own error when exec itself fails', async () => {
     const pending = execFallback('a');
     child.stderr.emit('data', 'Error response from daemon: container a is not running\n');
     child.emit('exit', 1, null);
+    child.emit('close', 1, null);
     await expect(pending).rejects.toThrow('Error response from daemon: container a is not running');
   } finally {
     write.mockRestore();
   }
 });
+it('waits for stderr to drain: a message arriving after exit still explains it', async () => {
+  child.stderr = new EventEmitter();
+  const write = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  try {
+    const pending = execFallback('a', {}, undefined, '/bin/sh', 'web');
+    child.emit('exit', 126, null);
+    child.stderr.emit('data', 'OCI runtime exec failed: exec failed: unable to start container process: exec: "/bin/sh": stat /bin/sh: no such file or directory: unknown\n');
+    child.emit('close', 126, null);
+    await expect(pending).rejects.toThrow('No /bin/sh in web');
+  } finally {
+    write.mockRestore();
+  }
+});
 it('lets Ctrl+C return from the shell without treating it as a dashboard error', async () => {
-  const pending = execFallback('a'); child.emit('exit', null, 'SIGINT');
+  const pending = execFallback('a'); child.emit('exit', null, 'SIGINT'); child.emit('close', null, 'SIGINT');
   await expect(pending).resolves.toBeUndefined();
 });

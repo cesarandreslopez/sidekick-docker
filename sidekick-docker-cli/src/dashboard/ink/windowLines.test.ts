@@ -97,6 +97,7 @@ describe('compareColumnRows (T1/T25)', () => {
 
   it('a scrolled-back column gets its own ▼ row, with the paused hint when given', () => {
     const rows = compareColumnRows(lines, 5, 10, ' · paused');
-    expect(rows.at(-1)).toEqual({ text: '▼ (17 more) · paused', indicator: true });
+    expect(rows.at(-1)).toEqual({ text: '▼ (17 more) · paused', indicator: true, paused: true });
+    expect(compareColumnRows(lines, 5, 10).at(-1)).toEqual({ text: '▼ (17 more)', indicator: true, paused: false });
   });
 });

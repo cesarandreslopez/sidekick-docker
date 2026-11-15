@@ -49,7 +49,7 @@ export function SortOverlay({ selectedIndex, currentField, reversed, maxWidth }:
           </Box>
         );
       })}
-      <Text>{''}</Text>
+      <Text>{' '}</Text>
       <Text color="gray" dimColor>{'j/k select  Enter apply  R reverse  Esc close'}</Text>
     </Box>
   );
