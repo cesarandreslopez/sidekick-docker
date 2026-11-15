@@ -26,6 +26,13 @@ export type AddToast = (
 export interface DashboardUIState {
   activePanelIndex: number;
   selectedItemIndex: number;
+  /**
+   * Id of the selected item. The index alone drifted whenever a refresh,
+   * sort or filter reordered the list, so actions hit a different item than
+   * the one the user picked. Null until resolved from the index (after a
+   * panel switch or a positional move); see resolveSelection.
+   */
+  selectedItemId: string | null;
   detailTabIndex: number;
   layoutMode: LayoutMode;
   focusTarget: FocusTarget;
@@ -53,13 +60,22 @@ export interface DashboardUIState {
   /** Per-panel pinned item IDs for compare mode, keyed by panel ID. */
   compareItemIds: Record<string, string | null>;
   secondaryDetailScrollOffset: number;
+  /**
+   * Tail mode for the compare pane, separate from logFollow: sharing the
+   * primary's flag meant every render snapped the pane back down and undid K.
+   */
+  secondaryFollow: boolean;
+  /** Mouse capture (M / --no-mouse). Off lets the terminal select and copy text. */
+  mouseEnabled: boolean;
   /** First visible row of the help overlay (it scrolls when it does not fit). */
   helpScroll: number;
 }
 
 export type Action =
   | { type: 'SWITCH_PANEL'; index: number }
-  | { type: 'SELECT_ITEM'; index: number }
+  | { type: 'SELECT_ITEM'; index: number; id?: string | null }
+  /** Re-point the selection after the list changed, without resetting scroll or follow. */
+  | { type: 'RESOLVE_SELECTION'; index: number; id: string | null }
   | { type: 'SET_DETAIL_TAB'; index: number }
   | { type: 'CYCLE_DETAIL_TAB'; direction: 1 | -1; tabCount: number }
   | { type: 'CYCLE_LAYOUT' }
@@ -84,9 +100,11 @@ export type Action =
   | { type: 'TOGGLE_SORT_REVERSE' }
   | { type: 'SORT_MENU_NAV'; delta: number }
   | { type: 'PIN_COMPARE'; panelId: string; itemId: string }
+  | { type: 'CLEAR_COMPARE'; panelId: string }
   | { type: 'SCROLL_SECONDARY_DETAIL'; offset: number }
   | { type: 'SCROLL_SECONDARY_DETAIL_DELTA'; delta: number; totalLines: number; viewportHeight: number }
-  | { type: 'HELP_SCROLL'; delta: number; max: number };
+  | { type: 'HELP_SCROLL'; delta: number; max: number }
+  | { type: 'TOGGLE_MOUSE' };
 
 /**
  * The sort fields, in the order the sort menu lists them.
@@ -108,3 +126,8 @@ export const SORT_OPTIONS: { field: SortField; label: string }[] = [
 ];
 
 export const SORT_FIELDS: SortField[] = SORT_OPTIONS.map(o => o.field);
+
+/** Menu label for a sort field ("Memory %"), for toasts — not the raw id ("mem"). */
+export function sortFieldLabel(field: SortField): string {
+  return SORT_OPTIONS.find(o => o.field === field)?.label ?? field;
+}

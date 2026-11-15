@@ -7,8 +7,11 @@ export type HelpLine =
 
 const CATEGORY_ORDER: KeyCategory[] = ['Navigation', 'View', 'Filters & Sort', 'System'];
 
-/** Rows the overlay spends outside the body: padding (2), title (1), blank + footer (2). */
-export const HELP_CHROME_ROWS = 5;
+/**
+ * Rows spent outside the body: padding (2), title (1), blank + footer (2),
+ * and the status bar the dashboard still draws under the overlay (1).
+ */
+export const HELP_CHROME_ROWS = 6;
 /** Below this width the help stays in one column. */
 export const HELP_TWO_COLUMN_MIN_WIDTH = 96;
 

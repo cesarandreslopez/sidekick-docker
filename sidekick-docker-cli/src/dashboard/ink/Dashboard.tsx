@@ -2,6 +2,7 @@ import React, { useReducer, useCallback, useEffect, useRef } from 'react';
 import { Box, useApp } from 'ink';
 import type { DockerDashboardMetrics } from '../DockerState';
 import type { SidePanel } from '../panels/types';
+import { itemName } from '../panels/types';
 import { useTerminalSize } from './useTerminalSize';
 import { useWindowedScroll } from './useWindowedScroll';
 import { useKeyboardHandler } from './useKeyboardHandler';
@@ -25,6 +26,7 @@ import { LogFilterOverlay } from './LogFilterOverlay';
 import { VersionOverlay } from './VersionOverlay';
 import { SortOverlay } from './SortOverlay';
 import { getRandomPhrase, matchesRunningOnly } from 'sidekick-docker-shared';
+import type { ContainerInfo } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes, renderLogLines } from '../../formatters';
 import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
@@ -35,6 +37,9 @@ import { maxScrollOffset } from './windowLines';
 import { appendExecOutput, ExecOutputBuffer, isDetachKey } from './execOutput';
 import { buildHelpSections, layoutHelp } from './helpLayout';
 import { toastDuration } from './toastLayout';
+import { orderItems, resolveSelection, isPinGone } from './listModel';
+import { detailTabSuffix } from './tabLayout';
+import { contextMenuTitle } from './overlayHitTest';
 import { DEFAULT_EXEC_SHELL, describeExecExit } from '../execShell';
 
 
@@ -55,6 +60,7 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
         ...state,
         activePanelIndex: action.index,
         selectedItemIndex: 0,
+        selectedItemId: null,
         detailTabIndex: 0,
         filterString: '',
         focusTarget: 'side',
@@ -67,7 +73,21 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
     // pane back to Logs, so comparing two containers' Stats or Config meant
     // re-selecting the tab for every row.
     case 'SELECT_ITEM':
-      return { ...state, selectedItemIndex: action.index, detailScrollOffset: 0, detailScrollPerTab: {}, secondaryDetailScrollOffset: 0, logFollow: true };
+      return {
+        ...state,
+        selectedItemIndex: action.index,
+        // Unknown id: resolveSelection records the row's id on the next render.
+        selectedItemId: action.id ?? null,
+        detailScrollOffset: 0,
+        detailScrollPerTab: {},
+        secondaryDetailScrollOffset: 0,
+        secondaryFollow: true,
+        logFollow: true,
+      };
+    // The list changed under the selection (refresh, sort, filter): follow the
+    // item without the scroll/follow reset a user's selection change gets.
+    case 'RESOLVE_SELECTION':
+      return { ...state, selectedItemIndex: action.index, selectedItemId: action.id };
     case 'SET_DETAIL_TAB': {
       const saved = { ...state.detailScrollPerTab, [state.detailTabIndex]: state.detailScrollOffset };
       return { ...state, detailTabIndex: action.index, detailScrollOffset: saved[action.index] ?? 0, detailScrollPerTab: saved, logFollow: true };
@@ -82,12 +102,24 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
       const next: LayoutMode = state.layoutMode === 'normal' ? 'wide' : state.layoutMode === 'wide' ? 'expanded' : 'normal';
       return { ...state, layoutMode: next, focusTarget: next === 'expanded' ? 'detail' : state.focusTarget };
     }
+    // Expanded hides the list, so focus stays on the detail pane: moving it to
+    // the invisible list made j/k change the item with nothing on screen
+    // saying so.
     case 'TOGGLE_FOCUS':
+      if (state.layoutMode === 'expanded') return state;
       return { ...state, focusTarget: state.focusTarget === 'side' ? 'detail' : 'side' };
     case 'SET_FOCUS':
+      if (state.layoutMode === 'expanded' && action.target === 'side') return state;
       return { ...state, focusTarget: action.target };
     case 'SET_OVERLAY':
-      return { ...state, overlay: action.overlay, contextMenuIndex: 0, helpScroll: 0 };
+      return {
+        ...state,
+        overlay: action.overlay,
+        contextMenuIndex: 0,
+        helpScroll: 0,
+        // The sort menu opens on the current field, not wherever its cursor was left.
+        sortMenuIndex: action.overlay === 'sort' ? Math.max(0, SORT_FIELDS.indexOf(state.sortField)) : state.sortMenuIndex,
+      };
     case 'HELP_SCROLL':
       return { ...state, helpScroll: Math.max(0, Math.min(state.helpScroll + action.delta, action.max)) };
     case 'SET_FILTER':
@@ -121,7 +153,17 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
     case 'SCROLL_SIDE': {
       if (action.itemCount === 0) return state;
       const next = Math.max(0, Math.min(state.selectedItemIndex + action.delta, action.itemCount - 1));
-      return { ...state, selectedItemIndex: next, detailScrollOffset: 0, logFollow: true };
+      // A selection change like SELECT_ITEM: every detail offset belongs to the old item.
+      return {
+        ...state,
+        selectedItemIndex: next,
+        selectedItemId: null,
+        detailScrollOffset: 0,
+        detailScrollPerTab: {},
+        secondaryDetailScrollOffset: 0,
+        secondaryFollow: true,
+        logFollow: true,
+      };
     }
     case 'SET_CONFIRM':
       return { ...state, confirmAction: action.action, confirmMessage: action.message, confirmSeverity: action.severity ?? 'high', overlay: action.action ? 'confirm' : null };
@@ -136,7 +178,7 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
     case 'TOGGLE_LOG_FILTER_MODE':
       return { ...state, logFilterMode: state.logFilterMode === 'exact' ? 'fuzzy' : 'exact' };
     case 'TOGGLE_SHOW_ALL':
-      return { ...state, showAllContainers: !state.showAllContainers, selectedItemIndex: 0 };
+      return { ...state, showAllContainers: !state.showAllContainers, selectedItemIndex: 0, selectedItemId: null };
     case 'SET_SORT_FIELD':
       return { ...state, sortField: action.field, overlay: null };
     case 'TOGGLE_SORT_REVERSE':
@@ -152,15 +194,27 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
         ...state,
         compareItemIds: { ...state.compareItemIds, [action.panelId]: newId },
         secondaryDetailScrollOffset: 0,
+        secondaryFollow: true,
       };
     }
+    case 'CLEAR_COMPARE':
+      return {
+        ...state,
+        compareItemIds: { ...state.compareItemIds, [action.panelId]: null },
+        secondaryDetailScrollOffset: 0,
+        secondaryFollow: true,
+      };
     case 'SCROLL_SECONDARY_DETAIL':
       return { ...state, secondaryDetailScrollOffset: action.offset };
     case 'SCROLL_SECONDARY_DETAIL_DELTA': {
+      // J/K: scrolling up pauses the compare pane's own follow; reaching the bottom resumes it.
       const maxOffset = maxScrollOffset(action.totalLines, action.viewportHeight);
-      const next = Math.max(0, Math.min(state.secondaryDetailScrollOffset + action.delta, maxOffset));
-      return { ...state, secondaryDetailScrollOffset: next };
+      const base = Math.min(state.secondaryDetailScrollOffset, maxOffset);
+      const next = Math.max(0, Math.min(base + action.delta, maxOffset));
+      return { ...state, secondaryDetailScrollOffset: next, secondaryFollow: next >= maxOffset };
     }
+    case 'TOGGLE_MOUSE':
+      return { ...state, mouseEnabled: !state.mouseEnabled };
     default:
       return state;
   }
@@ -169,6 +223,7 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
 export const initialState: DashboardUIState = {
   activePanelIndex: 0,
   selectedItemIndex: 0,
+  selectedItemId: null,
   detailTabIndex: 0,
   layoutMode: 'normal',
   focusTarget: 'side',
@@ -193,7 +248,9 @@ export const initialState: DashboardUIState = {
   sortMenuIndex: 0,
   compareItemIds: {},
   secondaryDetailScrollOffset: 0,
+  secondaryFollow: true,
   helpScroll: 0,
+  mouseEnabled: true,
 };
 
 interface DashboardProps {
@@ -208,6 +265,8 @@ interface DashboardProps {
   dockerEnv?: Record<string, string>;
   /** Re-fetch everything now; resolves with the resources that could not be refreshed. */
   onRefresh?: () => Promise<string[]>;
+  /** Initial mouse capture (false for --no-mouse); M toggles it at runtime. */
+  mouse?: boolean;
 }
 
 export interface DashboardViewState {
@@ -218,8 +277,8 @@ export interface DashboardViewState {
   compareItemId: string | null;
 }
 
-export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh, execShell = DEFAULT_EXEC_SHELL }: DashboardProps): React.ReactElement {
-  const [state, dispatch] = useReducer(reducer, initialState);
+export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh, execShell = DEFAULT_EXEC_SHELL, mouse = true }: DashboardProps): React.ReactElement {
+  const [state, dispatch] = useReducer(reducer, mouse, (enabled): DashboardUIState => ({ ...initialState, mouseEnabled: enabled }));
   const { columns, rows } = useTerminalSize();
   const { exit, suspendTerminal } = useApp();
   const toastIdRef = useRef(0);
@@ -330,7 +389,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
             execInFallbackRef.current = false;
             manager.dispose();
             execManagerRef.current = null;
-                dispatch({ type: 'EXEC_END' });
+            dispatch({ type: 'EXEC_END' });
           }
         }
       }).catch((error: unknown) => {
@@ -373,17 +432,15 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   // Items for the active panel: filtered + sorted, memoized so UI-only renders
   // (toasts, scroll, phrase) don't refilter/resort. metrics identity changes on
   // every data refresh, which is exactly when recomputation is needed.
-  const { currentItems, totalItemCount } = React.useMemo(() => {
-    const allItems = panel.getItems(enrichedMetrics);
-    const total = allItems.length;
-    let items = allItems;
+  const { allItems, currentItems, totalItemCount, hiddenByRunningOnly } = React.useMemo(() => {
+    const unfiltered = panel.getItems(enrichedMetrics);
+    const total = unfiltered.length;
+    let items = unfiltered;
     // Show all / running-only toggle (containers panel)
     if (panel.id === 'containers' && !state.showAllContainers) {
-      items = items.filter(it => {
-        const c = it.data as import('sidekick-docker-shared').ContainerInfo;
-        return matchesRunningOnly(c.state);
-      });
+      items = items.filter(it => matchesRunningOnly((it.data as ContainerInfo).state));
     }
+    const hidden = total - items.length;
     if (state.filterString) {
       const f = state.filterString.toLowerCase();
       items = items.filter(it => {
@@ -391,55 +448,21 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         return text.toLowerCase().includes(f);
       });
     }
-    // Copy before sorting: the array may be the memoized/panel-owned one.
-    items = [...items];
-    // Sort: use sortField for containers panel, default sortKey otherwise
-    if (panel.id === 'containers' && state.sortField !== 'state') {
-      const dir = state.sortReversed ? -1 : 1;
-      items.sort((a, b) => {
-        const ca = a.data as import('sidekick-docker-shared').ContainerInfo;
-        const cb = b.data as import('sidekick-docker-shared').ContainerInfo;
-        switch (state.sortField) {
-          case 'name': return dir * ca.name.localeCompare(cb.name);
-          case 'cpu': {
-            const sa = metrics.statsCollector.getLatest(ca.id)?.cpuPercent ?? 0;
-            const sb = metrics.statsCollector.getLatest(cb.id)?.cpuPercent ?? 0;
-            return dir * (sb - sa);
-          }
-          case 'mem': {
-            const sa = metrics.statsCollector.getLatest(ca.id)?.memoryPercent ?? 0;
-            const sb = metrics.statsCollector.getLatest(cb.id)?.memoryPercent ?? 0;
-            return dir * (sb - sa);
-          }
-          case 'net': {
-            const sa = metrics.statsCollector.getLatest(ca.id);
-            const sb = metrics.statsCollector.getLatest(cb.id);
-            return dir * (((sb?.networkRx ?? 0) + (sb?.networkTx ?? 0)) - ((sa?.networkRx ?? 0) + (sa?.networkTx ?? 0)));
-          }
-          case 'io': {
-            const sa = metrics.statsCollector.getLatest(ca.id);
-            const sb = metrics.statsCollector.getLatest(cb.id);
-            return dir * (((sb?.blockRead ?? 0) + (sb?.blockWrite ?? 0)) - ((sa?.blockRead ?? 0) + (sa?.blockWrite ?? 0)));
-          }
-          case 'pids': {
-            const sa = metrics.statsCollector.getLatest(ca.id)?.pids ?? 0;
-            const sb = metrics.statsCollector.getLatest(cb.id)?.pids ?? 0;
-            return dir * (sb - sa);
-          }
-          default: return a.sortKey - b.sortKey;
-        }
-      });
-    } else {
-      const dir = state.sortReversed ? -1 : 1;
-      items.sort((a, b) => dir * (a.sortKey - b.sortKey));
-    }
-    return { currentItems: items, totalItemCount: total };
+    const ordered = orderItems(items, {
+      panelId: panel.id,
+      sortField: state.sortField,
+      sortReversed: state.sortReversed,
+      stats: metrics.statsCollector,
+    });
+    return { allItems: unfiltered, currentItems: ordered, totalItemCount: total, hiddenByRunningOnly: hidden };
   }, [panel, metrics, enrichedMetrics, state.showAllContainers, state.filterString, state.sortField, state.sortReversed]);
-  const clampedSelection = Math.min(state.selectedItemIndex, Math.max(0, currentItems.length - 1));
 
-  if (clampedSelection !== state.selectedItemIndex && currentItems.length > 0) {
-    dispatch({ type: 'SELECT_ITEM', index: clampedSelection });
+  // Keep the selection on the same item when the list reorders or shrinks.
+  const resolved = resolveSelection(currentItems, state.selectedItemIndex, state.selectedItemId);
+  if (currentItems.length > 0 && (resolved.index !== state.selectedItemIndex || resolved.id !== state.selectedItemId)) {
+    dispatch({ type: 'RESOLVE_SELECTION', index: resolved.index, id: resolved.id });
   }
+  const clampedSelection = Math.min(resolved.index, Math.max(0, currentItems.length - 1));
 
   const sideViewportHeight = Math.max(1, rows - RESERVED_UI_ROWS);
   const sideScroll = useWindowedScroll({ totalItems: currentItems.length, viewportHeight: sideViewportHeight });
@@ -457,13 +480,16 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const tabIdx = Math.min(state.detailTabIndex, detailTabs.length - 1);
 
   const compareItemId = state.compareItemIds[panel.id] ?? null;
+  // Pinning the selected item and moving on is how compare starts, so the pin
+  // must survive selecting it again (that just shows one pane): it used to be
+  // auto-cleared right away, and compare never turned on.
+  const comparedItemId = compareItemId !== null && compareItemId !== selectedItem?.id ? compareItemId : null;
 
-  // Auto-clear compare when selected item equals pinned item
+  // Drop the pin only once the pinned item is really gone.
+  const pinGone = isPinGone(compareItemId, allItems, listState);
   useEffect(() => {
-    if (compareItemId && selectedItem?.id === compareItemId) {
-      dispatch({ type: 'PIN_COMPARE', panelId: panel.id, itemId: compareItemId });
-    }
-  }, [selectedItem?.id, compareItemId, panel.id]);
+    if (pinGone) dispatch({ type: 'CLEAR_COMPARE', panelId: panel.id });
+  }, [pinGone, panel.id]);
 
   useEffect(() => {
     onViewStateChange?.({
@@ -471,10 +497,11 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
       itemId: selectedItem?.id ?? null,
       detailTabIndex: tabIdx,
       sortField: state.sortField,
-      compareItemId,
+      // Null while the pinned item is the selected one: no second stream of it.
+      compareItemId: comparedItemId,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [panel.id, selectedItem?.id, tabIdx, state.sortField, compareItemId]);
+  }, [panel.id, selectedItem?.id, tabIdx, state.sortField, comparedItemId]);
 
   let detailLines: string[] = [];
   if (selectedItem && detailTabs.length > 0 && tabIdx >= 0) {
@@ -493,7 +520,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
 
   // Compare mode spends one viewport row on its column-header; every scroll
   // clamp must budget it or the newest lines become unreachable.
-  const isCompareActive = compareItemId != null && shouldAutoScroll;
+  const isCompareActive = comparedItemId != null && shouldAutoScroll;
   const scrollViewportHeight = isCompareActive ? Math.max(1, detailViewportHeight - 1) : detailViewportHeight;
 
   // Follow the tail — including back *up* when the content shrinks. Switching
@@ -524,19 +551,24 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     return [];
   }, [isCompareActive, panel.id, enrichedMetrics.secondaryContainerLogs, enrichedMetrics.secondaryComposeLogs, enrichedMetrics.secondaryLogSeverityCounts, state.logFilterString, state.logFilterMode]);
 
-  // Auto-scroll secondary pane (compare panes follow together with the primary)
+  // The compare pane tails on its own flag (K pauses it, J to the bottom
+  // resumes), compared against the target like the primary — re-running only
+  // on a length change left it at the top after SELECT_ITEM zeroed it.
+  const secondaryFollowOffset = maxScrollOffset(secondaryDetailLines.length, scrollViewportHeight);
   useEffect(() => {
-    if (isCompareActive && state.logFollow && secondaryDetailLines.length > scrollViewportHeight) {
-      dispatch({ type: 'SCROLL_SECONDARY_DETAIL', offset: maxScrollOffset(secondaryDetailLines.length, scrollViewportHeight) });
+    if (isCompareActive && state.secondaryFollow && state.secondaryDetailScrollOffset !== secondaryFollowOffset) {
+      dispatch({ type: 'SCROLL_SECONDARY_DETAIL', offset: secondaryFollowOffset });
     }
-  }, [isCompareActive, state.logFollow, secondaryDetailLines.length, scrollViewportHeight]);
+  }, [isCompareActive, state.secondaryFollow, state.secondaryDetailScrollOffset, secondaryFollowOffset]);
+  const secondaryOffset = Math.min(state.secondaryDetailScrollOffset, secondaryFollowOffset);
 
-  // Find the compare item's label for the pane header
+  // The compare item's name for the pane header — from the unfiltered list,
+  // so a filter or the running-only toggle cannot turn it into a bare id.
   const compareItemLabel = React.useMemo(() => {
-    if (!compareItemId) return '';
-    const item = currentItems.find(it => it.id === compareItemId);
-    return item ? item.label.replace(/^[^\w]*/, '').trim() : compareItemId.slice(0, 12);
-  }, [compareItemId, currentItems]);
+    if (!comparedItemId) return '';
+    const item = allItems.find(it => it.id === comparedItemId);
+    return item ? itemName(item) : comparedItemId.slice(0, 12);
+  }, [comparedItemId, allItems]);
 
   // Panel actions — computed once, used by context menu, keyboard handler, and status bar
   const panelActions = panel.getActions();
@@ -559,18 +591,32 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     return { total: p.getItems(enrichedMetrics).length };
   }), [panels, metrics, enrichedMetrics, runningCount]);
 
-  // Mouse input (extracted hook)
-  const handleMouse = useMouseHandler({
-    state, dispatch, panels, panelCounts, currentItems, clampedSelection,
-    selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines,
-    detailViewportHeight: scrollViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast,
+  // The detail strip's trailing text; the mouse handler windows the tabs with the same one.
+  const detailSuffix = detailTabSuffix({
+    followPaused,
+    itemName: state.layoutMode === 'expanded' && selectedItem ? itemName(selectedItem) : undefined,
   });
+  const menuTitle = contextMenuTitle(selectedItem ? itemName(selectedItem) : undefined);
 
   // Read-only slice: safe to consume during render (help overlay, status hints).
   const keyQueryCtx: KeyQueryContext = {
     state, panel, selectedItem, applicableActions, detailTabs, tabIdx,
     secondaryDetailLineCount: secondaryDetailLines.length,
   };
+
+  // The help overlay is laid out to fit (two columns when wide, scrolling when tall).
+  const helpLayout = state.overlay === 'help'
+    ? layoutHelp(buildHelpSections(buildHelpBindings(keyQueryCtx), panel.getActions(), panel.title), rows, columns, state.helpScroll)
+    : null;
+  const helpMaxScroll = helpLayout?.maxScroll ?? 0;
+
+  // Mouse input (extracted hook)
+  const handleMouse = useMouseHandler({
+    state, dispatch, panels, panelCounts, currentItems, clampedSelection,
+    selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines,
+    detailViewportHeight: scrollViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast,
+    detailSuffixLength: detailSuffix.text.length, menuTitle, helpMaxScroll,
+  });
 
   // Full context for key handlers — adds dispatch/addToast/exit, which close
   // over refs and must therefore never reach a render-time call.
@@ -587,16 +633,11 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     });
   }, [onRefresh, addToast, removeToast]);
 
-  // The help overlay is laid out to fit (two columns when wide, scrolling when tall).
-  const helpLayout = state.overlay === 'help'
-    ? layoutHelp(buildHelpSections(buildHelpBindings(keyQueryCtx), panel.getActions(), panel.title), rows, columns, state.helpScroll)
-    : null;
-
   const keyCtx: KeyContext = {
     ...keyQueryCtx,
     dispatch, panels, clampedSelection, currentItems, detailLines,
     detailViewportHeight: scrollViewportHeight, sideScroll, addToast, exit, refresh,
-    helpMaxScroll: helpLayout?.maxScroll ?? 0,
+    helpMaxScroll,
   };
 
   // Keyboard input (extracted hook)
@@ -626,7 +667,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const contextHint = buildContextHint(keyQueryCtx);
 
   return (
-    <MouseProvider onMouse={handleMouse} enabled={state.overlay !== 'exec'}>
+    <MouseProvider onMouse={handleMouse} enabled={state.overlay !== 'exec' && state.mouseEnabled}>
       <Box flexDirection="column" height={rows} width={columns}>
         {showNormalLayout && (
           <TabBar panels={panels} activeIndex={state.activePanelIndex} layoutMode={state.layoutMode} phrase={phrase} panelCounts={panelCounts} width={columns} />
@@ -645,25 +686,28 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                 panelTitle={panel.title}
                 filterString={state.filterString || undefined}
                 panelId={panel.id}
-                totalCount={totalItemCount}
+                // Services counts service rows only, as its tab does (not project headers).
+                totalCount={panel.id === 'services' ? panelCounts[state.activePanelIndex].total : totalItemCount}
                 runningCount={panel.id === 'containers' ? runningCount : undefined}
                 compareItemId={compareItemId || undefined}
                 listState={listState}
+                hiddenByRunningOnly={hiddenByRunningOnly}
               />
             )}
             <Box flexDirection="column" flexGrow={1}>
-              <DetailTabBar tabs={detailTabs} activeIndex={tabIdx} followPaused={followPaused} width={columns - sideWidth} />
+              <DetailTabBar tabs={detailTabs} activeIndex={tabIdx} suffix={detailSuffix} width={columns - sideWidth} />
               {isCompareActive ? (
                 <CompareDetailPane
                   primaryLines={detailLines}
                   secondaryLines={secondaryDetailLines}
                   primaryScrollOffset={detailOffset}
-                  secondaryScrollOffset={state.secondaryDetailScrollOffset}
+                  secondaryScrollOffset={secondaryOffset}
                   viewportHeight={scrollViewportHeight}
                   totalWidth={columns - sideWidth}
                   focused={state.focusTarget === 'detail'}
-                  primaryLabel={selectedItem?.label.replace(/^[^\w]*/, '').trim() ?? ''}
+                  primaryLabel={selectedItem ? itemName(selectedItem) : ''}
                   secondaryLabel={compareItemLabel}
+                  followPaused={followPaused}
                 />
               ) : (
                 <DetailPane
@@ -671,6 +715,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                   scrollOffset={detailOffset}
                   viewportHeight={detailViewportHeight}
                   focused={state.focusTarget === 'detail'}
+                  followPaused={followPaused}
                 />
               )}
             </Box>
@@ -678,7 +723,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         )}
 
         {helpLayout && (
-          <HelpOverlay version={__CLI_VERSION__} layout={helpLayout} />
+          <HelpOverlay version={__CLI_VERSION__} layout={helpLayout} mouseEnabled={state.mouseEnabled} />
         )}
 
         {state.overlay === 'version' && (
@@ -706,12 +751,13 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
             totalCount={state.filterString ? totalItemCount : undefined}
             lastRefresh={metrics.lastRefresh}
             contextHint={contextHint}
+            mouseEnabled={state.mouseEnabled}
             width={columns}
           />
         )}
 
         {state.overlay === 'context-menu' && (
-          <ContextMenuOverlay actions={contextActions} selectedIndex={state.contextMenuIndex} maxWidth={columns - 6} />
+          <ContextMenuOverlay actions={contextActions} selectedIndex={state.contextMenuIndex} title={menuTitle} maxWidth={columns - 6} />
         )}
 
         {state.overlay === 'filter' && (

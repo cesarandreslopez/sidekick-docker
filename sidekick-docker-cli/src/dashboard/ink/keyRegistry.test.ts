@@ -4,6 +4,7 @@ import { GLOBAL_BINDINGS, buildHelpBindings, buildContextHint } from './keyRegis
 import type { KeyContext } from './keyRegistry';
 import type { DashboardUIState } from './dashboardTypes';
 import type { SidePanel } from '../panels/types';
+import { initialState } from './Dashboard';
 
 function bareKey(overrides: Partial<Key> = {}): Key {
   return {
@@ -15,35 +16,7 @@ function bareKey(overrides: Partial<Key> = {}): Key {
 }
 
 function makeState(overrides: Partial<DashboardUIState> = {}): DashboardUIState {
-  return {
-    activePanelIndex: 0,
-    selectedItemIndex: 0,
-    detailTabIndex: 0,
-    layoutMode: 'normal',
-    focusTarget: 'side',
-    overlay: null,
-    filterString: '',
-    detailScrollOffset: 0,
-    detailScrollPerTab: {},
-    toasts: [],
-    contextMenuIndex: 0,
-    confirmAction: null,
-    confirmMessage: '',
-    confirmSeverity: 'high',
-    execOutputLines: [],
-    execContainerId: null,
-    execContainerName: '',
-    logFilterString: '',
-    logFilterMode: 'exact',
-    showAllContainers: true,
-    sortField: 'state',
-    sortReversed: false,
-    sortMenuIndex: 0,
-    compareItemIds: {},
-    secondaryDetailScrollOffset: 0,
-    helpScroll: 0,
-    ...overrides,
-  };
+  return { ...initialState, ...overrides };
 }
 
 function makePanel(id: string): SidePanel {
@@ -106,6 +79,7 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
       { input: 'o', id: 'sort-menu' },
       { input: 'R', id: 'sort-reverse' },
       { input: 'm', id: 'compare-pin' },
+      { input: 'M', id: 'mouse-toggle' },
       { input: 'x', id: 'actions-menu' },
       { input: '[', id: 'detail-tab-cycle' },
       { input: ']', id: 'detail-tab-cycle' },
@@ -134,14 +108,6 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
     }
   });
 
-  it('does not shadow any panel action key', () => {
-    // Full inventory of PanelAction keys across the five panels.
-    const panelActionKeys = ['s', 'S', 'r', 'p', 'u', 'd', 'e', 'c', 'P', 'D', 'b'];
-    for (const k of panelActionKeys) {
-      expect(findMatch(k), `panel action key '${k}' must fall through`).toBeUndefined();
-    }
-  });
-
   it('panel switch respects panels.length', () => {
     const ctx = makeCtx();
     const spec = findMatch('7')!;
@@ -158,11 +124,62 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
     ];
     const side = makeCtx({ currentItems: items });
     findMatch('j')!.run(side, 'j', bareKey());
-    expect(side.dispatch).toHaveBeenCalledWith({ type: 'SELECT_ITEM', index: 1 });
+    // The id rides along so a later reorder keeps this item selected.
+    expect(side.dispatch).toHaveBeenCalledWith({ type: 'SELECT_ITEM', index: 1, id: 'c2' });
 
     const detail = makeCtx({ state: makeState({ focusTarget: 'detail' }) });
     findMatch('j')!.run(detail, 'j', bareKey());
     expect(detail.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'SCROLL_DETAIL_DELTA', delta: 1 }));
+  });
+
+  it('G resumes a paused follow even with the list focused; a second G selects the last item', () => {
+    const items = [
+      { id: 'c1', label: 'web', sortKey: 0, data: {} },
+      { id: 'c2', label: 'db', sortKey: 1, data: {} },
+    ];
+    const paused = makeCtx({ currentItems: items, state: makeState({ focusTarget: 'side', logFollow: false }) });
+    findMatch('G')!.run(paused, 'G', bareKey());
+    expect(paused.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'SCROLL_DETAIL', followTab: true }));
+    expect(paused.dispatch).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'SELECT_ITEM' }));
+
+    const following = makeCtx({ currentItems: items, state: makeState({ focusTarget: 'side', logFollow: true }) });
+    findMatch('G')!.run(following, 'G', bareKey());
+    expect(following.dispatch).toHaveBeenCalledWith({ type: 'SELECT_ITEM', index: 1, id: 'c2' });
+  });
+
+  it('g with the list focused still selects the first item while follow is paused', () => {
+    const ctx = makeCtx({ state: makeState({ focusTarget: 'side', logFollow: false }) });
+    findMatch('g')!.run(ctx, 'g', bareKey());
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'SELECT_ITEM', index: 0, id: 'c1' });
+  });
+
+  it('Tab is unavailable in Expanded, where the list is hidden (T15)', () => {
+    const spec = GLOBAL_BINDINGS.find(b => b.id === 'focus-toggle')!;
+    expect(spec.isAvailable!(makeCtx({ state: makeState({ layoutMode: 'expanded' }) }))).toBe(false);
+    expect(spec.isAvailable!(makeCtx())).toBe(true);
+  });
+
+  it('M toggles mouse capture and says what that means', () => {
+    const on = makeCtx();
+    findMatch('M')!.run(on, 'M', bareKey());
+    expect(on.dispatch).toHaveBeenCalledWith({ type: 'TOGGLE_MOUSE' });
+    expect(on.addToast).toHaveBeenCalledWith(expect.stringContaining('select text'), 'info');
+    const off = makeCtx({ state: makeState({ mouseEnabled: false }) });
+    findMatch('M')!.run(off, 'M', bareKey());
+    expect(off.addToast).toHaveBeenCalledWith('Mouse on', 'info');
+  });
+
+  it('names sort fields by their menu label in the R toast', () => {
+    const ctx = makeCtx({ state: makeState({ sortField: 'mem' }) });
+    findMatch('R')!.run(ctx, 'R', bareKey());
+    expect(ctx.addToast).toHaveBeenCalledWith('Sort: Memory %, lowest first', 'info');
+  });
+
+  it('pin toast uses the plain name, not the label decorations', () => {
+    const item = { id: 'c1', label: '● web :8080', name: 'web', sortKey: 0, data: {}, badge: 'healthy' };
+    const ctx = makeCtx({ selectedItem: item, currentItems: [item] });
+    findMatch('m')!.run(ctx, 'm', bareKey());
+    expect(ctx.addToast).toHaveBeenCalledWith(expect.stringMatching(/^Pinned web for comparison/), 'info');
   });
 
   it('marks containers-only bindings unavailable on other panels', () => {

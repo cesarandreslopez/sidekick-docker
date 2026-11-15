@@ -181,6 +181,20 @@ describe('sort overlay input', () => {
     const ctx = makeCtx({ overlay: 'sort', sortMenuIndex: 2 });
     OVERLAY_INPUT_HANDLERS.sort('', bareKey({ return: true }), ctx);
     expect(ctx.dispatched).toContainEqual({ type: 'SET_SORT_FIELD', field: 'cpu' });
+    // The menu's label, not the raw field id.
+    expect(ctx.addToast).toHaveBeenCalledWith('Sort: CPU %', 'info');
+  });
+
+  it('R names the new direction in words that fit the field (T17)', () => {
+    // Stats fields default to highest first, so reversing gives lowest first —
+    // the toast used to say "descending".
+    const ctx = makeCtx({ overlay: 'sort', sortField: 'cpu', sortReversed: false });
+    OVERLAY_INPUT_HANDLERS.sort('R', bareKey(), ctx);
+    expect(ctx.dispatched).toContainEqual({ type: 'TOGGLE_SORT_REVERSE' });
+    expect(ctx.addToast).toHaveBeenCalledWith('Sort: CPU %, lowest first', 'info');
+    const name = makeCtx({ overlay: 'sort', sortField: 'name', sortReversed: true });
+    OVERLAY_INPUT_HANDLERS.sort('R', bareKey(), name);
+    expect(name.addToast).toHaveBeenCalledWith('Sort: Name, A→Z', 'info');
   });
 
   it('q and Esc close it', () => {

@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { useTerminalSize } from './useTerminalSize';
 import { ACCENT } from '../../theme';
+import { execViewportRows } from '../execShell';
 
 interface ExecOverlayProps {
   containerName: string;
@@ -10,7 +11,9 @@ interface ExecOverlayProps {
 
 export function ExecOverlay({ containerName, outputLines }: ExecOverlayProps): React.ReactElement {
   const { rows } = useTerminalSize();
-  const viewportHeight = Math.max(1, rows - 3); // header + status + border
+  // The header is the only other row: the status bar is hidden during exec.
+  // Must match the PTY's size (ExecManager uses the same function).
+  const viewportHeight = execViewportRows(rows);
 
   // Auto-scroll to bottom
   const scrollOffset = Math.max(0, outputLines.length - viewportHeight);
@@ -24,7 +27,9 @@ export function ExecOverlay({ containerName, outputLines }: ExecOverlayProps): R
       </Box>
       <Box flexDirection="column" flexGrow={1}>
         {visibleLines.map((line, i) => (
-          <Text key={scrollOffset + i}>{line || ' '}</Text>
+          // Truncate, never wrap: a wrapped line takes two rows and pushes
+          // the newest output off the bottom.
+          <Text key={scrollOffset + i} wrap="truncate">{line || ' '}</Text>
         ))}
       </Box>
     </Box>

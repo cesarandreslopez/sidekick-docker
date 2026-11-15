@@ -1,3 +1,5 @@
+import { execViewportRows } from './execShell';
+
 /**
  * Manages a PTY-based `docker exec -it` session inside the TUI.
  * Uses node-pty when it can be loaded. It is not a dependency of the published
@@ -63,7 +65,7 @@ export class ExecManager {
     this.pty = nodePty.spawn('docker', ['exec', '-it', opts.containerId, opts.shell], {
       name: 'xterm-256color',
       cols: opts.cols,
-      rows: Math.max(1, opts.rows - 2), // Reserve space for header
+      rows: execViewportRows(opts.rows),
       env: { ...process.env, ...opts.env } as Record<string, string>,
     });
 
@@ -84,7 +86,7 @@ export class ExecManager {
 
   /** Update PTY dimensions on terminal resize. */
   resize(cols: number, rows: number): void {
-    this.pty?.resize(cols, Math.max(1, rows - 2));
+    this.pty?.resize(cols, execViewportRows(rows));
   }
 
   /** Kill the PTY process and clean up. */

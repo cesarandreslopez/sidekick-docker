@@ -41,7 +41,9 @@ export function TabBar({ panels, activeIndex, layoutMode, phrase, panelCounts, w
               inverse={isActive}
               wrap="truncate"
             >
-              {compact ? ` ${panel.shortcutKey}` : ` ${panel.shortcutKey} ${panel.title}`}
+              {/* Brackets replace the edge spaces (same width) so the active
+                  tab still shows when NO_COLOR strips inverse video. */}
+              {`${isActive ? '[' : ' '}${panel.shortcutKey}${compact ? '' : ` ${panel.title}`}`}
             </Text>
             <Text
               color={isActive ? (countColor || ACCENT) : (countColor || 'gray')}
@@ -50,7 +52,7 @@ export function TabBar({ panels, activeIndex, layoutMode, phrase, panelCounts, w
               dimColor={!isActive && !countColor}
               wrap="truncate"
             >
-              {countStr ? `${countStr} ` : ' '}
+              {`${countStr}${isActive ? ']' : ' '}`}
             </Text>
           </Box>
         );

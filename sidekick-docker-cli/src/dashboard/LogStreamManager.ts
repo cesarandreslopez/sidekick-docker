@@ -1,5 +1,5 @@
 import type { DockerClient } from 'sidekick-docker-shared';
-import type { LogEntry, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
+import type { LogEntry, SeverityCounts, SeverityLevel, LogTemplate, FollowStreamState } from 'sidekick-docker-shared';
 import { LogAnalytics, LogResumeCursor, LogSeverityTimeSeries, LogTemplateEngine, MAX_LOG_LINES } from 'sidekick-docker-shared';
 import { BaseStreamManager } from './BaseStreamManager';
 import type { StreamManagerOptions } from './BaseStreamManager';
@@ -50,6 +50,15 @@ export class LogStreamManager extends BaseStreamManager<string | null, LogEntry>
     if (this.logs.length > MAX_LOG_LINES) {
       this.logs.shift();
     }
+  }
+
+  /**
+   * Repaint on lifecycle changes too: an empty Logs tab says whether the
+   * stream is connecting, ended (target stopped) or lost. 'live' is followed
+   * by the item that caused it, which repaints anyway.
+   */
+  protected onStreamState(state: FollowStreamState): void {
+    if (state !== 'live') this.onChange();
   }
 
   protected onClear(): void {

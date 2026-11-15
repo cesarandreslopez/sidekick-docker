@@ -3,7 +3,7 @@ import { DockerClient, pruneConfirmFor, pruneResultText, removeNetworkConfirmMes
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { truncate, colorizeDetailKey, colorizeId, colorizeBool, colorizeNetworkContainer, colorizeEnvLine, sectionHeader } from '../../formatters';
+import { colorizeDetailKey, colorizeId, colorizeBool, colorizeNetworkContainer, colorizeEnvLine, sectionHeader } from '../../formatters';
 import { ACCENT } from '../../theme';
 
 export class NetworksPanel implements SidePanel {
@@ -78,7 +78,8 @@ export class NetworksPanel implements SidePanel {
       const countLabel = net.containers.length > 0 ? `${net.containers.length}` : '';
       return {
         id: net.id,
-        label: `${icon} ${truncate(net.name, 38)}`,
+        label: `${icon} ${net.name}`,
+        name: net.name,
         sortKey: net.isDefault ? 0 : 1,
         data: net,
         iconColor: net.isDefault ? ACCENT : 'gray',
@@ -96,6 +97,7 @@ export class NetworksPanel implements SidePanel {
         confirm: true,
         confirmMessage: (item) => removeNetworkConfirmMessage(panelData<NetworkInfo>(item).name),
         confirmSeverity: 'high',
+        actionType: 'remove',
         handler: (item) => {
           const net = panelData<NetworkInfo>(item);
           return this.client.removeNetwork(net.id).then(() => {
@@ -114,6 +116,8 @@ export class NetworksPanel implements SidePanel {
         confirm: true,
         confirmMessage: () => pruneConfirmFor('networks', this.lastMetrics?.networks ?? []),
         confirmSeverity: 'batch',
+        actionType: 'prune',
+        targetName: () => 'unused networks',
         handler: () => {
           return this.client.pruneNetworks().then((r) => {
             this.onAction();

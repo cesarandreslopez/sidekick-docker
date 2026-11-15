@@ -12,7 +12,7 @@ import type {
   ComposeConfigSource,
 } from 'sidekick-docker-shared';
 import { DockerClient, DockerStateStore, StatsCollector, MAX_LOG_LINES } from 'sidekick-docker-shared';
-import type { LogEntry, FilterMode, SeverityCounts, SeverityLevel, LogTemplate } from 'sidekick-docker-shared';
+import type { LogEntry, FilterMode, SeverityCounts, SeverityLevel, LogTemplate, FollowStreamState } from 'sidekick-docker-shared';
 import { debugLog } from '../utils/debug';
 
 export interface DockerDashboardMetrics {
@@ -42,6 +42,9 @@ export interface DockerDashboardMetrics {
   logTemplates: LogTemplate[];
   secondaryLogSeverityCounts: SeverityCounts | null;
   secondaryLogSeverityTimeSeries: { severity: SeverityLevel; total: number }[];
+  /** Lifecycle of the selected container's / compose target's log stream (null: none). */
+  logStreamState: FollowStreamState | null;
+  composeLogStreamState: FollowStreamState | null;
 }
 
 /** Lazy per-tab fetches whose failures are recorded (see detailErrors). */
@@ -266,6 +269,8 @@ export class DockerState {
       logTemplates: [],
       secondaryLogSeverityCounts: null,
       secondaryLogSeverityTimeSeries: [],
+      logStreamState: null,
+      composeLogStreamState: null,
     };
   }
 }

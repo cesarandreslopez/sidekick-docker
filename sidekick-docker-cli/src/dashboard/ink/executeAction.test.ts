@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { executeAction, findPanelAction } from './executeAction';
+import { executeAction, findPanelAction, unavailableActionText } from './executeAction';
 import type { PanelAction, PanelItem } from '../panels/types';
 
 const item: PanelItem = { id: 'c1', label: 'web', sortKey: 0, data: {} };
@@ -64,5 +64,39 @@ describe('findPanelAction', () => {
   it('never matches a Ctrl or Meta chord', () => {
     expect(findPanelAction(actions, 'r', { ctrl: true })).toBeUndefined();
     expect(findPanelAction(actions, 'r', { meta: true })).toBeUndefined();
+  });
+});
+
+describe('shared action wording', () => {
+  const web: PanelItem = { id: 'c1', label: '● web', name: 'web', sortKey: 0, data: {} };
+
+  it('uses actionText/actionFailedText when the action declares its type', async () => {
+    const h = harness();
+    const action: PanelAction = { key: 'S', label: 'Stop', actionType: 'stop', handler: () => Promise.reject(new Error('boom')) };
+    executeAction(action, web, h.dispatch, h.addToast, h.removeToast);
+    expect(h.addToast).toHaveBeenCalledWith('Stopping web…', 'info', undefined, { progress: true });
+    await vi.waitFor(() => expect(h.addToast).toHaveBeenCalledWith('Failed to stop web: boom', 'error'));
+  });
+
+  it('names the action\'s own target when it is not the item (Up on a service row)', async () => {
+    const h = harness();
+    const action: PanelAction = { key: 'u', label: 'Up', actionType: 'up', targetName: () => 'shop', handler: () => Promise.resolve() };
+    executeAction(action, web, h.dispatch, h.addToast, h.removeToast);
+    expect(h.addToast).toHaveBeenCalledWith('Bringing shop up…', 'info', undefined, { progress: true });
+    await vi.waitFor(() => expect(h.addToast).toHaveBeenCalledWith('shop is up', 'success'));
+  });
+});
+
+describe('unavailableActionText (T18)', () => {
+  const actions = [{ key: 'S', label: 'Stop', handler: () => {}, condition: () => false }];
+  const web: PanelItem = { id: 'c1', label: '○ web', name: 'web', sortKey: 0, data: {} };
+
+  it('explains a panel key that does not apply to this item', () => {
+    expect(unavailableActionText(actions, 'S', {}, web)).toBe("Stop isn't available for web");
+  });
+
+  it('stays quiet for keys the panel does not have, and for Ctrl chords', () => {
+    expect(unavailableActionText(actions, 'Z', {}, web)).toBeNull();
+    expect(unavailableActionText(actions, 'S', { ctrl: true }, web)).toBeNull();
   });
 });

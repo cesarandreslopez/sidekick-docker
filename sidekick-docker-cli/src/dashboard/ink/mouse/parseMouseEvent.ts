@@ -77,3 +77,12 @@ export function parseMouseEvent(data: Buffer | string): TerminalMouseEvent | nul
 
   return null;
 }
+
+/**
+ * Whether keyboard input is really one or more SGR mouse reports. Ink's
+ * input parser passes them to useInput as text, minus the ESC
+ * ("[<0;12;5M"), so they must be dropped before any text prompt sees them.
+ */
+export function isMouseSequenceInput(input: string): boolean {
+  return /^(?:\x1b?\[<\d+;\d+;\d+[Mm])+$/.test(input);
+}

@@ -8,21 +8,26 @@ interface DetailPaneProps {
   scrollOffset: number;
   viewportHeight: number;
   focused: boolean;
+  /** Logs follow is paused: the ▼ row says how to resume (the tab strip drops that hint when narrow). */
+  followPaused?: boolean;
 }
 
-export function DetailPane({ lines, scrollOffset, viewportHeight, focused }: DetailPaneProps): React.ReactElement {
+/** Appended to the ▼ row while a logs tab's follow is paused. */
+export const FOLLOW_PAUSED_ROW_HINT = ' · paused — G to resume';
+
+export function DetailPane({ lines, scrollOffset, viewportHeight, focused, followPaused }: DetailPaneProps): React.ReactElement {
   const win = windowLines(lines, scrollOffset, viewportHeight);
 
   return (
     <Box flexDirection="column" flexGrow={1} borderStyle={focused ? 'bold' : 'single'} borderColor={focused ? ACCENT : 'gray'}>
       {win.hasUp && (
-        <Text color="gray">{`▲ (${win.above} more)`}</Text>
+        <Text color="gray" wrap="truncate">{`▲ (${win.above} more)`}</Text>
       )}
       {win.visible.map((line, i) => (
         <Text key={i} wrap="truncate">{line}</Text>
       ))}
       {win.hasDown && (
-        <Text color="gray">{`▼ (${win.below} more)`}</Text>
+        <Text color={followPaused ? 'yellow' : 'gray'} wrap="truncate">{`▼ (${win.below} more)${followPaused ? FOLLOW_PAUSED_ROW_HINT : ''}`}</Text>
       )}
     </Box>
   );

@@ -1,35 +1,36 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import { CONFIRM_OVERLAY_ORIGIN } from './overlayHitTest';
+import { CONFIRM_OVERLAY_ORIGIN, CONFIRM_WARNING, confirmLayout } from './overlayHitTest';
+import type { ConfirmSeverity } from './overlayHitTest';
 
 interface ConfirmOverlayProps {
   message: string;
-  severity: 'low' | 'high' | 'batch';
+  severity: ConfirmSeverity;
   onConfirm: () => void;
   onCancel: () => void;
   maxWidth?: number;
 }
 
 const SEVERITY_CONFIG = {
-  low: { borderColor: 'yellow', icon: '\u26A0', title: 'Confirm', warning: '' },
-  high: { borderColor: 'red', icon: '\u2717', title: 'Destructive Action', warning: '  This cannot be undone.' },
-  batch: { borderColor: 'red', icon: '\u2717\u2717', title: 'Batch Destructive Action', warning: '  This cannot be undone.' },
+  low: { borderColor: 'yellow', icon: '⚠', title: 'Confirm' },
+  high: { borderColor: 'red', icon: '✗', title: 'Destructive Action' },
+  batch: { borderColor: 'red', icon: '✗✗', title: 'Batch Destructive Action' },
 } as const;
 
 export function ConfirmOverlay({ message, severity, maxWidth }: ConfirmOverlayProps): React.ReactElement {
   const config = SEVERITY_CONFIG[severity];
   const color = config.borderColor;
-  // Clamp so long messages truncate instead of pushing past the terminal edge
-  // (single-row message keeps the buttons row where confirmHit expects it).
-  const naturalWidth = Math.max(message.length + 1, config.warning.length, 36) + 6;
-  const width = maxWidth !== undefined ? Math.min(naturalWidth, maxWidth) : undefined;
+  const warning = CONFIRM_WARNING[severity];
+  // Clamped to the terminal; the message wraps (≤3 rows) instead of being
+  // cut, and confirmHit counts the same rows to find the buttons.
+  const layout = confirmLayout(message, severity, maxWidth);
 
   return (
     <Box
       position="absolute"
       marginTop={CONFIRM_OVERLAY_ORIGIN.top}
       marginLeft={CONFIRM_OVERLAY_ORIGIN.left}
-      width={width}
+      width={layout.width}
       flexDirection="column"
       borderStyle="double"
       borderColor={color}
@@ -40,12 +41,16 @@ export function ConfirmOverlay({ message, severity, maxWidth }: ConfirmOverlayPr
         <Text color={color} bold>{`${config.icon} `}</Text>
         <Text bold color={color}>{config.title}</Text>
       </Box>
-      <Text>{''}</Text>
-      <Text bold wrap="truncate-end">{` ${message}`}</Text>
-      {config.warning ? (
-        <Text color="gray" dimColor>{config.warning}</Text>
+      {/* ' ', not '': Ink gives an empty Text no height, which moved the
+          buttons two rows above where confirmHit looks for them. */}
+      <Text>{' '}</Text>
+      {layout.lines.map((line, i) => (
+        <Text key={i} bold wrap="truncate-end">{` ${line}`}</Text>
+      ))}
+      {warning ? (
+        <Text color="gray" dimColor>{warning}</Text>
       ) : null}
-      <Text>{''}</Text>
+      <Text>{' '}</Text>
       <Box>
         {/* Danger color sits on the dangerous button; No is the safe visual default. */}
         <Text backgroundColor={severity === 'low' ? 'yellow' : 'red'} color={severity === 'low' ? 'black' : 'white'} bold>{' y Yes '}</Text>

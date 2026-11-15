@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseMouseEvent } from './parseMouseEvent';
+import { parseMouseEvent, isMouseSequenceInput } from './parseMouseEvent';
 
 describe('parseMouseEvent', () => {
   it('parses left click at (5, 10)', () => {
@@ -180,5 +180,24 @@ describe('parseMouseEvent', () => {
     expect(event).not.toBeNull();
     expect(event!.x).toBe(199);
     expect(event!.y).toBe(49);
+  });
+});
+
+describe('isMouseSequenceInput (T2)', () => {
+  it('recognises the text Ink hands useInput for a mouse report (ESC stripped)', () => {
+    expect(isMouseSequenceInput('[<0;12;5M')).toBe(true);
+    expect(isMouseSequenceInput('[<0;12;5m')).toBe(true);
+    expect(isMouseSequenceInput('[<65;3;20M')).toBe(true);
+  });
+
+  it('also accepts the raw form and several reports in one chunk', () => {
+    expect(isMouseSequenceInput('\x1b[<0;12;5M')).toBe(true);
+    expect(isMouseSequenceInput('[<0;12;5M[<0;12;5m')).toBe(true);
+  });
+
+  it('leaves ordinary typing alone', () => {
+    for (const input of ['a', '[', '[<', 'web', '[<0;12M', '<0;1;2M', '']) {
+      expect(isMouseSequenceInput(input), JSON.stringify(input)).toBe(false);
+    }
   });
 });

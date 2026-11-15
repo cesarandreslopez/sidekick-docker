@@ -3,7 +3,7 @@ import { DockerClient, pruneConfirmFor, pruneResultText, removeVolumeConfirmMess
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { truncate, colorizeDetailKey, colorizeBool, sectionHeader } from '../../formatters';
+import { colorizeDetailKey, colorizeBool, sectionHeader } from '../../formatters';
 
 export class VolumesPanel implements SidePanel {
   readonly id = 'volumes';
@@ -47,7 +47,8 @@ export class VolumesPanel implements SidePanel {
       const icon = vol.isInUse ? '\u25CF' : '\u25CB'; // ● vs ○
       return {
         id: vol.name,
-        label: `${icon} ${truncate(vol.name, 38)}`,
+        label: `${icon} ${vol.name}`,
+        name: vol.name,
         sortKey: vol.isInUse ? 0 : 1,
         data: vol,
         iconColor: vol.isInUse ? 'green' : 'gray',
@@ -65,6 +66,7 @@ export class VolumesPanel implements SidePanel {
         confirm: true,
         confirmMessage: (item) => removeVolumeConfirmMessage(panelData<VolumeInfo>(item).name),
         confirmSeverity: 'high',
+        actionType: 'remove',
         handler: (item) => {
           const vol = panelData<VolumeInfo>(item);
           return this.client.removeVolume(vol.name).then(() => {
@@ -80,6 +82,8 @@ export class VolumesPanel implements SidePanel {
         confirm: true,
         confirmMessage: () => pruneConfirmFor('volumes', this.lastMetrics?.volumes ?? []),
         confirmSeverity: 'batch',
+        actionType: 'prune',
+        targetName: () => 'unused volumes',
         handler: () => {
           return this.client.pruneVolumes().then((r) => {
             this.onAction();

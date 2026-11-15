@@ -52,8 +52,12 @@ export const ansi = {
 
 /** Parse Docker status string into compact uptime like "2h 14m" or "5d  3h". */
 export function compactUptime(status: string): string {
-  // Docker status examples: "Up 2 hours", "Up 5 days", "Up 3 minutes", "Exited (0) 2 hours ago"
-  if (/^exited|^dead|^created|^removing/i.test(status)) return 'Exited';
+  // Docker status examples: "Up 2 hours", "Up 5 days", "Up 3 minutes", "Exited (0) 2 hours ago",
+  // "Created", "Dead", "Removal In Progress". Only exited containers are "Exited".
+  if (/^exited/i.test(status)) return 'Exited';
+  if (/^created/i.test(status)) return 'Created';
+  if (/^dead/i.test(status)) return 'Dead';
+  if (/^remov/i.test(status)) return 'Removing';
 
   if (/^up\s+less than a second/i.test(status)) return '0s';
   // Extract time components from "Up X (unit)" patterns. Docker words the
@@ -74,6 +78,22 @@ export function compactUptime(status: string): string {
     case 'year': return `${val}y`;
     default: return '';
   }
+}
+
+/**
+ * Shorten `text` to `width` columns with an ellipsis in the middle, keeping
+ * the end that tells similar names apart: a replica suffix ("-1"), an image
+ * tag (":1.2.3"), or else the last third. Cutting the end instead made
+ * "shop-web-1" and "shop-web-2" look identical.
+ */
+export function truncateMiddle(text: string, width: number): string {
+  if (width <= 0) return '';
+  if (text.length <= width) return text;
+  if (width === 1) return '\u2026';
+  const room = width - 1;
+  const suffix = /(?:[-_]\d+|:[\w][\w.-]*)$/.exec(text)?.[0] ?? '';
+  const tail = suffix && suffix.length <= Math.floor(room / 2) ? suffix.length : Math.floor(room / 3);
+  return text.slice(0, room - tail) + '\u2026' + (tail > 0 ? text.slice(-tail) : '');
 }
 
 /** One row of the Files tab: A/D/C marker (green/red/yellow) and the path. */
@@ -331,7 +351,8 @@ export function renderLogLines(
       lines.push(ansi.gray(`No logs matching "${filterString}"`));
     } else {
       const headerIdx = severityCounts ? 1 : 0;
-      lines.splice(headerIdx, 0, ansi.gray(`${matchCount} matches (f to filter, Tab to toggle mode)`));
+      // Tab only toggles the mode inside the filter prompt, so say f.
+      lines.splice(headerIdx, 0, ansi.gray(`${matchCount} matches (${filterMode}) — f to edit the filter`));
     }
   } else {
     for (const l of logs) {

@@ -6,6 +6,9 @@ import {
   detailTabWidth,
   detailTabWindow,
   DETAIL_TAB_SUFFIX_LENGTH,
+  detailTabSuffix,
+  DETAIL_TAB_CYCLE_HINT,
+  DETAIL_TAB_FOLLOW_PAUSED,
 } from './tabLayout';
 
 /** The real panel set, which is what actually overflows at 80 columns. */
@@ -147,5 +150,19 @@ describe('detailTabWindow', () => {
       .slice(win.start, win.start + win.count)
       .reduce((sum, l) => sum + detailTabWidth(l), 0);
     expect(tabs + 1).toBeLessThanOrEqual(paneWidth);
+  });
+});
+
+describe('detailTabSuffix (T15)', () => {
+  it('names the item in Expanded, else reports a paused follow, else the cycle hint', () => {
+    expect(detailTabSuffix({ followPaused: true, itemName: 'web' })).toEqual({ text: 'web', kind: 'name' });
+    expect(detailTabSuffix({ followPaused: true })).toEqual({ text: DETAIL_TAB_FOLLOW_PAUSED, kind: 'paused' });
+    expect(detailTabSuffix({ followPaused: false })).toEqual({ text: DETAIL_TAB_CYCLE_HINT, kind: 'hint' });
+  });
+
+  it('caps a long name, keeping its distinguishing end', () => {
+    const s = detailTabSuffix({ followPaused: false, itemName: 'an-extremely-long-compose-project-service-name-7' });
+    expect(s.text.length).toBe(40);
+    expect(s.text.endsWith('-7')).toBe(true);
   });
 });

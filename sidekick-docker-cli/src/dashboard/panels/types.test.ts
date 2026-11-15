@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { collectLogText, copyLogsAction } from './types';
+import { collectLogText, copyLogsAction, emptyLogMessage, itemName } from './types';
 import type { DockerDashboardMetrics } from '../DockerState';
 import type { LogEntry } from 'sidekick-docker-shared';
 
@@ -30,5 +30,41 @@ describe('copyLogsAction', () => {
     const metrics = { selectedContainerLogs: LOGS, logFilterString: '', logFilterMode: 'exact' } as unknown as DockerDashboardMetrics;
     const action = copyLogsAction(() => metrics, m => m.selectedContainerLogs, () => () => false);
     expect(() => action.handler({ id: 'x', label: '', sortKey: 0, data: null })).toThrow(/clipboard/);
+  });
+});
+
+describe('copyLogsAction refuses to copy nothing (T12)', () => {
+  it('throws before touching the clipboard when the buffer is empty', () => {
+    const copy = vi.fn(() => true);
+    const metrics = { selectedContainerLogs: [], logFilterString: '', logFilterMode: 'exact' } as unknown as DockerDashboardMetrics;
+    const action = copyLogsAction(() => metrics, m => m.selectedContainerLogs, () => copy);
+    expect(() => action.handler({ id: 'x', label: '', sortKey: 0, data: null })).toThrow(/no log lines/);
+    expect(copy).not.toHaveBeenCalled();
+  });
+
+  it('says so when the filter matches nothing', () => {
+    const copy = vi.fn(() => true);
+    const metrics = { selectedContainerLogs: LOGS, logFilterString: 'nomatch', logFilterMode: 'exact' } as unknown as DockerDashboardMetrics;
+    const action = copyLogsAction(() => metrics, m => m.selectedContainerLogs, () => copy);
+    expect(() => action.handler({ id: 'x', label: '', sortKey: 0, data: null })).toThrow('no log lines match "nomatch"');
+    expect(copy).not.toHaveBeenCalled();
+  });
+});
+
+describe('emptyLogMessage (T20)', () => {
+  it('describes the stream instead of asking to select what is selected', () => {
+    expect(emptyLogMessage(null, 'container')).toBe('Waiting for log output…');
+    expect(emptyLogMessage('loading', 'container')).toBe('Waiting for log output…');
+    expect(emptyLogMessage('reconnecting', 'container')).toContain('reconnecting');
+    expect(emptyLogMessage('empty', 'container')).toBe('No log output — the container is stopped.');
+    expect(emptyLogMessage('ended', 'service')).toBe('No log output — the service is stopped.');
+    expect(emptyLogMessage('error', 'container')).toContain('lost');
+  });
+});
+
+describe('itemName (T26)', () => {
+  it('prefers the plain name over the decorated label', () => {
+    expect(itemName({ id: 'c', label: '● web :8080', name: 'web', sortKey: 0, data: null })).toBe('web');
+    expect(itemName({ id: 'v', label: '○ pgdata', sortKey: 0, data: null })).toBe('pgdata');
   });
 });

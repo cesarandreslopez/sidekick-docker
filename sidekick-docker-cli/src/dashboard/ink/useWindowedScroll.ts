@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { maxScrollOffset } from './windowLines';
+import { clampWindowOffset } from './windowLines';
 
 interface UseWindowedScrollOptions {
   totalItems: number;
@@ -18,22 +18,15 @@ interface UseWindowedScrollResult {
 
 export function useWindowedScroll({ totalItems, viewportHeight }: UseWindowedScrollOptions): UseWindowedScrollResult {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [scrollOffset, setScrollOffset] = useState(0);
+  const [storedOffset, setScrollOffset] = useState(0);
+  // Clamped at read time: the stored offset was only recomputed on a
+  // selection change, so a resize or a shrinking list left it past the end.
+  const scrollOffset = clampWindowOffset(storedOffset, selectedIndex, totalItems, viewportHeight);
 
   const adjustScroll = useCallback((newIndex: number) => {
     // Conservative visible budget: windowLines may reserve up to two rows
     // for the ▲/▼ indicators, so keep the selection inside the worst case.
-    const maxVisible = Math.max(1, viewportHeight - 2);
-    let newOffset = scrollOffset;
-
-    if (newIndex < scrollOffset) {
-      newOffset = newIndex;
-    } else if (newIndex >= scrollOffset + maxVisible) {
-      newOffset = newIndex - maxVisible + 1;
-    }
-
-    newOffset = Math.max(0, Math.min(newOffset, maxScrollOffset(totalItems, viewportHeight)));
-    setScrollOffset(newOffset);
+    setScrollOffset(clampWindowOffset(scrollOffset, newIndex, totalItems, viewportHeight));
   }, [scrollOffset, viewportHeight, totalItems]);
 
   const setSelected = useCallback((index: number) => {

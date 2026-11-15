@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHelpSections, layoutHelp } from './helpLayout';
+import { buildHelpSections, layoutHelp, HELP_CHROME_ROWS } from './helpLayout';
 import type { HelpBinding } from './keyRegistry';
 
 const binding = (label: string, category: HelpBinding['category'], keys = ['x'], available = true): HelpBinding => ({ keys, label, category, available });
@@ -46,5 +46,14 @@ describe('layoutHelp', () => {
     const end = layoutHelp(sections, 24, 80, 999);
     expect(end.scroll).toBe(narrow.maxScroll);
     expect(all(end.columns).at(-1)).toEqual({ kind: 'entry', keys: 'd', label: 'Remove', dimmed: false, danger: true });
+  });
+});
+
+describe('help chrome (T21)', () => {
+  it('budgets the status bar drawn under the overlay, so it is never a row too tall', () => {
+    // padding 2 + title 1 + blank 1 + footer 1 + status bar 1
+    expect(HELP_CHROME_ROWS).toBe(6);
+    const l = layoutHelp(buildHelpSections(bindings, actions, 'Containers'), 24, 80, 0);
+    expect(l.bodyRows).toBe(24 - 6);
   });
 });

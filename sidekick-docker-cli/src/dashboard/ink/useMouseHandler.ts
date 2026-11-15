@@ -3,10 +3,10 @@ import type { SidePanel, PanelItem, PanelAction, DetailTab } from '../panels/typ
 import type { TerminalMouseEvent } from './mouse';
 import type { DashboardUIState, Action, AddToast } from './dashboardTypes';
 import { executeAction } from './executeAction';
-import { contextMenuHit, confirmHit, sortHit } from './overlayHitTest';
+import { contextMenuHit, confirmHit, confirmLayout, sortHit } from './overlayHitTest';
 import { windowLines } from './windowLines';
-import { panelTabWidth, detailTabWidth, detailTabWindow, shouldCompactTabs, DETAIL_TAB_SUFFIX_LENGTH } from './tabLayout';
-import { SORT_FIELDS } from './dashboardTypes';
+import { panelTabWidth, detailTabWidth, detailTabWindow, shouldCompactTabs } from './tabLayout';
+import { SORT_FIELDS, sortFieldLabel } from './dashboardTypes';
 
 
 interface MouseContext {
@@ -34,27 +34,41 @@ interface MouseContext {
   rows: number;
   addToast: AddToast;
   removeToast: (id: number) => void;
+  /** Length of the detail strip's trailing text (detailTabSuffix), which sizes the tab window. */
+  detailSuffixLength: number;
+  /** The context menu's title (contextMenuTitle), which can set its width. */
+  menuTitle: string;
+  /** How far the help overlay scrolls (the wheel scrolls it). */
+  helpMaxScroll: number;
 }
 
 export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) => void {
-  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast } = ctx;
+  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast, detailSuffixLength, menuTitle, helpMaxScroll } = ctx;
   // Read the individual fields outside the callback: closing over `state` itself would make
   // the whole object the dependency, which the compiler cannot reconcile with the field-level
   // dependency array below (react-hooks/preserve-manual-memoization).
-  const { overlay, activePanelIndex, confirmAction, confirmSeverity, layoutMode } = state;
+  const { overlay, activePanelIndex, confirmAction, confirmSeverity, confirmMessage, layoutMode } = state;
 
   return useCallback((event: TerminalMouseEvent) => {
     // Text-entry overlays: ignore all mouse events (raw escape bytes leak into the input).
     // Exec: the shell owns the screen; a click must not close the overlay and
     // strand the session (MouseProvider also stops tracking while exec runs).
     if (overlay === 'filter' || overlay === 'log-filter' || overlay === 'exec') return;
+    // The help footer promises the wheel scrolls it.
+    if (overlay === 'help' && event.type === 'scroll') {
+      dispatch({ type: 'HELP_SCROLL', delta: event.scrollDirection === 'down' ? 3 : -3, max: helpMaxScroll });
+      return;
+    }
     // Overlays are clickable: buttons/rows activate, clicks outside dismiss.
     if (overlay) {
       if (event.type !== 'click' || event.button !== 'left') return;
       const { x, y } = event;
       switch (overlay) {
         case 'confirm': {
-          if (confirmHit(x, y, confirmSeverity) === 'yes') {
+          // Same wrap as ConfirmOverlay (maxWidth columns - 6): the buttons
+          // move down one row per extra message line.
+          const messageLines = confirmLayout(confirmMessage, confirmSeverity, columns - 6).lines.length;
+          if (confirmHit(x, y, confirmSeverity, messageLines) === 'yes') {
             confirmAction?.();
           }
           // No / outside = cancel (safe default)
@@ -62,7 +76,7 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
           return;
         }
         case 'context-menu': {
-          const idx = contextMenuHit(x, y, applicableActions);
+          const idx = contextMenuHit(x, y, applicableActions, menuTitle);
           // Close the menu BEFORE executing: executeAction may open the
           // confirm overlay, which a later SET_OVERLAY:null would clobber.
           dispatch({ type: 'SET_OVERLAY', overlay: null });
@@ -75,7 +89,7 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
           const idx = sortHit(x, y);
           if (idx !== null) {
             dispatch({ type: 'SET_SORT_FIELD', field: SORT_FIELDS[idx] });
-            addToast(`Sort: ${SORT_FIELDS[idx]}`, 'info');
+            addToast(`Sort: ${sortFieldLabel(SORT_FIELDS[idx])}`, 'info');
           } else {
             dispatch({ type: 'SET_OVERLAY', overlay: null });
           }
@@ -119,7 +133,7 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         const rendered = windowLines(currentItems, sideScroll.scrollOffset, sideViewportHeight).visible.length;
         if (itemRow >= 0 && itemRow < rendered) {
           dispatch({ type: 'SET_FOCUS', target: 'side' });
-          dispatch({ type: 'SELECT_ITEM', index: itemIndex });
+          dispatch({ type: 'SELECT_ITEM', index: itemIndex, id: currentItems[itemIndex]?.id ?? null });
           sideScroll.setSelected(itemIndex);
           dispatch({ type: 'SET_OVERLAY', overlay: 'context-menu' });
         }
@@ -161,7 +175,7 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
       const itemIndex = sideScroll.scrollOffset + itemRow;
       const rendered = windowLines(currentItems, sideScroll.scrollOffset, sideViewportHeight).visible.length;
       if (itemRow >= 0 && itemRow < rendered) {
-        dispatch({ type: 'SELECT_ITEM', index: itemIndex });
+        dispatch({ type: 'SELECT_ITEM', index: itemIndex, id: currentItems[itemIndex]?.id ?? null });
         sideScroll.setSelected(itemIndex);
       }
     } else {
@@ -172,7 +186,7 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
       if (y === 1 && detailTabs.length > 1) {
         // Only the windowed tabs are drawn, so hit-test that same slice.
         const paneWidth = columns - sideWidth;
-        const win = detailTabWindow(detailTabs.map(t => t.label), tabIdx, paneWidth, DETAIL_TAB_SUFFIX_LENGTH);
+        const win = detailTabWindow(detailTabs.map(t => t.label), tabIdx, paneWidth, detailSuffixLength);
         let col = sideWidth + (win.hasLeftMarker ? 1 : 0);
         for (let i = win.start; i < win.start + win.count && i < detailTabs.length; i++) {
           const tabWidth = detailTabWidth(detailTabs[i].label);
@@ -184,5 +198,5 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
       }
     }
-  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, columns, layoutMode, addToast, removeToast, dispatch]);
+  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, confirmMessage, detailSuffixLength, menuTitle, helpMaxScroll, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, columns, layoutMode, addToast, removeToast, dispatch]);
 }

@@ -33,3 +33,32 @@ describe('buildStatusSegments', () => {
     expect(fresh).not.toContain('Ctrl+R');
   });
 });
+
+describe('buildStatusSegments under pressure (T23, A1)', () => {
+  const plain = (segs: { text: string }[]) => segs.map(s => s.text).join('');
+  const width = (segs: { text: string }[]) => [...plain(segs)].length;
+  const disconnected = {
+    ...base,
+    daemonConnected: false,
+    resourceErrors: { containers: 'x', images: 'x', volumes: 'x', networks: 'x' },
+  };
+
+  it('shortens the unavailable warning to a count instead of pushing ?:Help off', () => {
+    for (const w of [60, 70, 77]) {
+      const segs = buildStatusSegments(disconnected, w);
+      expect(width(segs), `width ${w}`).toBeLessThanOrEqual(w);
+      expect(plain(segs)).toContain('?:Help');
+      expect(plain(segs)).toContain('⚠ 4 unavailable');
+      expect(plain(segs)).toContain('disconnected');
+    }
+  });
+
+  it('lists the resources when there is room', () => {
+    expect(plain(buildStatusSegments(disconnected, 200))).toContain('containers, images, volumes, networks unavailable');
+  });
+
+  it('says when mouse capture is off, and drops that before the action hints', () => {
+    expect(plain(buildStatusSegments({ ...base, mouseEnabled: false }, 200))).toContain('mouse off');
+    expect(plain(buildStatusSegments(base, 200))).not.toContain('mouse off');
+  });
+});

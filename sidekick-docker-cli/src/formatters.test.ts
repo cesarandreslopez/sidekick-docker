@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { LogEntry } from 'sidekick-docker-shared';
-import { formatBytes, formatCpu, formatPorts, stateIcon, truncate, stripCursorEscapes, colorizeEnvLine, colorizeBool, colorizeId, colorizePercent, colorizeLogEntry, renderLogLines, sectionHeader, ansi, setColorEnabled, isColorEnabled, formatFileChange, formatLogTemplate, compactUptime } from './formatters';
+import { formatBytes, formatCpu, formatPorts, stateIcon, truncate, stripCursorEscapes, colorizeEnvLine, colorizeBool, colorizeId, colorizePercent, colorizeLogEntry, renderLogLines, sectionHeader, ansi, setColorEnabled, isColorEnabled, formatFileChange, formatLogTemplate, compactUptime, truncateMiddle } from './formatters';
 
 // Vitest runs non-TTY, so detectColor() disables color at import; the
 // color-asserting tests below need it forced on.
@@ -225,3 +225,45 @@ describe('compactUptime wording', () => {
   });
 });
 
+
+describe('compactUptime for states that are not "exited" (T19)', () => {
+  it('names created, dead and removing containers as such', () => {
+    expect(compactUptime('Exited (0) 2 hours ago')).toBe('Exited');
+    expect(compactUptime('Created')).toBe('Created');
+    expect(compactUptime('Dead')).toBe('Dead');
+    expect(compactUptime('Removal In Progress')).toBe('Removing');
+  });
+});
+
+describe('truncateMiddle (T10)', () => {
+  it('returns text that fits unchanged', () => {
+    expect(truncateMiddle('web', 10)).toBe('web');
+  });
+
+  it('keeps a replica suffix so replicas stay distinguishable', () => {
+    expect(truncateMiddle('myproject-web-1', 10)).toBe('myproje…-1');
+    expect(truncateMiddle('myproject-web-2', 10)).toBe('myproje…-2');
+  });
+
+  it('keeps an image tag', () => {
+    expect(truncateMiddle('ghcr.io/org/some-image:1.2.3', 20)).toBe('ghcr.io/org/s…:1.2.3');
+  });
+
+  it('otherwise keeps the last third, and always fits the width', () => {
+    const out = truncateMiddle('averyverylongcontainername', 10);
+    expect(out).toBe('averyv…ame');
+    for (let w = 0; w <= 12; w++) expect(truncateMiddle('averyverylongcontainername', w).length).toBe(w);
+  });
+});
+
+describe('log filter header', () => {
+  afterEach(() => { setColorEnabled(true); });
+
+  it('points at f (Tab only toggles inside the prompt)', () => {
+    setColorEnabled(false);
+    const logs = [{ timestamp: null, stream: 'stdout' as const, message: 'error one' }, { timestamp: null, stream: 'stdout' as const, message: 'ok' }];
+    const [header] = renderLogLines(logs, 'error', 'fuzzy');
+    expect(header).toBe('1 matches (fuzzy) — f to edit the filter');
+    expect(header).not.toContain('Tab');
+  });
+});

@@ -1,3 +1,12 @@
+/**
+ * Rows the embedded exec session gets: the terminal less the overlay's
+ * one-row header (the status bar is hidden during exec). The PTY and the
+ * overlay both size from this, so output neither wraps nor leaves dead rows.
+ */
+export function execViewportRows(terminalRows: number): number {
+  return Math.max(1, terminalRows - 1);
+}
+
 /** Shell used for Exec when nothing else is configured. */
 export const DEFAULT_EXEC_SHELL = '/bin/sh';
 

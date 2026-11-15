@@ -1,5 +1,6 @@
-import { errorMessage } from 'sidekick-docker-shared';
+import { errorMessage, actionText, actionFailedText } from 'sidekick-docker-shared';
 import type { PanelAction, PanelItem } from '../panels/types';
+import { itemName } from '../panels/types';
 import type { Action, AddToast } from './dashboardTypes';
 
 /**
@@ -13,8 +14,42 @@ export function findPanelAction(actions: readonly PanelAction[], input: string, 
   return actions.find(a => a.key === input);
 }
 
+/**
+ * Toast for a panel key that exists but whose condition rules it out for
+ * this item (Stop on a stopped container), or null when the panel has no
+ * such key. Such keys used to do nothing at all.
+ */
+export function unavailableActionText(
+  allActions: readonly PanelAction[],
+  input: string,
+  key: { ctrl?: boolean; meta?: boolean },
+  item: PanelItem,
+): string | null {
+  const action = findPanelAction(allActions, input, key);
+  return action ? `${action.label} isn't available for ${itemName(item)}` : null;
+}
+
 export function isPromise(value: unknown): value is Promise<unknown> {
   return value != null && typeof (value as Promise<unknown>).then === 'function';
+}
+
+/**
+ * Progress, success and failure toast text for an action on an item: the
+ * shared wording ("Stopping web…", "Failed to stop web: …") when the action
+ * declares its type and the target has a name, else the bare label.
+ */
+export function actionToastText(action: PanelAction, item: PanelItem): {
+  progress: string;
+  success: string;
+  failed: (message: string) => string;
+} {
+  const name = action.targetName?.(item) ?? item.name;
+  const type = action.actionType;
+  if (type && name) {
+    const text = actionText(type, name);
+    return { progress: text.progress, success: text.success, failed: message => actionFailedText(type, name, message) };
+  }
+  return { progress: `${action.label}…`, success: action.label, failed: message => `${action.label} failed: ${message}` };
 }
 
 /**
@@ -33,29 +68,30 @@ export function executeAction(
   addToast: AddToast,
   removeToast: (id: number) => void,
 ): void {
+  const text = actionToastText(action, item);
   const run = () => {
     let result: ReturnType<PanelAction['handler']>;
     try {
       result = action.handler(item);
     } catch (err: unknown) {
-      addToast(`${action.label} failed: ${errorMessage(err)}`, 'error');
+      addToast(text.failed(errorMessage(err)), 'error');
       return;
     }
     if (isPromise(result)) {
-      const progressId = addToast(`${action.label}…`, 'info', undefined, { progress: true });
+      const progressId = addToast(text.progress, 'info', undefined, { progress: true });
       result
         .then((msg) => {
           removeToast(progressId);
-          addToast(typeof msg === 'string' ? msg : action.label, 'success');
+          addToast(typeof msg === 'string' ? msg : text.success, 'success');
         })
         .catch((err: unknown) => {
           removeToast(progressId);
-          addToast(`${action.label} failed: ${errorMessage(err)}`, 'error');
+          addToast(text.failed(errorMessage(err)), 'error');
         });
     } else if (typeof result === 'string') {
       addToast(result, 'success');
     } else {
-      addToast(action.label, 'success');
+      addToast(text.success, 'success');
     }
   };
 

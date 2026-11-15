@@ -1,9 +1,10 @@
 import type { ComposeService, ComposeProject, ComposeExecResult, ComposeCommandOptions } from 'sidekick-docker-shared';
-import { ComposeClient, throwIfComposeFailed, resolveComposeOptions, composeDownConfirmMessage } from 'sidekick-docker-shared';
+import type { ActionType } from 'sidekick-docker-shared';
+import { ComposeClient, throwIfComposeFailed, resolveComposeOptions, composeDownConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { panelData, copyLogsAction } from './types';
+import { panelData, copyLogsAction, emptyLogMessage } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { stateIcon, stateColor, truncate, colorizeDetailKey, colorizeState, colorizeId, renderLogLines } from '../../formatters';
+import { stateIcon, stateColor, colorizeDetailKey, colorizeState, colorizeId, renderLogLines } from '../../formatters';
 
 type ServiceItemData =
   | { type: 'project'; project: ComposeProject }
@@ -11,6 +12,11 @@ type ServiceItemData =
 
 function getProjectName(d: ServiceItemData): string {
   return d.type === 'project' ? d.project.name : d.service.projectName;
+}
+
+/** What Restart/Stop act on: the service on a service row, else the whole project. */
+function getTargetName(d: ServiceItemData): string {
+  return d.type === 'service' ? d.service.name : d.project.name;
 }
 
 export class ServicesPanel implements SidePanel {
@@ -38,7 +44,6 @@ export class ServicesPanel implements SidePanel {
     {
       label: 'Info',
       render: (item) => {
-        if (!item.data) return 'No compose projects detected.\n\nCompose projects are detected from container labels\n(com.docker.compose.project) or from a compose file in the CWD.';
         const d = panelData<ServiceItemData>(item);
         if (d.type === 'project') {
           const p = d.project;
@@ -67,7 +72,7 @@ export class ServicesPanel implements SidePanel {
       label: 'Logs',
       render: (_item, metrics) => {
         const logs = metrics.selectedComposeLogs;
-        if (logs.length === 0) return ['No compose logs. Logs will appear when a service produces output.'];
+        if (logs.length === 0) return [emptyLogMessage(metrics.composeLogStreamState, 'service')];
         return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode);
       },
       autoScrollBottom: true,
@@ -87,6 +92,7 @@ export class ServicesPanel implements SidePanel {
       items.push({
         id: `project:${project.name}`,
         label: `${statusIcon} ${project.name}`,
+        name: project.name,
         sortKey: sortKey++,
         data: { type: 'project' as const, project },
         iconColor: projectIconColor,
@@ -99,7 +105,8 @@ export class ServicesPanel implements SidePanel {
         const icon = stateIcon(service.state);
         items.push({
           id: `service:${project.name}:${service.name}`,
-          label: `  ${icon} ${truncate(service.name, 36)}`,
+          label: `  ${icon} ${service.name}`,
+          name: service.name,
           sortKey: sortKey++,
           data: { type: 'service' as const, service },
           iconColor: stateColor(service.state),
@@ -108,15 +115,8 @@ export class ServicesPanel implements SidePanel {
       }
     }
 
-    if (items.length === 0) {
-      items.push({
-        id: 'no-services',
-        label: '  No compose projects found',
-        sortKey: 0,
-        data: null,
-      });
-    }
-
+    // No placeholder row: it hid the side list's empty / connecting /
+    // disconnected states and counted as "Services (1)".
     return items;
   }
 
@@ -144,9 +144,10 @@ export class ServicesPanel implements SidePanel {
    * toast. executeAction turns a rejection into an error toast, so throwing is
    * all that is needed here.
    */
-  private async runCompose(action: string, exec: Promise<ComposeExecResult>): Promise<void> {
+  private async runCompose(action: string, exec: Promise<ComposeExecResult>, type: ActionType, name: string): Promise<string> {
     throwIfComposeFailed(await exec, action);
     this.onAction();
+    return actionText(type, name).success;
   }
 
   getActions(): PanelAction[] {
@@ -156,9 +157,12 @@ export class ServicesPanel implements SidePanel {
         label: 'Up',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          return this.runCompose('Up', this.composeClient.up(getProjectName(d), this.cwdFor(d)));
+          return this.runCompose('Up', this.composeClient.up(getProjectName(d), this.cwdFor(d)), 'up', getProjectName(d));
         },
         condition: (item) => item.data !== null,
+        // Up and Down act on the whole project, even from a service row.
+        actionType: 'up',
+        targetName: (item) => getProjectName(panelData<ServiceItemData>(item)),
       },
       {
         key: 'D',
@@ -168,9 +172,11 @@ export class ServicesPanel implements SidePanel {
         confirmSeverity: 'high',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
-          return this.runCompose('Down', this.composeClient.down(getProjectName(d), this.cwdFor(d)));
+          return this.runCompose('Down', this.composeClient.down(getProjectName(d), this.cwdFor(d)), 'down', getProjectName(d));
         },
         condition: (item) => item.data !== null,
+        actionType: 'down',
+        targetName: (item) => getProjectName(panelData<ServiceItemData>(item)),
       },
       {
         key: 'r',
@@ -179,9 +185,11 @@ export class ServicesPanel implements SidePanel {
           const d = panelData<ServiceItemData>(item);
           return this.runCompose('Restart', d.type === 'service'
             ? this.composeClient.restart(d.service.projectName, d.service.name, this.cwdFor(d))
-            : this.composeClient.restart(d.project.name, undefined, this.cwdFor(d)));
+            : this.composeClient.restart(d.project.name, undefined, this.cwdFor(d)), 'restart', getTargetName(d));
         },
         condition: (item) => item.data !== null,
+        actionType: 'restart',
+        targetName: (item) => getTargetName(panelData<ServiceItemData>(item)),
       },
       {
         key: 'S',
@@ -190,9 +198,11 @@ export class ServicesPanel implements SidePanel {
           const d = panelData<ServiceItemData>(item);
           return this.runCompose('Stop', d.type === 'service'
             ? this.composeClient.stop(d.service.projectName, d.service.name, this.cwdFor(d))
-            : this.composeClient.stop(d.project.name, undefined, this.cwdFor(d)));
+            : this.composeClient.stop(d.project.name, undefined, this.cwdFor(d)), 'stop', getTargetName(d));
         },
         condition: (item) => item.data !== null,
+        actionType: 'stop',
+        targetName: (item) => getTargetName(panelData<ServiceItemData>(item)),
       },
       copyLogsAction(() => this.lastMetrics, m => m.selectedComposeLogs, () => this.onCopyLogs),
     ];

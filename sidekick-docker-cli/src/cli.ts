@@ -24,6 +24,7 @@ program
   .option('--no-color', 'Disable colored output')
   .option('--verbose', 'Show full error details')
   .option('--shell <path>', 'Shell for Exec in the dashboard (default: $SIDEKICK_DOCKER_SHELL or /bin/sh)')
+  .option('--no-mouse', 'Start the dashboard with mouse capture off, so the terminal can select text (M toggles it)')
   .action(async (_opts, cmd) => {
     await dashboardAction(_opts, cmd);
   });

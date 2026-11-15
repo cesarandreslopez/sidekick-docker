@@ -37,3 +37,42 @@ export function maxScrollOffset(totalLines: number, viewportHeight: number): num
   if (totalLines <= viewportHeight) return 0;
   return Math.max(0, totalLines - Math.max(1, viewportHeight - 1));
 }
+
+/**
+ * A list window's first row, re-clamped to the current list and viewport:
+ * no further than the last full page, and keeping the selection visible
+ * (inside the conservative budget that leaves room for both ▲ and ▼).
+ * Applied at read time, so a terminal resize or a shrinking list cannot
+ * leave the window scrolled past the end with blank rows.
+ */
+export function clampWindowOffset(offset: number, selectedIndex: number, totalItems: number, viewportHeight: number): number {
+  const maxVisible = Math.max(1, viewportHeight - 2);
+  let next = offset;
+  if (selectedIndex >= 0 && selectedIndex < totalItems) {
+    if (selectedIndex < next) next = selectedIndex;
+    else if (selectedIndex >= next + maxVisible) next = selectedIndex - maxVisible + 1;
+  }
+  return Math.max(0, Math.min(next, maxScrollOffset(totalItems, viewportHeight)));
+}
+
+/** One row of a compare column: content, or a ▲/▼ indicator. */
+export interface ColumnRow {
+  text: string;
+  indicator: boolean;
+}
+
+/**
+ * Exactly `viewportHeight` rows for one compare column, windowed on its own:
+ * ▲/▼ rows only where that column has more, blank rows below short content.
+ * The columns used to share one budget, so a ▼ row in the scrolled-back
+ * column hid the newest line of the column that was following.
+ */
+export function compareColumnRows(lines: string[], scrollOffset: number, viewportHeight: number, downSuffix = ''): ColumnRow[] {
+  const win = windowLines(lines, scrollOffset, viewportHeight);
+  const rows: ColumnRow[] = [];
+  if (win.hasUp) rows.push({ text: `▲ (${win.above} more)`, indicator: true });
+  for (const line of win.visible) rows.push({ text: line, indicator: false });
+  if (win.hasDown) rows.push({ text: `▼ (${win.below} more)${downSuffix}`, indicator: true });
+  while (rows.length < viewportHeight) rows.push({ text: '', indicator: false });
+  return rows.slice(0, Math.max(0, viewportHeight));
+}

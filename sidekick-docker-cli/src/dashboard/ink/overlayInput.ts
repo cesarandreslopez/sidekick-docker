@@ -1,8 +1,9 @@
 import type { Key } from 'ink';
 import type { PanelAction, PanelItem } from '../panels/types';
 import type { Action, DashboardUIState, OverlayKind, ToastSeverity } from './dashboardTypes';
-import { SORT_FIELDS } from './dashboardTypes';
+import { SORT_FIELDS, sortFieldLabel } from './dashboardTypes';
 import { executeAction } from './executeAction';
+import { sortDirectionLabel } from 'sidekick-docker-shared';
 
 
 export interface OverlayInputContext {
@@ -151,13 +152,15 @@ const sort: OverlayInputHandler = (input, key, { state, dispatch, addToast }) =>
   }
   if (input === 'R') {
     dispatch({ type: 'TOGGLE_SORT_REVERSE' });
-    addToast(`Sort: ${state.sortReversed ? 'ascending' : 'descending'}`, 'info');
+    // state is pre-toggle, so the new direction is the opposite one ("ascending"
+    // was wrong for stats fields, whose default is highest first).
+    addToast(`Sort: ${sortFieldLabel(state.sortField)}, ${sortDirectionLabel(state.sortField, !state.sortReversed)}`, 'info');
     return;
   }
   if (key.return) {
     const field = SORT_FIELDS[state.sortMenuIndex];
     dispatch({ type: 'SET_SORT_FIELD', field });
-    addToast(`Sort: ${field}`, 'info');
+    addToast(`Sort: ${sortFieldLabel(field)}`, 'info');
   }
 };
 

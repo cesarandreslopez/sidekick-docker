@@ -1,14 +1,26 @@
 import type { DockerDashboardMetrics } from '../DockerState';
-import type { FilterMode, LogEntry } from 'sidekick-docker-shared';
+import type { ActionType, FilterMode, FollowStreamState, LogEntry } from 'sidekick-docker-shared';
 import { filterLine } from 'sidekick-docker-shared';
 import { ansi } from '../../formatters';
 
 /** An item displayed in the side panel list. */
 export interface PanelItem {
   id: string;
+  /** Plain text (no ANSI): leading icon, then the name and any short hint. */
   label: string;
+  /**
+   * The item's plain name, for toasts, menu titles and compare headers.
+   * Deriving it from `label` kept the port hint and badge ("web :8080 healthy").
+   */
+  name?: string;
   sortKey: number;
   data: unknown;
+  /**
+   * Short status word after the label (e.g. a health state), drawn as its own
+   * run. Embedding its colour codes in `label` broke the list's width math.
+   */
+  badge?: string;
+  badgeColor?: string;
   /** Right-aligned secondary text (e.g. uptime, size). */
   rightLabel?: string;
   /** Color for the rightLabel text. */
@@ -32,11 +44,39 @@ export interface PanelAction {
   // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
   handler: (item: PanelItem) => void | string | Promise<void | string>;
   condition?: (item: PanelItem) => boolean;
+  /**
+   * What the action does, for the shared progress and failure wording
+   * ("Stopping web…", "Failed to stop web: …"). Without it the toasts fall
+   * back to the label.
+   */
+  actionType?: ActionType;
+  /** The name those toasts use, when it is not the item's own (Up on a service acts on its project). */
+  targetName?: (item: PanelItem) => string;
   confirm?: boolean;
   /** Static message, or a function to interpolate the target's name/count. */
   confirmMessage?: string | ((item: PanelItem) => string);
   /** Risk level for confirmation dialog: 'low' (yellow), 'high' (red, default), 'batch' (red, shows count). */
   confirmSeverity?: 'low' | 'high' | 'batch';
+}
+
+/** The item's plain name: `name`, else the label without its leading icon. */
+export function itemName(item: PanelItem): string {
+  return item.name ?? item.label.replace(/^[^\w]*/, '').trim();
+}
+
+/**
+ * What an empty Logs tab says, from the stream's state. It used to read
+ * "Select a container" while one was selected, whether the stream was still
+ * connecting, the container was stopped, or the stream had been lost.
+ */
+export function emptyLogMessage(state: FollowStreamState | null, subject: 'container' | 'service'): string {
+  switch (state) {
+    case 'reconnecting': return 'Log stream interrupted — reconnecting…';
+    case 'ended':
+    case 'empty': return `No log output — the ${subject} is stopped.`;
+    case 'error': return 'Log stream lost after several retries. Select another item and come back to retry.';
+    default: return 'Waiting for log output…';
+  }
 }
 
 /** A tab in the detail pane for a selected item. */
@@ -81,6 +121,12 @@ export function copyLogsAction(
       const onCopy = copy();
       if (!metrics || !onCopy) return;
       const { text, count } = collectLogText(getLogs(metrics), metrics.logFilterString, metrics.logFilterMode);
+      // Copying nothing used to report "Copied 0 lines" and empty the clipboard.
+      if (count === 0) {
+        throw new Error(metrics.logFilterString
+          ? `no log lines match "${metrics.logFilterString}"`
+          : 'no log lines to copy yet');
+      }
       if (!onCopy(text)) {
         throw new Error('no clipboard tool found (install xclip, xsel, or wl-copy)');
       }

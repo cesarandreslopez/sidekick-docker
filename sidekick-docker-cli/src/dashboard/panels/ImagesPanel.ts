@@ -76,7 +76,8 @@ export class ImagesPanel implements SidePanel {
       const icon = img.isDangling ? '\u25CB' : '\u25CF'; // ○ vs ●
       return {
         id: img.id,
-        label: `${icon} ${truncate(tag, 38)}`,
+        label: `${icon} ${tag}`,
+        name: tag,
         sortKey: img.isDangling ? 1 : 0,
         data: img,
         iconColor: img.isDangling ? 'gray' : ACCENT,
@@ -94,6 +95,7 @@ export class ImagesPanel implements SidePanel {
         confirm: true,
         confirmMessage: (item) => removeImageConfirmMessage(panelData<ImageInfo>(item)),
         confirmSeverity: 'high',
+        actionType: 'remove',
         handler: (item) => {
           const img = panelData<ImageInfo>(item);
           return this.client.removeImage(img.id).then(() => {
@@ -108,6 +110,8 @@ export class ImagesPanel implements SidePanel {
         confirm: true,
         confirmMessage: () => pruneConfirmFor('images', this.lastMetrics?.images ?? []),
         confirmSeverity: 'batch',
+        actionType: 'prune',
+        targetName: () => 'dangling images',
         handler: () => {
           return this.client.pruneImages().then((r) => {
             this.onAction();

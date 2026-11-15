@@ -42,7 +42,9 @@ export function SortOverlay({ selectedIndex, currentField, reversed, maxWidth }:
               bold={isSelected}
               inverse={isSelected}
             >
-              {` ${opt.label}${indicator} `}
+              {/* ▸ replaces the leading space (same width): inverse alone
+                  vanishes under NO_COLOR. */}
+              {`${isSelected ? '\u25B8' : ' '}${opt.label}${indicator} `}
             </Text>
           </Box>
         );

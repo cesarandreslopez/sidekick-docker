@@ -22,6 +22,8 @@ interface StatusBarProps {
   totalCount?: number;
   lastRefresh?: Date | null;
   contextHint?: string;
+  /** False while mouse capture is off (M / --no-mouse). */
+  mouseEnabled?: boolean;
   /** Terminal width budget; segments are dropped lowest-priority-first to fit. */
   width: number;
 }
@@ -45,11 +47,19 @@ export interface StatusSegment {
   bold?: boolean;
 }
 
-/** Groups dropped (in this order) until the bar fits the width budget. */
-const DROP_ORDER = ['tagline', 'version', 'brand', 'nav', 'context', 'ago', 'hints'];
+/** Not a group: the step that shortens the unavailable-resources warning to a count. */
+const COMPACT_ERRORS = '#compact-errors';
+
+/**
+ * Groups dropped (in this order) until the bar fits the width budget. The
+ * daemon state and ?:Help are never dropped; the "⚠ containers, images, …
+ * unavailable" warning is shortened to "⚠ 4 unavailable" instead, which used
+ * to push ?:Help off narrow terminals during a disconnect.
+ */
+const DROP_ORDER = ['tagline', 'version', 'brand', 'nav', COMPACT_ERRORS, 'context', 'mouse', 'ago', 'hints'];
 
 export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width: number): StatusSegment[] {
-  const { daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh, contextHint } = props;
+  const { daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh, contextHint, mouseEnabled = true } = props;
   const ago = lastRefresh ? formatAgo(lastRefresh) : null;
 
   const segments: StatusSegment[] = [];
@@ -64,7 +74,7 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
       : { group: 'daemon', text: '○ disconnected', color: 'red' },
   );
   const failed = Object.keys(props.resourceErrors ?? {});
-  if (failed.length) segments.push({ group: 'daemon', text: ` ⚠ ${failed.join(', ')} unavailable`, color: 'yellow' });
+  if (failed.length) segments.push({ group: 'errors', text: ` ⚠ ${failed.join(', ')} unavailable`, color: 'yellow' });
   if (ago) {
     // Stale data says how to fix it.
     segments.push({ group: 'ago', text: ` ↻ ${ago.text}${ago.stale ? ' (Ctrl+R)' : ''}`, color: ago.stale ? 'yellow' : 'gray', dimColor: !ago.stale });
@@ -91,6 +101,11 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
     segments.push({ group: 'context', text: `  ${contextHint}`, color: 'cyan', dimColor: true });
   }
 
+  // Mouse capture off: the terminal selects text, and clicks do nothing here.
+  if (!mouseEnabled) {
+    segments.push({ group: 'mouse', text: '  mouse off (M)', color: 'yellow' });
+  }
+
   if (filterString) {
     const counts = matchCount !== undefined && totalCount !== undefined ? ` ${matchCount}/${totalCount}` : '';
     segments.push({ group: 'filter', text: `  ◉ "${filterString}"${counts}`, color: 'yellow', bold: true });
@@ -99,9 +114,11 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
   // Drop lowest-priority groups until the plain text fits the width budget.
   let result = segments;
   const fits = (segs: StatusSegment[]) => segs.reduce((n, s) => n + [...s.text].length, 0) <= width;
-  for (const group of DROP_ORDER) {
+  for (const step of DROP_ORDER) {
     if (fits(result)) break;
-    result = result.filter(s => s.group !== group);
+    result = step === COMPACT_ERRORS
+      ? result.map(s => (s.group === 'errors' ? { ...s, text: ` ⚠ ${failed.length} unavailable` } : s))
+      : result.filter(s => s.group !== step);
   }
   return result;
 }

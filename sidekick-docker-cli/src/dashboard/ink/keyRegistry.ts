@@ -1,6 +1,8 @@
 import type { Key } from 'ink';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from '../panels/types';
+import { itemName } from '../panels/types';
 import type { Action, DashboardUIState, ToastSeverity } from './dashboardTypes';
+import { sortFieldLabel } from './dashboardTypes';
 import { maxScrollOffset } from './windowLines';
 import { sortDirectionLabel } from 'sidekick-docker-shared';
 
@@ -67,6 +69,11 @@ export interface KeyBindingSpec {
 /** True when the active detail tab tails content (logs) — drives log-filter availability and follow-pause. */
 function isAutoScrollTab(ctx: KeyQueryContext): boolean {
   return ctx.detailTabs[ctx.tabIdx]?.autoScrollBottom === true;
+}
+
+/** Select the list row at `index` (by id, so a later reorder keeps it). */
+function selectIndex(ctx: KeyContext, index: number): void {
+  ctx.dispatch({ type: 'SELECT_ITEM', index, id: ctx.currentItems[index]?.id ?? null });
 }
 
 /** Move the side-list selection by a page-sized delta, mirroring the wheel path. */
@@ -155,6 +162,8 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     match: (_input, key) => key.tab,
     label: 'Toggle focus (list ↔ detail)',
     category: 'Navigation',
+    // Expanded hides the list; focus stays on the detail pane there.
+    isAvailable: (ctx) => ctx.state.layoutMode !== 'expanded',
     run: (ctx) => ctx.dispatch({ type: 'TOGGLE_FOCUS' }),
   },
   {
@@ -220,7 +229,7 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     run: (ctx) => {
       ctx.dispatch({ type: 'TOGGLE_SORT_REVERSE' });
       // state is pre-toggle here, so the new direction is the opposite one.
-      ctx.addToast(`Sort: ${ctx.state.sortField}, ${sortDirectionLabel(ctx.state.sortField, !ctx.state.sortReversed)}`, 'info');
+      ctx.addToast(`Sort: ${sortFieldLabel(ctx.state.sortField)}, ${sortDirectionLabel(ctx.state.sortField, !ctx.state.sortReversed)}`, 'info');
     },
   },
   {
@@ -239,8 +248,7 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
       if (currentCompare === item.id) {
         ctx.addToast('Unpinned comparison', 'info');
       } else {
-        const label = item.label.replace(/^[^\w]*/, '').trim();
-        ctx.addToast(`Pinned ${label} for comparison`, 'info');
+        ctx.addToast(`Pinned ${itemName(item)} for comparison — select another to compare`, 'info');
         // The split view only renders on the logs tab — switch so it appears immediately.
         if (!isAutoScrollTab(ctx)) {
           const logsTabIdx = ctx.detailTabs.findIndex(t => t.autoScrollBottom);
@@ -249,6 +257,18 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
           }
         }
       }
+    },
+  },
+  {
+    id: 'mouse-toggle',
+    keys: ['M'],
+    match: (input) => input === 'M',
+    label: 'Toggle mouse capture (off: select text)',
+    category: 'View',
+    run: (ctx) => {
+      ctx.dispatch({ type: 'TOGGLE_MOUSE' });
+      // state is pre-toggle here.
+      ctx.addToast(ctx.state.mouseEnabled ? 'Mouse off — the terminal can select text (M to turn on)' : 'Mouse on', 'info');
     },
   },
   {
@@ -297,11 +317,11 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
       if (ctx.state.focusTarget === 'side') {
         if (down) {
           if (ctx.clampedSelection < ctx.currentItems.length - 1) {
-            ctx.dispatch({ type: 'SELECT_ITEM', index: ctx.clampedSelection + 1 });
+            selectIndex(ctx, ctx.clampedSelection + 1);
             ctx.sideScroll.selectNext();
           }
         } else if (ctx.clampedSelection > 0) {
-          ctx.dispatch({ type: 'SELECT_ITEM', index: ctx.clampedSelection - 1 });
+          selectIndex(ctx, ctx.clampedSelection - 1);
           ctx.sideScroll.selectPrev();
         }
         return;
@@ -339,12 +359,17 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     category: 'Navigation',
     run: (ctx, input) => {
       const top = input === 'g';
-      if (ctx.state.focusTarget === 'side') {
+      // G resumes a paused follow whatever has focus — the wheel pauses it
+      // without moving focus, and the paused hint says "G to resume", yet
+      // with the list focused G used to select the last item instead. A
+      // second G (follow back on) selects the last item as before.
+      const followPaused = isAutoScrollTab(ctx) && !ctx.state.logFollow;
+      if (ctx.state.focusTarget === 'side' && !(followPaused && !top)) {
         if (top) {
-          ctx.dispatch({ type: 'SELECT_ITEM', index: 0 });
+          selectIndex(ctx, 0);
           ctx.sideScroll.selectFirst();
         } else {
-          ctx.dispatch({ type: 'SELECT_ITEM', index: Math.max(0, ctx.currentItems.length - 1) });
+          selectIndex(ctx, Math.max(0, ctx.currentItems.length - 1));
           ctx.sideScroll.selectLast();
         }
         return;

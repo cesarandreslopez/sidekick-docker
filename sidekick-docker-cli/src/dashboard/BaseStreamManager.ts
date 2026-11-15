@@ -56,6 +56,7 @@ export abstract class BaseStreamManager<TId, TItem> {
       onError: err => debugLog(`${this.streamLabel} stream error:`, err),
       onState: (state) => {
         if (state === 'error') debugLog(`${this.streamLabel} stream: gave up reconnecting for ${this.idLabel(id)}`);
+        this.onStreamState?.(state);
       },
     });
     this.stream = stream;
@@ -122,4 +123,7 @@ export abstract class BaseStreamManager<TId, TItem> {
 
   /** Called when stop() is invoked. */
   protected onStop(): void {}
+
+  /** Called on every stream lifecycle change (see getStreamState). */
+  protected onStreamState?(state: FollowStreamState): void;
 }

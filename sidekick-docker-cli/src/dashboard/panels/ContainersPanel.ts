@@ -2,9 +2,9 @@ import type { ContainerInfo, ContainerDetails } from 'sidekick-docker-shared';
 import { DockerClient, shortId, publishedPortUrls, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneConfirmFor, pruneResultText, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
-import { panelData, detailFetchError, copyLogsAction } from './types';
+import { panelData, detailFetchError, copyLogsAction, emptyLogMessage } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
-import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, truncate, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, ansi, formatFileChange, formatLogTemplate, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
+import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, ansi, formatFileChange, formatLogTemplate, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
 
 /** Exit status and health detail (inspect-only) for the Config tab's Status section. */
 function configStatusDetails(c: ContainerInfo, d: ContainerDetails | undefined): string[] {
@@ -33,6 +33,13 @@ function configInspectSections(d: ContainerDetails | undefined, failure: string 
     ...(d.mounts.length ? d.mounts.map(m => `  ${formatMount(m)}`) : [ansi.gray('  none')]),
   ];
 }
+
+/** Ink colour names for the side list's health badge (matches colorizeHealth). */
+const HEALTH_COLORS: Record<NonNullable<ContainerInfo['healthStatus']>, string> = {
+  healthy: 'green',
+  unhealthy: 'red',
+  starting: 'yellow',
+};
 
 export class ContainersPanel implements SidePanel {
   readonly id = 'containers';
@@ -71,7 +78,7 @@ export class ContainersPanel implements SidePanel {
       label: 'Logs',
       render: (_item, metrics) => {
         const logs = metrics.selectedContainerLogs;
-        if (logs.length === 0) return ['No logs available. Select a container to view logs.'];
+        if (logs.length === 0) return [emptyLogMessage(metrics.logStreamState, 'container')];
         return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode, metrics.logSeverityCounts);
       },
       autoScrollBottom: true,
@@ -224,16 +231,16 @@ export class ContainersPanel implements SidePanel {
       const portHint = c.state === 'running' && c.ports.length > 0
         ? `:${c.ports[0].hostPort || c.ports[0].containerPort}`
         : '';
-      const healthBadge = c.healthStatus ? ` ${colorizeHealth(c.healthStatus)}` : '';
-      const namePart = portHint
-        ? `${truncate(c.name, 34)} ${portHint}`
-        : truncate(c.name, 38);
+      // The side list fits (and middle-truncates) the name to its real width.
       return {
         id: c.id,
-        label: `${stateIcon(c.state)} ${namePart}${healthBadge}`,
+        label: `${stateIcon(c.state)} ${c.name}${portHint ? ` ${portHint}` : ''}`,
+        name: c.name,
         sortKey: c.state === 'running' ? 0 : 1,
         data: c,
         iconColor: stateColor(c.state),
+        badge: c.healthStatus,
+        badgeColor: c.healthStatus ? HEALTH_COLORS[c.healthStatus] : undefined,
         rightLabel: uptime,
         rightColor: c.state === 'running' ? 'green' : 'gray',
       };
@@ -249,6 +256,7 @@ export class ContainersPanel implements SidePanel {
           const c = panelData<ContainerInfo>(item);
           return this.client.startContainer(c.id).then(() => { this.onAction(); return actionText('start', c.name).success; });
         },
+        actionType: 'start',
         // Not for paused containers: Docker rejects start; they need unpause.
         condition: (item) => canStart(panelData<ContainerInfo>(item).state),
       },
@@ -259,6 +267,7 @@ export class ContainersPanel implements SidePanel {
           const c = panelData<ContainerInfo>(item);
           return this.client.stopContainer(c.id).then(() => { this.onAction(); return actionText('stop', c.name).success; });
         },
+        actionType: 'stop',
         // Paused and restarting containers can be stopped too.
         condition: (item) => canStop(panelData<ContainerInfo>(item).state),
       },
@@ -269,6 +278,7 @@ export class ContainersPanel implements SidePanel {
           const c = panelData<ContainerInfo>(item);
           return this.client.restartContainer(c.id).then(() => { this.onAction(); return actionText('restart', c.name).success; });
         },
+        actionType: 'restart',
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
       {
@@ -278,6 +288,7 @@ export class ContainersPanel implements SidePanel {
           const c = panelData<ContainerInfo>(item);
           return this.client.pauseContainer(c.id).then(() => { this.onAction(); return actionText('pause', c.name).success; });
         },
+        actionType: 'pause',
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },
       {
@@ -287,6 +298,7 @@ export class ContainersPanel implements SidePanel {
           const c = panelData<ContainerInfo>(item);
           return this.client.unpauseContainer(c.id).then(() => { this.onAction(); return actionText('unpause', c.name).success; });
         },
+        actionType: 'unpause',
         condition: (item) => panelData<ContainerInfo>(item).state === 'paused',
       },
       {
@@ -295,6 +307,7 @@ export class ContainersPanel implements SidePanel {
         confirm: true,
         confirmMessage: (item) => removeContainerConfirmMessage(panelData<ContainerInfo>(item)),
         confirmSeverity: 'high',
+        actionType: 'remove',
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
           return this.client.removeContainer(c.id, true).then(() => { this.onAction(); return actionText('remove', c.name).success; });
@@ -317,6 +330,8 @@ export class ContainersPanel implements SidePanel {
         confirm: true,
         confirmMessage: () => pruneConfirmFor('containers', this.lastMetrics?.containers ?? []),
         confirmSeverity: 'batch',
+        actionType: 'prune',
+        targetName: () => 'stopped containers',
         handler: () => {
           return this.client.pruneContainers().then((r) => {
             this.onAction();

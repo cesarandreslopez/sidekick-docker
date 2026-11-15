@@ -1,3 +1,5 @@
+import { truncateMiddle } from '../../formatters';
+
 /**
  * Geometry for the two tab bars, shared between the components that render
  * them and `useMouseHandler`, which hit-tests clicks against them.
@@ -68,12 +70,31 @@ export function shouldCompactTabs(
   return full + 1 + layoutIndicatorWidth(layoutMode) > totalWidth;
 }
 
+export const DETAIL_TAB_CYCLE_HINT = '[/] cycle tabs';
+export const DETAIL_TAB_FOLLOW_PAUSED = '⏸ follow paused — G to resume';
+/** Width of the detail strip's usual trailing hint ("[/] cycle tabs"). */
+export const DETAIL_TAB_SUFFIX_LENGTH = DETAIL_TAB_CYCLE_HINT.length;
+/** Longest item name the strip shows (Expanded layout). */
+const DETAIL_TAB_NAME_MAX = 40;
+
+export interface DetailTabSuffix {
+  text: string;
+  kind: 'name' | 'paused' | 'hint';
+}
+
 /**
- * Width of the detail strip's trailing hint ("[/] cycle tabs"). The
- * follow-paused variant is longer, but the hint is only dropped when space is
- * tight, so sizing on the common case keeps the geometry stable.
+ * The detail strip's trailing text. In Expanded the list is hidden and
+ * nothing else said which item was on screen, so the strip names it (the ▼
+ * row reports a paused follow). Otherwise: follow paused, else the cycle hint.
+ *
+ * DetailTabBar and the mouse handler must both use this: the tab window
+ * depends on the suffix length, and a mismatch moved the click targets.
  */
-export const DETAIL_TAB_SUFFIX_LENGTH = '[/] cycle tabs'.length;
+export function detailTabSuffix(opts: { followPaused: boolean; itemName?: string }): DetailTabSuffix {
+  if (opts.itemName) return { text: truncateMiddle(opts.itemName, DETAIL_TAB_NAME_MAX), kind: 'name' };
+  if (opts.followPaused) return { text: DETAIL_TAB_FOLLOW_PAUSED, kind: 'paused' };
+  return { text: DETAIL_TAB_CYCLE_HINT, kind: 'hint' };
+}
 
 /** Rendered width of one detail tab: " {label} " plus its separator. */
 export function detailTabWidth(label: string): number {

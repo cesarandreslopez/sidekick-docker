@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { windowLines, maxScrollOffset } from './windowLines';
+import { windowLines, maxScrollOffset, clampWindowOffset, compareColumnRows } from './windowLines';
 
 const items = (n: number): number[] => Array.from({ length: n }, (_, i) => i);
 
@@ -60,5 +60,43 @@ describe('maxScrollOffset', () => {
     // 100 lines, 10 rows: bottom shows ▲ + 9 lines.
     expect(maxScrollOffset(100, 10)).toBe(91);
     expect(maxScrollOffset(11, 10)).toBe(2);
+  });
+});
+
+describe('clampWindowOffset (T22)', () => {
+  it('pulls the window back when the list shrinks', () => {
+    // Was scrolled to 40 of 50; now only 12 items in a 10-row viewport.
+    expect(clampWindowOffset(40, 5, 12, 10)).toBe(maxScrollOffset(12, 10));
+  });
+
+  it('keeps the selection visible after the viewport shrinks', () => {
+    // Selected row 20, window at 15: fine at 10 rows (8 usable), not at 5 (3 usable).
+    expect(clampWindowOffset(15, 20, 50, 10)).toBe(15);
+    expect(clampWindowOffset(15, 20, 50, 5)).toBe(18);
+  });
+
+  it('scrolls up to a selection above the window, and is 0 when everything fits', () => {
+    expect(clampWindowOffset(10, 3, 50, 10)).toBe(3);
+    expect(clampWindowOffset(4, 2, 6, 10)).toBe(0);
+  });
+});
+
+describe('compareColumnRows (T1/T25)', () => {
+  const lines = Array.from({ length: 30 }, (_, i) => `line ${i}`);
+
+  it('always yields exactly the viewport height', () => {
+    expect(compareColumnRows(lines, 0, 10)).toHaveLength(10);
+    expect(compareColumnRows(['a', 'b'], 0, 10)).toHaveLength(10);
+  });
+
+  it('a following column shows its newest line, whatever the other column does', () => {
+    const rows = compareColumnRows(lines, maxScrollOffset(30, 10), 10);
+    expect(rows[0]).toEqual({ text: '▲ (21 more)', indicator: true });
+    expect(rows.at(-1)).toEqual({ text: 'line 29', indicator: false });
+  });
+
+  it('a scrolled-back column gets its own ▼ row, with the paused hint when given', () => {
+    const rows = compareColumnRows(lines, 5, 10, ' · paused');
+    expect(rows.at(-1)).toEqual({ text: '▼ (17 more) · paused', indicator: true });
   });
 });

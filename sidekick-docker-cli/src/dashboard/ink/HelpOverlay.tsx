@@ -7,6 +7,8 @@ import { ACCENT_FILL } from '../../theme';
 interface HelpOverlayProps {
   version: string;
   layout: HelpLayout;
+  /** Mouse capture on: the footer advertises clicks and the wheel only then. */
+  mouseEnabled?: boolean;
 }
 
 function KeyBadge({ k, dimmed }: { k: string; dimmed?: boolean }): React.ReactElement {
@@ -16,7 +18,8 @@ function KeyBadge({ k, dimmed }: { k: string; dimmed?: boolean }): React.ReactEl
 }
 
 function Line({ line, width, keyWidth }: { line: HelpLine; width: number; keyWidth: number }): React.ReactElement {
-  if (line.kind === 'blank') return <Text>{''}</Text>;
+  // ' ', not '': Ink gives an empty Text no height, and layoutHelp counts this row.
+  if (line.kind === 'blank') return <Text>{' '}</Text>;
   if (line.kind === 'header') {
     return (
       <Box>
@@ -37,9 +40,10 @@ function Line({ line, width, keyWidth }: { line: HelpLine; width: number; keyWid
   );
 }
 
-export function HelpOverlay({ version, layout }: HelpOverlayProps): React.ReactElement {
+export function HelpOverlay({ version, layout, mouseEnabled = true }: HelpOverlayProps): React.ReactElement {
   const { columns, columnWidth, keyWidth, scroll, maxScroll } = layout;
   const position = maxScroll > 0 ? `  ·  ${scroll === 0 ? 'top' : scroll >= maxScroll ? 'end' : `${scroll}/${maxScroll}`} — j/k to scroll` : '';
+  const mouse = mouseEnabled ? 'Mouse: click to select, wheel to scroll' : 'Mouse off: M turns it on';
   return (
     <Box flexDirection="column" flexGrow={1} padding={1}>
       <Box>
@@ -53,8 +57,8 @@ export function HelpOverlay({ version, layout }: HelpOverlayProps): React.ReactE
           </Box>
         ))}
       </Box>
-      <Text>{''}</Text>
-      <Text color="gray" dimColor wrap="truncate">{`Press ? or Esc to close · Mouse: click to select, wheel to scroll${position}`}</Text>
+      <Text>{' '}</Text>
+      <Text color="gray" dimColor wrap="truncate">{`Press ? or Esc to close · ${mouse}${position}`}</Text>
     </Box>
   );
 }

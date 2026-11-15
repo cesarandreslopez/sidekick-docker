@@ -33,6 +33,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   // is silently ignored and they talk to the default daemon instead.
   const cliEnv = socket ? dockerCliEnv(socket) : undefined;
   const execShell = resolveExecShell(globalOpts.shell as string | undefined);
+  // Commander sets `mouse: false` for --no-mouse.
+  const mouse = globalOpts.mouse !== false;
   const composeClient = new ComposeClient(cliEnv);
 
   // Create state and do initial refresh
@@ -73,6 +75,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           dockerEnv: cliEnv,
           onRefresh,
           execShell,
+          mouse,
         }),
       );
     }, 200);
@@ -234,7 +237,10 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     );
 
     if (panelId === 'containers') {
-      void logManager.select(detailTabIndex === 0 ? itemId : null);
+      // The log stream runs on every Containers tab: Patterns and the Stats
+      // tab's log sparkline read its analytics, Copy Logs reads its buffer,
+      // and stopping it on a tab switch threw away up to 1000 lines.
+      void logManager.select(itemId);
       void statsManager.select(itemId && (detailTabIndex === 1 || wantsLiveStats) ? itemId : null);
       void composeLogManager.selectCompose(null, null);
       // Secondary compare stream: only when on Logs tab and a compare item is pinned
@@ -383,6 +389,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       dockerEnv: cliEnv,
       onRefresh,
       execShell,
+      mouse,
     }),
   );
 
@@ -421,6 +428,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     m.logTemplates = logManager.getTemplates();
     m.secondaryLogSeverityCounts = secondaryLogSeverityCounts;
     m.secondaryLogSeverityTimeSeries = secondaryLogManager.getSeverityTimeSeries();
+    m.logStreamState = logManager.getStreamState();
+    m.composeLogStreamState = composeLogManager.getStreamState();
     return m;
   }
 
