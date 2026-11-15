@@ -11,7 +11,7 @@ function lastErrorLine(stderr: string): string | null {
 }
 
 /** How long the missing-shell probe may take before the session counts as ordinary. */
-const PROBE_TIMEOUT_MS = 10_000;
+const PROBE_TIMEOUT_MS = 3_000;
 
 /**
  * Run the shell once more, without a TTY, to learn whether it exists. Docker
@@ -25,10 +25,16 @@ function probeShell(
 ): Promise<{ code: number | null; output: string }> {
   return new Promise((resolve) => {
     const deadline = AbortSignal.timeout(PROBE_TIMEOUT_MS);
-    const probe = spawn('docker', ['exec', containerId, shell, '-c', 'exit 0'], {
-      stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env },
-      signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
-    });
+    let probe: ReturnType<typeof spawn>;
+    try {
+      probe = spawn('docker', ['exec', containerId, shell, '-c', 'exit 0'], {
+        stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env },
+        signal: signal ? AbortSignal.any([signal, deadline]) : deadline,
+      });
+    } catch {
+      resolve({ code: null, output: '' });
+      return;
+    }
     let output = '';
     const keep = (chunk: Buffer | string) => { output = (output + chunk.toString()).slice(-STDERR_TAIL); };
     probe.stdout?.on('data', keep);
@@ -80,11 +86,11 @@ export function execFallback(
       // shell at all — and Docker said which on the TTY, out of our sight.
       // Ask again without one; only Docker's own message counts as missing.
       if (code === 126 || code === 127) {
-        void probeShell(containerId, shell, env, signal).then(({ code: probeCode, output }) => {
+        probeShell(containerId, shell, env, signal).then(({ code: probeCode, output }) => {
           const missingShell = describeExecExit({ exitCode: probeCode, outputTail: output, shell, containerName });
           if (missingShell) reject(new Error(missingShell));
           else resolve();
-        });
+        }).catch(() => resolve());
         return;
       }
       resolve();
