@@ -26,6 +26,6 @@ Press `x` to open the context menu, or press `d` (Remove) / `P` (Prune) directly
 | Action | Description |
 |--------|-------------|
 | Remove | Remove the selected volume (confirmation required) |
-| Prune | Remove all unused volumes (the confirmation names how many) |
+| Prune | Remove unused anonymous volumes. Since Docker Engine 23 a prune keeps named volumes, and the confirmation counts and says so; on older engines it removes every unused volume |
 
 Prune reports the total space reclaimed.

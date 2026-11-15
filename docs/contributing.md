@@ -22,7 +22,7 @@ npm test
 ### Running Locally
 
 - **TUI dashboard**: `node ./sidekick-docker-cli/dist/sidekick-docker.mjs` (the build marks it executable, so `./sidekick-docker-cli/dist/sidekick-docker.mjs` works too)
-- **VS Code extension**: Open `sidekick-docker-vscode/` in VS Code and press `F5`
+- **VS Code extension**: Open `sidekick-docker-vscode/` in VS Code, press `F5` and pick **VS Code Extension Development** in the debugger picker (no `launch.json` is committed) to launch the Extension Development Host
 
 ## Available Commands
 

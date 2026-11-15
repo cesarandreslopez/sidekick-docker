@@ -49,10 +49,10 @@ Sidekick Docker gives you a real-time, keyboard-driven dashboard for managing yo
 - **Container details** — failing health checks with the last probe's output, exit code and OOM kills, restart policy and count, mounts
 - **Filter & search** — `/` to filter any resource list by name
 - **Confirmation modals** — destructive actions (remove, prune) always ask first
-- **Mouse support** — click to select, scroll to navigate, right-click for the actions menu
+- **Mouse support** — click to select, scroll to navigate, right-click for the actions menu; `M` (or `--no-mouse`) releases the mouse so you can select and copy text
 - **Scriptable CLI** — `ps`, `logs`, `images`, `volumes`, `networks`, `stats`, `df` and `inspect`, each with `--format json` and `-q` where it makes sense, for scripts and pipes, with `--no-color`/`NO_COLOR` support
 - **Disk usage** — `df` reports images, containers, volumes and build cache, the last of which is usually the biggest surprise
-- **Prune everything** — reclaim space from stopped containers, dangling images, unused volumes and networks, with the reclaimed total reported back
+- **Prune everything** — reclaim space from stopped containers, dangling images, unused anonymous volumes and unused networks, with the reclaimed total reported back
 - **Flexible endpoints** — `--socket` accepts a socket path, `unix://` URL, or `tcp://host:port` for remote daemons
 - **SSH connections** — connect with `DOCKER_HOST=ssh://user@host`; the CLI and extension include the SSH transport
 - **Refresh recovery** — keep the last successful resource data when part of a refresh fails, and refresh on demand with `Ctrl+R`; the VS Code dashboard also offers Retry controls for detail loads and streams, and says *why* Docker is unreachable

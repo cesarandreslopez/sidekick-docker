@@ -69,6 +69,7 @@ Lists named volumes, including which containers currently mount each one.
 
 ```bash
 sidekick-docker volumes
+sidekick-docker volumes -q             # names only
 sidekick-docker volumes --format json
 ```
 
@@ -78,6 +79,7 @@ Lists networks with their subnet and attached-container count.
 
 ```bash
 sidekick-docker networks
+sidekick-docker networks -q            # IDs only
 sidekick-docker networks --format json
 ```
 
@@ -89,6 +91,7 @@ composes in scripts and pipelines.
 
 ```bash
 sidekick-docker stats
+sidekick-docker stats -q               # container IDs only
 sidekick-docker stats --format json
 ```
 
@@ -124,6 +127,7 @@ Exits non-zero when no container matches.
 | `--no-color` | Disable colored output (the `NO_COLOR` env var also disables it; `FORCE_COLOR` forces it on) |
 | `--verbose` | Show full error details |
 | `--shell <path>` | Shell for Exec in the dashboard (default: `$SIDEKICK_DOCKER_SHELL`, else `/bin/sh`) |
+| `--no-mouse` | Start the dashboard with mouse capture off, so the terminal can select text (`M` toggles it) |
 | `--version` | Show version |
 | `--help` | Show help |
 

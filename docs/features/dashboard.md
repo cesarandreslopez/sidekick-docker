@@ -13,7 +13,9 @@ The dashboard uses a split layout:
 - **Left pane** — resource list (containers, images, etc.)
 - **Right pane** — detail tabs for the selected item (logs, stats, configuration)
 
-Press **`z`** to cycle layout modes: **Normal** (28-col side panel) → **Wide** (42-col side panel, showing full names) → **Expanded** (side panel hidden, detail pane only).
+Press **`z`** to cycle layout modes: **Normal** (28-col side panel) → **Wide** (side panel 40% of the terminal, 28–42 columns, for longer names) → **Expanded** (side panel hidden, detail pane only). In Expanded the detail tab strip names the selected item and focus stays on the details; press `z` again to get the list back.
+
+List names that do not fit are shortened in the middle, so a replica's `-2` suffix or an image's `:tag` stays visible.
 
 ## Panels
 
@@ -40,20 +42,22 @@ This means changes appear almost instantly without manual refreshing. To refresh
 
 ## Actions
 
-Press **`x`** on any selected item to open the context menu, or press an action's key (shown in the menu and the status bar) directly. Only actions that apply to the item's current state are offered — for example, Start is not offered for a paused container (Docker rejects it; use Unpause). Available actions vary by panel — see each panel's page for details.
+Press **`x`** on any selected item to open the context menu (titled with the item's name), or press an action's key (shown in the menu) directly. A key whose action does not apply to the item says so in a toast. Only actions that apply to the item's current state are offered — for example, Start is not offered for a paused container (Docker rejects it; use Unpause). Available actions vary by panel — see each panel's page for details.
 
-Destructive actions (remove, prune) are color-coded red in the context menu and require a confirmation modal that names the exact target (e.g. `Remove container "web"?`, `Prune 3 dangling images?`); removing a running container warns that it will be stopped first. `y` confirms; `Enter`, `Esc`, or `n` cancel — Enter is deliberately the safe default.
+Destructive actions (remove, prune) are color-coded red in the context menu and require a confirmation modal that names the exact target (e.g. `Remove container "web"?`, `Prune 3 dangling images?`); removing a running container warns that it will be stopped first. Long messages wrap to up to three lines rather than cutting off the target. `y` confirms; `Enter`, `Esc`, or `n` cancel — Enter is deliberately the safe default.
 
 ## Visual Indicators
 
 - **Tab bar badges** — container count is color-coded: green when all running, yellow when partially running
-- **Status bar** — shows the connection status and running/total count, any resources that failed to refresh, time since the last refresh (with a `(Ctrl+R)` hint once it is a minute old), the selected item's action keys, focus, contextual hints, the active filter, and an always-visible `?:Help`; lower-priority segments drop out on narrow terminals
+- **Status bar** — shows the connection status and running/total count, any resources that failed to refresh, time since the last refresh (with a `(Ctrl+R)` hint once it is a minute old), `x:Actions` when the item has actions, focus, contextual hints, the active filter, `mouse off (M)` while mouse capture is off, and an always-visible `?:Help`; lower-priority segments drop out or shorten on narrow terminals
 - **Selection** — focused items preserve their state icon color instead of overriding with a uniform highlight
 - **Detail tab bar** — shows the tab label even for single-tab panels
 
 ## Mouse Support
 
-Click to select items, switch panels and detail tabs, and press overlay buttons; right-click an item to open its actions menu. The scroll wheel scrolls the pane under the cursor — scrolling up in a logs tab pauses follow (scroll back to the bottom or press `G` to resume).
+Click to select items, switch panels and detail tabs, and press overlay buttons; right-click an item to open its actions menu. Over the list the scroll wheel moves the selection; over the details it scrolls them — scrolling up in a logs tab pauses follow (scroll back to the bottom or press `G` to resume). The wheel also scrolls the help overlay.
+
+While the dashboard captures the mouse, most terminals cannot select text. Press **`M`** to turn mouse capture off (the status bar shows `mouse off (M)`) and select and copy text as usual, then `M` again to turn it back on. `--no-mouse` starts the dashboard with capture off.
 
 ## Minimum Terminal Size
 

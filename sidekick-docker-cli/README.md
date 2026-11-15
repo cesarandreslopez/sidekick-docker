@@ -35,7 +35,7 @@ sidekick-docker ps -q                   # container IDs only
 sidekick-docker logs <container>
 sidekick-docker logs <container> --no-follow --tail 50
 
-# Inventory (all support --format json; images also supports -q)
+# Inventory (all support --format json; images, volumes, networks and stats also support -q)
 sidekick-docker images
 sidekick-docker volumes
 sidekick-docker networks
@@ -58,6 +58,7 @@ sidekick-docker inspect <container> | jq .State.Health
 | `--no-color` | Disable colored output, including the dashboard (also honors `NO_COLOR` / `FORCE_COLOR`) |
 | `--verbose` | Show full error details |
 | `--shell <path>` | Shell for Exec in the dashboard (default: `$SIDEKICK_DOCKER_SHELL`, else `/bin/sh`) |
+| `--no-mouse` | Start the dashboard with mouse capture off, so the terminal can select text (`M` toggles it) |
 | `--version` | Show version |
 | `--help` | Show help |
 
@@ -144,14 +145,14 @@ Item actions below work directly on the selected item or from the `x` menu; only
 | Key | Action |
 |-----|--------|
 | `d` | Remove (with confirmation; volumes only when unused, networks only when custom and empty) |
-| `P` | Prune dangling images / unused volumes / unused networks (confirmation names the count) |
+| `P` | Prune dangling images / unused anonymous volumes (Engine 23+ keeps named ones) / unused networks (confirmation names the count) |
 
 ### Compose Actions
 
 | Key | Action |
 |-----|--------|
 | `u` | Up (start project) |
-| `D` | Down (stop project, with confirmation) |
+| `D` | Down — `docker compose down`: removes containers and networks, keeps volumes (with confirmation) |
 | `r` | Restart |
 | `S` | Stop |
 | `c` | Copy logs to clipboard |
@@ -159,8 +160,10 @@ Item actions below work directly on the selected item or from the `x` menu; only
 ### Mouse
 
 Click to select items, switch panels/tabs, and press overlay buttons; right-click
-opens the actions menu; wheel scrolls (scrolling up in logs pauses follow — jump
-to the bottom or press `G` to resume).
+opens the actions menu; the wheel moves the list selection or scrolls the details
+(scrolling up in logs pauses follow — jump to the bottom or press `G` to resume).
+Press `M` to turn mouse capture off so the terminal can select and copy text
+(`--no-mouse` starts that way).
 
 ## Features
 
@@ -177,7 +180,7 @@ to the bottom or press `G` to resume).
 - **Compose detection** — automatically discovers projects from container labels, merges with compose file config
 - **Filter** — press `/` to filter any list by name
 - **Confirmation modals** — destructive actions always ask before executing
-- **Mouse support** — click items to select, scroll to navigate
+- **Mouse support** — click items to select, scroll to navigate; `M` releases the mouse for text selection
 - **Toast notifications** — non-blocking feedback for actions; errors wrap to three lines and stay up longer
 - **Readable on any terminal** — accent colour tuned for dark and light backgrounds; `NO_COLOR` or `--no-color` makes the whole dashboard monochrome
 

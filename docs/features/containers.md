@@ -1,6 +1,6 @@
 # Containers Panel
 
-The Containers panel (press `1`) shows all Docker containers — running and stopped. Press `a` to toggle between showing all containers and only running/paused containers.
+The Containers panel (press `1`) shows all Docker containers — running and stopped. Press `a` to toggle between showing all containers and only those with a live process (running, paused or restarting), as `docker ps` lists them.
 
 ## List Columns
 

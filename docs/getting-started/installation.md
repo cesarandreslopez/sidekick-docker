@@ -56,4 +56,4 @@ node ./sidekick-docker-cli/dist/sidekick-docker.mjs
 
 ### Run the VS Code extension after building
 
-Open the `sidekick-docker-vscode/` folder in VS Code and press `F5` to launch the Extension Development Host.
+Open the `sidekick-docker-vscode/` folder in VS Code and press `F5` and pick **VS Code Extension Development** in the debugger picker (no `launch.json` is committed) to launch the Extension Development Host.

@@ -33,7 +33,7 @@ Thank you for your interest in contributing! This document provides guidelines a
 ### Running Locally
 
 - **TUI dashboard**: After building, run `./sidekick-docker-cli/dist/sidekick-docker.mjs` (the build marks it executable) or `node ./sidekick-docker-cli/dist/sidekick-docker.mjs`
-- **VS Code extension**: Open `sidekick-docker-vscode/` in VS Code and press `F5` to launch the Extension Development Host
+- **VS Code extension**: Open `sidekick-docker-vscode/` in VS Code and press `F5` and pick **VS Code Extension Development** in the debugger picker (no `launch.json` is committed) to launch the Extension Development Host
 
 ### Available Commands
 

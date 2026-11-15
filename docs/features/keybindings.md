@@ -9,7 +9,7 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `j` / `Down` | Move down |
 | `k` / `Up` | Move up |
 | `g` | Jump to top |
-| `G` | Jump to bottom (resumes log follow) |
+| `G` | Jump to bottom. While log follow is paused, `G` resumes it first, wherever focus is |
 | `PgUp` / `PgDn` | Page up / down |
 | `Ctrl+U` / `Ctrl+D` | Half page up / down |
 | `Tab` | Toggle focus between side list and detail pane |
@@ -35,8 +35,9 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `o` | Open sort menu (Containers panel) |
 | `R` | Reverse sort direction (Containers panel) |
 | `m` | Pin/unpin item for log comparison (Containers/Services) |
-| `J` / `K` | Scroll compare pane (when in detail focus) |
+| `J` / `K` | Scroll the pinned comparison pane (while comparing) |
 | `z` | Cycle layout (Normal/Wide/Expanded) |
+| `M` | Toggle mouse capture. Off lets the terminal select and copy text (`--no-mouse` starts with it off) |
 | `Ctrl+R` | Refresh now (the status bar shows `(Ctrl+R)` once the last refresh is a minute old) |
 | `?` | Show help overlay |
 | `V` | Show version |
@@ -70,7 +71,7 @@ Embedded exec sessions detach with `Ctrl+]`; ending the shell (`exit` / `Ctrl+D`
 | Key | Action |
 |-----|--------|
 | `d` | Remove the selected image / volume / network (with confirmation) |
-| `P` | Prune — remove all dangling images, unused volumes, or unused networks (confirmation names the count) |
+| `P` | Prune — remove dangling images, unused anonymous volumes (Engine 23+ keeps named ones), or unused networks (confirmation names the count) |
 
 Remove is offered only where it can succeed: volumes that are not in use, and
 networks that are neither built-in nor still attached to a container.
@@ -80,7 +81,7 @@ networks that are neither built-in nor still attached to a container.
 | Key | Action |
 |-----|--------|
 | `u` | Up (start project) |
-| `D` | Down (stop project, with confirmation) |
+| `D` | Down — `docker compose down`: removes the project's containers and networks, keeps volumes (with confirmation) |
 | `r` | Restart |
 | `S` | Stop |
 | `c` | Copy logs to clipboard |
@@ -101,7 +102,7 @@ any width.
 | Click panel tab / detail tab | Switch panel / detail tab |
 | Click overlay buttons | Activate them (clicks outside an overlay dismiss it) |
 | Right-click item | Open the actions menu for it |
-| Scroll wheel | Scroll the pane under the cursor; scrolling up in a logs tab pauses follow — scroll back to the bottom or press `G` to resume |
+| Scroll wheel | Over the list: move the selection. Over the details: scroll them; scrolling up in a logs tab pauses follow — scroll back to the bottom or press `G` to resume. In the help overlay: scroll it |
 
 ## Overlay Keyboard Hints
 

@@ -130,16 +130,28 @@ checks nothing.
   `ContainerWatcherService` wrap — don't re-implement refresh or event handling in a consumer
 - **Action gating and wording are shared UI policy** in `shared/src/formatters.ts` (browser-safe, also
   imported by the webview via `sidekick-docker-shared/formatters`): `canStart`/`canStop`,
-  `pruneCandidateCount`/`pruneConfirmMessage`, `removeContainerConfirmMessage`, `sortDirectionLabel`,
-  `publishedPortUrls`/`browserHostForEndpoint`, `actionText`, plus the Config-tab helpers
-  (`summarizeHealth`, `summarizeRestartPolicy`, `formatMount`). Change behaviour there so both surfaces move together
+  `matchesRunningOnly` (the `a` toggle: running/paused/restarting), `pruneConfirmFor` (count + wording from
+  the listed items — prefer it over `pruneCandidateCount`/`pruneConfirmMessage`), `pruneResultText`,
+  `removeContainerConfirmMessage`, `removeImageConfirmMessage`, `removeVolumeConfirmMessage`,
+  `removeNetworkConfirmMessage`, `composeDownConfirmMessage`, `imageDisplayName` (`<none> (id)` for
+  untagged), `sortDirectionLabel`, `publishedPortUrls`/`browserHostForEndpoint`, `actionText` +
+  `actionFailedText(type, name, message)`, plus the Config-tab helpers (`summarizeHealth`,
+  `summarizeRestartPolicy`, `formatMount`). Change behaviour there so both surfaces move together
+- **Volume prune is anonymous-only on Engine 23+ (API ≥ 1.42).** `DockerClient.getApiVersion()` reads the
+  daemon version once per client (failures not cached) and every `VolumeInfo` carries `anonymous` (the
+  `com.docker.volume.anonymous` label) and `pruneScope` (`anonymous`/`all`/`unknown`), so the browser-safe
+  prune wording can count honestly. `removeImage` untags a multi-tag image by name (Docker refuses delete-by-ID
+  with several tags), refuses up front if any container descends from it, and reports half-removed tags.
+  Untagged images: API ≥ 1.43 sends `RepoTags: []`; use `realImageTags` (`docker/utils.ts`)
 - VI keybindings: j/k navigation, g/G top/bottom, h/l focus, 1-5 panel switch, [/] detail tabs,
-  PgUp/PgDn + Ctrl+D/U paging, Ctrl+R refresh. TUI global bindings live in `ink/keyRegistry.ts` — the single
+  PgUp/PgDn + Ctrl+D/U paging, Ctrl+R refresh, `M` mouse-capture toggle (`--no-mouse` starts it off, so
+  the terminal can select text). TUI global bindings live in `ink/keyRegistry.ts` — the single
   source of truth driving dispatch, the help overlay, and status-bar hints; add new global keys
   there, not in `useKeyboardHandler`
 - **`keyRegistry` matching is first-hit.** `useKeyboardHandler` runs the first binding whose `match()`
   returns true, so order matters only between bindings whose predicates overlap — today none do
-  (`keyRegistry.test.ts` asserts every key resolves to exactly one binding). When adding a global key,
+  (`keyRegistry.test.ts` asserts every key resolves to exactly one binding, and `ink/keyConflicts.test.ts`
+  builds the five real panels and fails if a global shadows any `getActions()` key). When adding a global key,
   check that no earlier binding already matches it, and note that a global whose `isAvailable` is false
   swallows the key with a "Not available here" toast rather than falling through to a panel action.
   Panel action shortcuts (`getActions()` keys) fire directly, without the `x` menu, but never on a
@@ -152,7 +164,17 @@ checks nothing.
   closure in reducer state instead of executing it — clearing that closure is what closes the modal
 - **Overlay geometry is shared with mouse hit-testing.** `ink/overlayHitTest.ts` exports both the origins
   the overlay components render at *and* the hit functions `useMouseHandler` uses. Change an overlay's
-  JSX rows and you must update the matching hit function, or clicks silently miss
+  JSX rows and you must update the matching hit function, or clicks silently miss. Confirm messages wrap
+  (≤3 lines) through one pure function both sides call. **Never render `<Text>{''}</Text>` as a spacer** —
+  Ink measures empty text as zero rows, so the row collapses and everything below shifts (this put the
+  confirm buttons two rows above their hit targets); use `' '`
+- **TUI selection is by id.** The reducer keeps `selectedItemId` beside the index; `RESOLVE_SELECTION`
+  re-finds it after refresh/sort/filter without resetting scroll, and a vanished item falls back to
+  `SELECT_ITEM` (which does reset). Sorting and filtering are pure (`ink/listModel.ts`); list row layout —
+  middle truncation keeping `-N`/`:tag`, the separate `badge` field — is `ink/sideListLayout.ts`.
+  `PanelItem.name` is the plain name for toasts/headers (the label is decorated); `PanelAction.actionType`
+  lets `executeAction` word progress/success/failure through the shared `actionText`/`actionFailedText`.
+  Mouse reports that Ink hands `useInput` as text are dropped first thing in `useKeyboardHandler`
 - CLI colors are gated centrally in `sidekick-docker-cli/src/formatters.ts`
   (NO_COLOR/FORCE_COLOR/isTTY + `--no-color`); never emit raw ANSI directly. TUI colour tokens live in
   `sidekick-docker-cli/src/theme.ts` (`ACCENT` `#5B8BD9` for text/borders/selection, `ACCENT_FILL` navy
@@ -180,6 +202,18 @@ checks nothing.
 - **VSCode has two independent surfaces** — the TreeView (`ContainerWatcherService`, its own `DockerClient`
   and a containers-only `DockerStateStore`) and the webview dashboard (`DockerDashboardProvider`, its own
   `DockerService` with a full store). They poll separately; the dashboard stops polling while hidden
+- **Tree menu `when` clauses list container states explicitly** (`/^container-(running|paused|…)$/`) —
+  never `/^container-/`, which also matches the group header (`container-group`). Command handlers take
+  their target through `containerIdFromArg` (an `instanceof ContainerTreeItem` guard). `getSettings()` has
+  no side effects; an invalid `socketPath` is reported once by `warnIfInvalidEndpoint()` and reads as `''`
+- **Dashboard F5** is a contributed keybinding (`sidekick-docker.refreshDashboard`, hidden from the
+  palette) scoped to `activeWebviewPanelId == 'sidekick-docker.dashboard'` and off while a debug session
+  is stopped or another part has focus; the webview has no F5 handler of its own (it would double-refresh)
+- **Webview re-renders compare HTML strings, not `innerHTML`** (`replaceContent` keeps the last string
+  per root in a WeakMap — the DOM serializes `<input />`/boolean attributes differently, so `innerHTML ===
+  html` never matched). Same-item log updates go through the patch functions; a full ring buffer drops
+  nodes from the top (`droppedLogPrefix` in `webview/state.ts`) and compensates `scrollTop`. Detail tab
+  indices the host relies on live in `src/types/detailTabs.ts` (pinned by tests on both sides)
 - **`socketPath` and `exec.defaultShell` are `restrictedConfigurations`** in the extension manifest: VS Code
   ignores workspace values for them until the folder is trusted, and `onDidGrantWorkspaceTrust` rebuilds
   the watcher and dashboard service. Compose is refused in untrusted workspaces (tree menu items are hidden
@@ -227,7 +261,7 @@ checks nothing.
 - **Render throttling**: `scheduleRender()` batches at 200ms and **drops the frame** when `process.stdout.writableLength > writableHighWaterMark` (backpressure guard); stream callbacks add a further 100ms flush debounce. `SIDEKICK_DEBUG_STREAMS=1` dumps heap/stdout diagnostics every 60s.
 - **Compose detection**: Primary from container labels (`com.docker.compose.*`), secondary from `docker compose config`. Merged to show running + planned services.
 - **esbuild** (CLI): bundles `ssh2` with its optional native accelerators (`cpu-features`, `sshcrypto.node`) stubbed to throw so ssh2 uses its JS fallback (`scripts/native-fallbacks.cjs`, shared with vscode); stubs `react-devtools-core`; externalizes `node-pty`; injects `__CLI_VERSION__`; the banner adds the shebang and the `NO_COLOR` → `FORCE_COLOR=0` mapping; the output is chmodded 0755.
-- **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts` (13 `ExtensionMessage` extension→webview, 14 `WebviewMessage` webview→extension variants). Lazy detail loads use `DetailKind = 'inspect' | 'changes' | 'layers'`; `inspect` is one `DockerClient.getContainerDetails()` call (env, restart policy + count, mounts, exit code/OOM/error, health log) delivered as `updateInspect` (formerly `updateEnv`).
+- **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts` (13 `ExtensionMessage` extension→webview, 15 `WebviewMessage` webview→extension variants — `copyText` copies a toast; `copyLogs` is only for logs). `updateChanges` carries the host's `fetchedAt`; the snapshot's optional `composeAllowed` hides compose actions in untrusted workspaces. Lazy detail loads use `DetailKind = 'inspect' | 'changes' | 'layers'`; `inspect` is one `DockerClient.getContainerDetails()` call (env, restart policy + count, mounts, exit code/OOM/error, health log) delivered as `updateInspect` (formerly `updateEnv`).
 
 ## Module Architecture
 
@@ -292,14 +326,14 @@ Checker semantics worth knowing before trusting a green result:
 
 ## Testing Reality
 
-Don't go looking for test infrastructure that doesn't exist. 64 co-located test files (shared 27, cli 26,
-vscode 11), **no `ink-testing-library`**, no `__mocks__`, no `setupFiles`, and **no coverage tooling at all**.
+Don't go looking for test infrastructure that doesn't exist. 69 co-located test files (shared 27, cli 29,
+vscode 13), **no `ink-testing-library`**, no `__mocks__`, no `setupFiles`, and **no coverage tooling at all**.
 Two tests render real UI, both without a harness library: `cli/src/dashboard/ink/execFallback.test.tsx` (the
 only `.test.tsx`) mounts `Dashboard` with Ink's own `render()` over `PassThrough` streams, mocking
 `ExecManager`/mouse/terminal-size; `vscode/src/providers/dashboard.dom.test.ts` esbuild-bundles the webview
 and runs it in `jsdom`. The one genuinely shared test double is `sidekick-docker-vscode/src/test/vscode.ts`
-(90 LOC: `workspace`, `window` incl. `showQuickPick`/`withProgress`, `Uri.parse`, `env.asExternalUri`/
-`openExternal`), aliased over the `vscode` module for that package's tests and seeded/inspected via its
+(121 LOC: `workspace` incl. `isTrusted`, `window` incl. `showQuickPick`/`withProgress`, `Uri.parse`,
+`env.asExternalUri`/`openExternal`/`clipboard`, `TreeItem`/`ThemeIcon`/`ThemeColor`), aliased over the `vscode` module for that package's tests and seeded/inspected via its
 exported `__mock`; shared and cli have no shared helpers.
 
 Testability comes from deliberately extracting pure logic out of components — `reducer`/`initialState` are
@@ -317,17 +351,18 @@ vscode package. Pure policy is tested directly: `eventPolicy`, `FollowStream`, `
 `runProcess`, `ComposeConfigCache`, and the shared UI-policy formatters.
 
 **Follow that pattern**: extract logic out of the component rather than adding a render harness (recent
-examples: `helpLayout.ts`, `toastLayout.ts`, `execOutput.ts`, `execShell.ts`, `buildStatusSegments` in
-`StatusBar.tsx`, `copyLogsAction` in `panels/types.ts`). Apart from the one exec-fallback render test,
+examples: `listModel.ts`, `sideListLayout.ts`, `helpLayout.ts`, `toastLayout.ts`, `execOutput.ts`,
+`execShell.ts`, `buildStatusSegments` in `StatusBar.tsx`, `copyLogsAction` in `panels/types.ts`; in VS Code
+`droppedLogPrefix`, `composeGroupTooltip`, `splitReplicaSuffix`). Apart from the one exec-fallback render test,
 `Dashboard.tsx`'s JSX, the `.tsx` components, `useMouseHandler`, `useKeyboardHandler`, `ExecManager`,
 `commands/dashboard.ts`, and the panel classes are untested — changes there need manual verification.
 
 ## Known Technical Debt
 
-- `webview/dashboard.ts` is still large (1222 LOC; keyboard/overlays/HTML extracted to their own modules).
-  `providers/dashboardHtml.ts` is 1185 LOC, nearly all one inline `<style>` block.
-  `services/DockerService.ts` is down to 837 LOC now that refresh/event policy lives in `DockerStateStore`
-  and log streams in `LogSlot`. `Dashboard.tsx` ~756 LOC
+- `webview/dashboard.ts` is still large (1367 LOC; keyboard/overlays/HTML extracted to their own modules).
+  `providers/dashboardHtml.ts` is 1283 LOC, nearly all one inline `<style>` block.
+  `services/DockerService.ts` is 850 LOC now that refresh/event policy lives in `DockerStateStore`
+  and log streams in `LogSlot`. `Dashboard.tsx` ~811 LOC
 - `noUncheckedIndexedAccess` not yet enabled — 213 errors under each package's own tsconfig (shared 20,
   cli 73, vscode 120; some of vscode's are in `.test.ts`, which only its tsconfig type-checks). Also absent
   are `noUnusedLocals`, `noUnusedParameters`, and `exactOptionalPropertyTypes`

@@ -35,9 +35,9 @@ The tree view adds **Open in Dashboard** for containers and **Compose Up / Compo
 
 ## Containers Tree View
 
-The activity-bar **Containers** view groups containers by state (and by Compose project). A container's context menu offers the actions that apply to its state — start, stop, restart, pause/unpause, remove (stopped containers; asks first), **Exec**, **Show Logs** and **Open in Dashboard** — and running-but-unhealthy containers are marked as such.
+The activity-bar **Containers** view groups containers by state (and by Compose project). A container's context menu offers the actions that apply to its state — start, stop, restart, pause/unpause, remove (asks first; a running container is force-removed and the prompt says so), **Exec**, **Show Logs** and **Open in Dashboard** — and running-but-unhealthy containers are marked as such. Clicking a row (or pressing Enter on it) shows that container in the dashboard but keeps focus in the tree, so you can keep moving through the list; **Open in Dashboard** and `Ctrl+Alt+D` move focus to the dashboard.
 
-Right-click a **Compose project group** for **Compose Up**, and for a running project **Compose Restart** and **Compose Down** (Down asks for confirmation). They run `docker compose` with the project's recorded files, against the same endpoint as the rest of the extension. Compose actions are hidden, and refused, in an untrusted workspace, because running them would execute the workspace's compose file.
+Right-click a **Compose project group** for **Compose Up**, and for a project with live containers (running, paused or restarting) **Compose Restart** and **Compose Down** (Down asks for confirmation). They run `docker compose` with the project's recorded files, against the same endpoint as the rest of the extension. Compose actions are hidden, and refused, in an untrusted workspace, because running them would execute the workspace's compose file.
 
 While the first connection is in progress the view says **Connecting to Docker…**. When the daemon is unreachable, the view shows *why* (permission denied on the socket, socket not found, connection refused, host unreachable…) and offers a **Retry Connection** action.
 
@@ -94,6 +94,46 @@ Key files:
 | `src/types/messages.ts` | Typed request/response messages |
 
 See [Architecture Overview](../architecture/overview.md) for more details.
+
+## Dashboard keys
+
+The dashboard mirrors the terminal TUI's vi-style keys. Press `?` in the
+dashboard for the same list. Where the two differ:
+
+- **Refresh is `F5`.** It is bound only while the dashboard is the active editor and has focus,
+  so it does not start the debugger there. While a debug session is paused, `F5` stays Debug: Continue;
+  use the status bar's refresh button instead. Elsewhere `F5` keeps its usual meaning. `Ctrl+R` is left
+  to VS Code.
+- **Exec opens a VS Code terminal** instead of an embedded session, and there is no mouse-capture toggle (`M`), because the webview never blocks text selection.
+- **Tab moves between controls**, as in any webview. The TUI uses Tab to toggle focus between list and details.
+
+| Key | Action |
+|-----|--------|
+| `1`–`5` | Switch panel |
+| `j`/`k`, `↑`/`↓` | Navigate the list / scroll the details |
+| `g`/`G` | Jump to first / last |
+| `Enter`, `l`/`→` | Focus the details |
+| `h`/`←` | Back to the list |
+| `Esc` | Close an overlay, clear the filter, or go back to the list |
+| `[`/`]` | Previous / next detail tab |
+| `z` | Cycle layout (Normal / Wide / Expanded) |
+| `/` | Filter the list |
+| `f` | Focus the log filter (Logs tab, Containers and Services) |
+| `x` | Actions menu |
+| `m` | Pin / unpin for log comparison (switches to the Logs tab) |
+| `J`/`K` | Scroll the pinned comparison pane |
+| `a` | Show all containers / only those with a live process |
+| `o` | Sort menu (Containers) |
+| `R` | Reverse the sort (Containers) |
+| `PgUp`/`PgDn`, `Ctrl+D`/`Ctrl+U` | Page / half-page scroll |
+| `y`/`n` | Confirm / cancel a prompt |
+| `F5` | Refresh |
+| `V` | Version |
+| `?` | Help |
+
+Item actions keep their TUI letters (`s` Start, `S` Stop, `r` Restart, `p` Pause/Unpause, `e` Exec,
+`d` Remove, `P` Prune, `u` Up, `D` Down, `c` Copy Logs, `b` Open in Browser). Destructive ones ask
+for confirmation, and `Enter` on the dialog cancels.
 
 ## Keyboard focus and recovery
 

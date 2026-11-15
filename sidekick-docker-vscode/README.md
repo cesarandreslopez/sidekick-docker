@@ -15,11 +15,12 @@ A Docker management dashboard embedded directly in VS Code, VSCodium, and compat
 
 ### From VSIX
 
+Build the shared package first (the extension depends on it by path), then package:
+
 ```bash
+bash scripts/build-all.sh          # from the repo root: installs and builds shared → cli → vscode
 cd sidekick-docker-vscode
-npm install
-npm run build
-npx vsce package
+npx @vscode/vsce package
 code --install-extension sidekick-docker-vscode-*.vsix
 ```
 
@@ -31,7 +32,7 @@ cd sidekick-docker
 bash scripts/build-all.sh
 ```
 
-Then open the `sidekick-docker-vscode` folder in VSCode and press `F5` to launch the Extension Development Host.
+Then open the `sidekick-docker-vscode` folder in VS Code, press `F5` and pick **VS Code Extension Development** in the debugger picker (no `launch.json` is committed) to launch the Extension Development Host.
 
 ## Usage
 
@@ -42,8 +43,9 @@ Sidekick Docker: Open Dashboard
 ```
 
 or press `Ctrl+Alt+D` — `Ctrl`, not `Cmd`, on macOS too (macOS reserves `Cmd+Opt+D`
-for the Dock). The dashboard opens as a webview panel with the same layout and
-capabilities as the terminal TUI, and survives window reloads.
+for the Dock). The dashboard opens as a webview panel with the terminal TUI's layout,
+panels and keys, and survives window reloads. A few keys differ: `F5` refreshes, and exec opens a VS
+Code terminal. See [Dashboard keys](https://cesarandreslopez.github.io/sidekick-docker/features/vscode/#dashboard-keys).
 
 ### Commands
 
