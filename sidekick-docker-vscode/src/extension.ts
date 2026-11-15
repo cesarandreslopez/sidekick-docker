@@ -14,6 +14,8 @@ let watcherService: ContainerWatcherService | undefined;
 let treeProvider: ContainerTreeProvider | undefined;
 let treeView: vscode.TreeView<unknown> | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
+/** Why Docker is unreachable, kept so a later container update keeps saying it. */
+let offlineReason: string | undefined;
 /** Whether the tree's "Connecting…" welcome is still showing. */
 let connecting = true;
 
@@ -69,9 +71,10 @@ function createWatcherService(settings: SidekickSettings): ContainerWatcherServi
       treeProvider!.update(containers, connected);
       connectingDone();
       updateBadge(containers);
-      updateStatusBar(containers, connected);
+      updateStatusBar(containers, connected, connected ? undefined : offlineReason);
     },
     onConnectionChanged: (connected, reason) => {
+      offlineReason = connected ? undefined : reason;
       // A failed connect never lists containers, so it ends "Connecting…" here.
       if (!connected) connectingDone();
       // viewsWelcome text is static; the tree's message can say *why*.
