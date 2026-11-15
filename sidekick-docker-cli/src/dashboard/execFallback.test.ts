@@ -67,3 +67,32 @@ it('lets Ctrl+C return from the shell without treating it as a dashboard error',
   const pending = execFallback('a'); child.emit('exit', null, 'SIGINT'); child.emit('close', null, 'SIGINT');
   await expect(pending).resolves.toBeUndefined();
 });
+
+function probeChild(): EventEmitter & { stdout: EventEmitter; stderr: EventEmitter } {
+  return Object.assign(new EventEmitter(), { stdout: new EventEmitter(), stderr: new EventEmitter() });
+}
+it('probes without a TTY when the session ends 126/127 with nothing on stderr (Engine 29 prints a missing shell on the TTY)', async () => {
+  const probe = probeChild();
+  spawn.mockReturnValueOnce(child).mockReturnValueOnce(probe);
+  const pending = execFallback('a', {}, undefined, '/bin/bash', 'web');
+  child.emit('exit', 127, null); child.emit('close', 127, null);
+  await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+  expect(spawn).toHaveBeenLastCalledWith('docker', ['exec', 'a', '/bin/bash', '-c', 'exit 0'], expect.objectContaining({ stdio: ['ignore', 'pipe', 'pipe'] }));
+  probe.stdout.emit('data', 'OCI runtime exec failed: exec failed: unable to start container process: exec: "/bin/bash": stat /bin/bash: no such file or directory\n');
+  probe.emit('close', 127);
+  await expect(pending).rejects.toThrow('No /bin/bash in web');
+});
+it('treats 127 as an ordinary exit when the probe finds the shell (last command was not found)', async () => {
+  const probe = probeChild();
+  spawn.mockReturnValueOnce(child).mockReturnValueOnce(probe);
+  const pending = execFallback('a', {}, undefined, '/bin/sh', 'web');
+  child.emit('exit', 127, null); child.emit('close', 127, null);
+  await vi.waitFor(() => expect(spawn).toHaveBeenCalledTimes(2));
+  probe.emit('close', 0);
+  await expect(pending).resolves.toBeUndefined();
+});
+it('does not probe for other exit codes', async () => {
+  const pending = execFallback('a'); child.emit('exit', 2, null); child.emit('close', 2, null);
+  await expect(pending).resolves.toBeUndefined();
+  expect(spawn).toHaveBeenCalledTimes(1);
+});
