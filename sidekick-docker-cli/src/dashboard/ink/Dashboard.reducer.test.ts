@@ -158,3 +158,15 @@ describe('mouse capture (A1)', () => {
     expect(reducer(initialState, { type: 'TOGGLE_MOUSE' }).mouseEnabled).toBe(false);
   });
 });
+
+describe('SCROLL_SIDE at the edge (T22)', () => {
+  it('leaves state alone when the selection cannot move', () => {
+    const atEnd = { ...initialState, selectedItemIndex: 2, selectedItemId: 'c3', detailScrollOffset: 7, logFollow: false };
+    expect(reducer(atEnd, { type: 'SCROLL_SIDE', delta: 5, itemCount: 3 })).toBe(atEnd);
+  });
+
+  it('moves by the whole delta from the current index', () => {
+    const next = reducer({ ...initialState, selectedItemIndex: 1 }, { type: 'SCROLL_SIDE', delta: 3, itemCount: 10 });
+    expect(next.selectedItemIndex).toBe(4);
+  });
+});

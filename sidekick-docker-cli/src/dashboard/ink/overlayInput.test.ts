@@ -217,3 +217,98 @@ describe('help/version overlays', () => {
     }
   });
 });
+
+describe('chords never answer or run (T2)', () => {
+  it('Ctrl+Y / Alt+Y do not confirm', () => {
+    for (const key of [bareKey({ ctrl: true }), bareKey({ meta: true })]) {
+      const action = vi.fn();
+      const ctx = makeCtx({ overlay: 'confirm', confirmAction: action });
+      OVERLAY_INPUT_HANDLERS.confirm('y', key, ctx);
+      expect(action).not.toHaveBeenCalled();
+      expect(ctx.dispatched).toEqual([]);
+    }
+  });
+
+  it('Ctrl+R in the actions menu does not run Restart', () => {
+    const handler = vi.fn();
+    const ctx = makeCtx({ overlay: 'context-menu' });
+    ctx.contextActions = [{ key: 'r', label: 'Restart', handler }];
+    OVERLAY_INPUT_HANDLERS['context-menu']('r', bareKey({ ctrl: true }), ctx);
+    expect(handler).not.toHaveBeenCalled();
+    expect(ctx.dispatched).toEqual([]);
+  });
+});
+
+describe('runs of j/k in menus (T22)', () => {
+  it('move the actions menu, sort menu and help by the run length', () => {
+    const menu = makeCtx({ overlay: 'context-menu' });
+    menu.contextActions = [
+      { key: 's', label: 'Start', handler: vi.fn() },
+      { key: 'd', label: 'Remove', handler: vi.fn() },
+      { key: 'e', label: 'Exec', handler: vi.fn() },
+    ];
+    OVERLAY_INPUT_HANDLERS['context-menu']('jj', bareKey(), menu);
+    expect(menu.dispatched).toEqual([{ type: 'CONTEXT_MENU_NAV', delta: 2, itemCount: 3 }]);
+
+    const sort = makeCtx({ overlay: 'sort' });
+    OVERLAY_INPUT_HANDLERS.sort('kkk', bareKey(), sort);
+    expect(sort.dispatched).toEqual([{ type: 'SORT_MENU_NAV', delta: -3 }]);
+
+    const help = makeCtx({ overlay: 'help' });
+    OVERLAY_INPUT_HANDLERS.help('jjjj', bareKey(), help);
+    expect(help.dispatched).toEqual([{ type: 'HELP_SCROLL', delta: 4, max: 12 }]);
+  });
+
+  it('a mixed chunk does nothing in the actions menu', () => {
+    const handler = vi.fn();
+    const menu = makeCtx({ overlay: 'context-menu' });
+    menu.contextActions = [{ key: 'd', label: 'Remove', handler, confirm: true }];
+    OVERLAY_INPUT_HANDLERS['context-menu']('jd', bareKey(), menu);
+    expect(menu.dispatched).toEqual([]);
+  });
+});
+
+describe('help Home/End (T25)', () => {
+  it('jump to the ends', () => {
+    const ctx = makeCtx({ overlay: 'help' });
+    OVERLAY_INPUT_HANDLERS.help('', bareKey({ end: true }), ctx);
+    OVERLAY_INPUT_HANDLERS.help('', bareKey({ home: true }), ctx);
+    expect(ctx.dispatched).toEqual([
+      { type: 'HELP_SCROLL', delta: 12, max: 12 },
+      { type: 'HELP_SCROLL', delta: -12, max: 12 },
+    ]);
+  });
+});
+
+describe('filter prompts drop control characters (T24)', () => {
+  it('strips a pasted newline, tab or BEL from the text', () => {
+    const ctx = makeCtx({ filterString: 'we' });
+    OVERLAY_INPUT_HANDLERS.filter('b\n\x07', bareKey(), ctx);
+    expect(ctx.dispatched).toEqual([{ type: 'SET_FILTER', value: 'web' }]);
+  });
+
+  it('a chunk of only control characters types nothing', () => {
+    const ctx = makeCtx({ filterString: 'web' });
+    OVERLAY_INPUT_HANDLERS.filter('\x07', bareKey(), ctx);
+    expect(ctx.dispatched).toEqual([]);
+  });
+
+  it('pasted tabs toggle the log filter mode once each, and type nothing in the panel filter', () => {
+    const log = makeCtx({ overlay: 'log-filter', logFilterString: 'err' });
+    OVERLAY_INPUT_HANDLERS['log-filter']('\t\t\t', bareKey(), log);
+    expect(log.dispatched).toEqual([
+      { type: 'TOGGLE_LOG_FILTER_MODE' },
+      { type: 'TOGGLE_LOG_FILTER_MODE' },
+      { type: 'TOGGLE_LOG_FILTER_MODE' },
+    ]);
+    const panel = makeCtx({ filterString: 'web' });
+    OVERLAY_INPUT_HANDLERS.filter('\t', bareKey(), panel);
+    expect(panel.dispatched).toEqual([]);
+  });
+
+  it('Esc still clears the log filter', () => {
+    const ctx = makeCtx({ overlay: 'log-filter', logFilterString: 'err' });
+    OVERLAY_INPUT_HANDLERS['log-filter']('', bareKey({ escape: true }), ctx);
+    expect(ctx.dispatched).toContainEqual({ type: 'SET_LOG_FILTER', value: '' });
+  });
+});

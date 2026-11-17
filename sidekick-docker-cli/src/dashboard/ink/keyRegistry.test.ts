@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Key } from 'ink';
-import { GLOBAL_BINDINGS, buildHelpBindings, buildContextHint } from './keyRegistry';
+import { GLOBAL_BINDINGS, buildHelpBindings, buildContextHint, findGlobalBinding, navigateBy } from './keyRegistry';
 import type { KeyContext } from './keyRegistry';
 import type { DashboardUIState } from './dashboardTypes';
 import type { SidePanel } from '../panels/types';
@@ -54,6 +54,7 @@ function makeCtx(overrides: Partial<KeyContext> = {}): KeyContext {
     exit: vi.fn(),
     refresh: vi.fn(),
     helpMaxScroll: 0,
+    tooSmall: false,
     secondaryDetailLineCount: 0,
     ...overrides,
   };
@@ -90,6 +91,8 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
       { input: '', key: bareKey({ downArrow: true }), id: 'nav' },
       { input: 'g', id: 'jump-edges' },
       { input: 'G', id: 'jump-edges' },
+      { input: '', key: bareKey({ home: true }), id: 'jump-edges' },
+      { input: '', key: bareKey({ end: true }), id: 'jump-edges' },
       { input: '', key: bareKey({ return: true }), id: 'descend' },
       { input: 'h', id: 'focus-back' },
       { input: '', key: bareKey({ leftArrow: true }), id: 'focus-back' },
@@ -253,5 +256,75 @@ describe('buildContextHint', () => {
     spec?.run(ctx, 'r', bareKey({ ctrl: true }));
     expect(ctx.refresh).toHaveBeenCalledTimes(1);
     expect(GLOBAL_BINDINGS.some(b => b.match('r', bareKey()))).toBe(false);
+  });
+});
+
+describe('findGlobalBinding (T28)', () => {
+  it('skips bare-letter bindings while Ctrl or Meta is held', () => {
+    expect(findGlobalBinding('q', bareKey({ ctrl: true }))).toBeUndefined();
+    expect(findGlobalBinding('x', bareKey({ meta: true }))).toBeUndefined();
+    expect(findGlobalBinding('g', bareKey({ ctrl: true }))).toBeUndefined();
+    expect(findGlobalBinding('', bareKey({ meta: true, upArrow: true }))).toBeUndefined();
+  });
+
+  it('still finds the chords themselves', () => {
+    expect(findGlobalBinding('r', bareKey({ ctrl: true }))?.id).toBe('refresh');
+    expect(findGlobalBinding('d', bareKey({ ctrl: true }))?.id).toBe('half-page-scroll');
+    expect(findGlobalBinding('c', bareKey({ ctrl: true }))?.id).toBe('quit-ctrl-c');
+  });
+
+  it('matches bare keys as before', () => {
+    expect(findGlobalBinding('q', bareKey())?.id).toBe('quit');
+    expect(findGlobalBinding('', bareKey({ tab: true }))?.id).toBe('focus-toggle');
+  });
+
+  it('only chord bindings are flagged as chords', () => {
+    const chords = GLOBAL_BINDINGS.filter(b => b.chord).map(b => b.id).sort();
+    expect(chords).toEqual(['half-page-scroll', 'quit-ctrl-c', 'refresh']);
+  });
+});
+
+describe('Home/End (T25)', () => {
+  it('Home selects the first item and End the last with the list focused', () => {
+    const items = [
+      { id: 'c1', label: 'web', sortKey: 0, data: {} },
+      { id: 'c2', label: 'db', sortKey: 1, data: {} },
+    ];
+    const home = makeCtx({ currentItems: items, clampedSelection: 1 });
+    findGlobalBinding('', bareKey({ home: true }))!.run(home, '', bareKey({ home: true }));
+    expect(home.dispatch).toHaveBeenCalledWith({ type: 'SELECT_ITEM', index: 0, id: 'c1' });
+    const end = makeCtx({ currentItems: items });
+    findGlobalBinding('', bareKey({ end: true }))!.run(end, '', bareKey({ end: true }));
+    expect(end.dispatch).toHaveBeenCalledWith({ type: 'SELECT_ITEM', index: 1, id: 'c2' });
+  });
+
+  it('Home scrolls the detail pane to the top when it has focus', () => {
+    const ctx = makeCtx({ state: makeState({ focusTarget: 'detail' }) });
+    findGlobalBinding('', bareKey({ home: true }))!.run(ctx, '', bareKey({ home: true }));
+    expect(ctx.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'SCROLL_DETAIL', offset: 0 }));
+  });
+});
+
+describe('navigateBy (T22)', () => {
+  it('moves the list selection by a delta the reducer applies to its own state', () => {
+    const items = [
+      { id: 'c1', label: 'web', sortKey: 0, data: {} },
+      { id: 'c2', label: 'db', sortKey: 1, data: {} },
+    ];
+    const ctx = makeCtx({ currentItems: items });
+    navigateBy(ctx, 4);
+    expect(ctx.dispatch).toHaveBeenCalledWith({ type: 'SCROLL_SIDE', delta: 4, itemCount: 2 });
+  });
+
+  it('scrolls the detail pane when it has focus', () => {
+    const ctx = makeCtx({ state: makeState({ focusTarget: 'detail' }) });
+    navigateBy(ctx, -3);
+    expect(ctx.dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'SCROLL_DETAIL_DELTA', delta: -3, followTab: true }));
+  });
+
+  it('does nothing on an empty list', () => {
+    const ctx = makeCtx({ currentItems: [] });
+    navigateBy(ctx, 2);
+    expect(ctx.dispatch).not.toHaveBeenCalled();
   });
 });

@@ -48,6 +48,8 @@ export interface KeyContext extends KeyQueryContext {
   refresh: () => void;
   /** Scroll range of the help overlay at the current size (0 when it fits). */
   helpMaxScroll: number;
+  /** The terminal is below the minimum size: nothing is drawn but the size warning. */
+  tooSmall: boolean;
 }
 
 export type KeyCategory = 'Navigation' | 'View' | 'Filters & Sort' | 'System';
@@ -57,6 +59,12 @@ export interface KeyBindingSpec {
   /** Display form for help/hints, e.g. ['j/k', '↑/↓']. */
   keys: string[];
   match: (input: string, key: Key) => boolean;
+  /**
+   * The binding is a Ctrl/Meta chord (Ctrl+R). Every other binding is skipped
+   * while Ctrl or Meta is held: Ink reports Ctrl+Q as input 'q' with
+   * key.ctrl set, so Ctrl+Q quit and Alt+x opened the actions menu.
+   */
+  chord?: boolean;
   label: string;
   category: KeyCategory;
   /** When false, the key press shows a "Not available here" toast and the help entry is dimmed. */
@@ -113,6 +121,7 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     keys: ['Ctrl+C'],
     // Matched pre-overlay in useKeyboardHandler; listed here so help stays complete.
     match: (input, key) => key.ctrl && input === 'c',
+    chord: true,
     label: 'Quit (always)',
     category: 'System',
     run: (ctx) => ctx.exit(),
@@ -138,6 +147,7 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     keys: ['Ctrl+R'],
     // Ctrl+R, not F5: Ink reports F5 with no key flag at all.
     match: (input, key) => key.ctrl && input === 'r',
+    chord: true,
     label: 'Refresh now',
     category: 'System',
     run: (ctx) => ctx.refresh(),
@@ -347,18 +357,19 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     id: 'half-page-scroll',
     keys: ['Ctrl+d/u'],
     match: (input, key) => key.ctrl && (input === 'd' || input === 'u'),
+    chord: true,
     label: 'Half page down / up',
     category: 'Navigation',
     run: (ctx, input) => pageScroll(ctx, input === 'd' ? 1 : -1, true),
   },
   {
     id: 'jump-edges',
-    keys: ['g/G'],
-    match: (input) => input === 'g' || input === 'G',
+    keys: ['g/G', 'Home/End'],
+    match: (input, key) => input === 'g' || input === 'G' || key.home || key.end,
     label: 'Jump to first / last',
     category: 'Navigation',
-    run: (ctx, input) => {
-      const top = input === 'g';
+    run: (ctx, input, key) => {
+      const top = input === 'g' || key.home;
       // G resumes a paused follow whatever has focus — the wheel pauses it
       // without moving focus, and the paused hint says "G to resume", yet
       // with the list focused G used to select the last item instead. That
@@ -441,6 +452,38 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     },
   },
 ];
+
+/**
+ * The global binding a keypress triggers, if any (first match wins). While
+ * Ctrl or Meta is held only chord bindings are considered, so a chord can
+ * never fire the binding of its bare letter.
+ */
+export function findGlobalBinding(input: string, key: Key): KeyBindingSpec | undefined {
+  const chorded = key.ctrl || key.meta;
+  return GLOBAL_BINDINGS.find(b => (b.chord === true || !chorded) && b.match(input, key));
+}
+
+/**
+ * Move by `delta` rows from wherever the reducer state is now: the list
+ * selection when it has focus, else the detail scroll. Used for a run of
+ * j/k ("jjjj" in one chunk), which used to be dropped entirely; looping the
+ * single-step binding would not work, since its clampedSelection is the
+ * value from the last render.
+ */
+export function navigateBy(ctx: KeyContext, delta: number): void {
+  if (ctx.state.focusTarget === 'side') {
+    if (ctx.currentItems.length === 0) return;
+    ctx.dispatch({ type: 'SCROLL_SIDE', delta, itemCount: ctx.currentItems.length });
+    return;
+  }
+  ctx.dispatch({
+    type: 'SCROLL_DETAIL_DELTA',
+    delta,
+    totalLines: ctx.detailLines.length,
+    viewportHeight: ctx.detailViewportHeight,
+    followTab: isAutoScrollTab(ctx),
+  });
+}
 
 /** Availability-annotated view of the registry, for help rendering. */
 export interface HelpBinding {

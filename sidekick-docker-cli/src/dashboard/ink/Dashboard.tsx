@@ -153,6 +153,8 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
     case 'SCROLL_SIDE': {
       if (action.itemCount === 0) return state;
       const next = Math.max(0, Math.min(state.selectedItemIndex + action.delta, action.itemCount - 1));
+      // Already at the edge: not a selection change, so the detail scroll stays.
+      if (next === state.selectedItemIndex) return state;
       // A selection change like SELECT_ITEM: every detail offset belongs to the old item.
       return {
         ...state,
@@ -643,7 +645,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     ...keyQueryCtx,
     dispatch, panels, clampedSelection, currentItems, detailLines,
     detailViewportHeight: scrollViewportHeight, sideScroll, addToast, exit, refresh,
-    helpMaxScroll,
+    helpMaxScroll, tooSmall,
   };
 
   // Keyboard input (extracted hook)

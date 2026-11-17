@@ -2,7 +2,8 @@ import type { Key } from 'ink';
 import type { PanelAction, PanelItem } from '../panels/types';
 import type { Action, DashboardUIState, OverlayKind, ToastSeverity } from './dashboardTypes';
 import { SORT_FIELDS, sortFieldLabel } from './dashboardTypes';
-import { executeAction } from './executeAction';
+import { executeAction, findPanelAction } from './executeAction';
+import { navigationRun, stripControlCharacters, tabRun } from './inputText';
 import { sortDirectionLabel } from 'sidekick-docker-shared';
 
 
@@ -49,23 +50,34 @@ function handleFilterInput(
     onTab();
     return;
   }
+  // A pasted run of tabs: one mode toggle each, not tab characters in the query.
+  const tabs = tabRun(input);
+  if (tabs > 0) {
+    if (onTab) for (let i = 0; i < tabs; i++) onTab();
+    return;
+  }
   if (key.backspace || key.delete) {
     dispatch({ type: setAction, value: currentValue.slice(0, -1) });
     return;
   }
-  if (input && !key.ctrl && !key.meta) {
-    dispatch({ type: setAction, value: currentValue + input });
+  // Control characters (a pasted newline, tab or BEL) never belong in a
+  // filter: they matched nothing and drew as garbage in the prompt.
+  const text = key.ctrl || key.meta ? '' : stripControlCharacters(input);
+  if (text) {
+    dispatch({ type: setAction, value: currentValue + text });
   }
 }
 
 const confirm: OverlayInputHandler = (input, key, { state, dispatch }) => {
-  if (input === 'y' || input === 'Y') {
+  // A chord is never an answer: Ctrl+Y / Alt+Y used to confirm a removal.
+  const plain = !key.ctrl && !key.meta;
+  if (plain && (input === 'y' || input === 'Y')) {
     state.confirmAction?.();
     dispatch({ type: 'SET_CONFIRM', action: null, message: '' });
     return;
   }
   // Enter is the safe default: cancel. q also cancels for consistency with other overlays.
-  if (input === 'n' || input === 'N' || input === 'q' || key.escape || key.return) {
+  if ((plain && (input === 'n' || input === 'N' || input === 'q')) || key.escape || key.return) {
     dispatch({ type: 'SET_CONFIRM', action: null, message: '' });
   }
 };
@@ -91,6 +103,11 @@ const contextMenu: OverlayInputHandler = (input, key, ctx) => {
     dispatch({ type: 'SET_OVERLAY', overlay: null });
     return;
   }
+  const run = navigationRun(input);
+  if (run !== 0) {
+    dispatch({ type: 'CONTEXT_MENU_NAV', delta: run, itemCount: contextActions.length });
+    return;
+  }
   if (input === 'j' || key.downArrow) {
     dispatch({ type: 'CONTEXT_MENU_NAV', delta: 1, itemCount: contextActions.length });
     return;
@@ -109,7 +126,8 @@ const contextMenu: OverlayInputHandler = (input, key, ctx) => {
     }
     return;
   }
-  const match = contextActions.find(a => a.key === input);
+  // Same rule as outside the menu: Ctrl+R is not R(estart).
+  const match = findPanelAction(contextActions, input, key);
   if (match && selectedItem) {
     dispatch({ type: 'SET_OVERLAY', overlay: null });
     executeAction(match, selectedItem, dispatch, addToast, removeToast);
@@ -121,12 +139,14 @@ const help: OverlayInputHandler = (input, key, { dispatch, helpMaxScroll: max })
     dispatch({ type: 'SET_OVERLAY', overlay: null });
     return;
   }
-  const delta = input === 'j' || key.downArrow ? 1
+  const run = navigationRun(input);
+  const delta = run !== 0 ? run
+    : input === 'j' || key.downArrow ? 1
     : input === 'k' || key.upArrow ? -1
     : key.pageDown || (key.ctrl && input === 'd') ? 10
     : key.pageUp || (key.ctrl && input === 'u') ? -10
-    : input === 'G' ? max
-    : input === 'g' ? -max
+    : input === 'G' || key.end ? max
+    : input === 'g' || key.home ? -max
     : 0;
   if (delta !== 0) dispatch({ type: 'HELP_SCROLL', delta, max });
 };
@@ -140,6 +160,11 @@ const version: OverlayInputHandler = (input, key, { dispatch }) => {
 const sort: OverlayInputHandler = (input, key, { state, dispatch, addToast }) => {
   if (key.escape || input === 'q') {
     dispatch({ type: 'SET_OVERLAY', overlay: null });
+    return;
+  }
+  const run = navigationRun(input);
+  if (run !== 0) {
+    dispatch({ type: 'SORT_MENU_NAV', delta: run });
     return;
   }
   if (input === 'j' || key.downArrow) {
