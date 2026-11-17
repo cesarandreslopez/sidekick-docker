@@ -61,6 +61,13 @@ describe('runProcess', () => {
     expect(r).toMatchObject({ exitCode: 0, stdout: 'x' });
   });
 
+  it('blames a missing working directory, not the binary', async () => {
+    await expect(runProcess(node, ['-e', ''], { cwd: '/definitely/not/a/dir' })).rejects.toMatchObject({
+      code: 'ENOENT',
+      message: 'The working directory /definitely/not/a/dir does not exist.',
+    });
+  });
+
   it('rejects when the command cannot be spawned', async () => {
     await expect(runProcess('sidekick-definitely-not-a-binary', [])).rejects.toMatchObject({
       code: 'ENOENT',

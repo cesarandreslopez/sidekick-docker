@@ -60,13 +60,15 @@ describe('prune skips the confirm when there is nothing to prune (B-e)', () => {
     expect(pruneSkip(panel, metrics({ volumes: [vol(false, true)] as never }))).toBeNull();
   });
 
-  it('networks: default and attached networks are not candidates', () => {
+  it('networks: only built-in networks prove there is nothing to prune', () => {
     const panel = new NetworksPanel({} as DockerClient, () => {});
     const net = (isDefault: boolean, attached: number) => ({
       id: 'n', name: 'n', driver: 'bridge', scope: 'local', isDefault, internal: false, attachable: false,
       ipamDriver: '', ipam: [], containers: Array.from({ length: attached }, () => ({ containerId: 'c', containerName: 'c', ipv4Address: '' })), labels: {},
     });
-    expect(pruneSkip(panel, metrics({ networks: [net(true, 0), net(false, 1)] as never }))).toBe('No unused networks to prune');
+    expect(pruneSkip(panel, metrics({ networks: [net(true, 0), net(true, 2)] as never }))).toBe('No unused networks to prune');
+    // The attached containers may all be stopped, which the daemon still prunes: ask.
+    expect(pruneSkip(panel, metrics({ networks: [net(true, 0), net(false, 1)] as never }))).toBeNull();
     expect(pruneSkip(panel, metrics({ networks: [net(false, 0)] as never }))).toBeNull();
   });
 });

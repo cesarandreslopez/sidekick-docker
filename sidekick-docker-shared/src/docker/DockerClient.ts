@@ -445,8 +445,10 @@ export class DockerClient {
       // older daemons as `["<none>:<none>"]` or null. Normalise all three, or
       // dangling images go undetected and the image prune count reads 0.
       const tags = realImageTags(validated.RepoTags);
-      // An image pulled by digest has no tags but still a digest reference;
-      // `docker image prune` keeps it, so it is not dangling.
+      // An image pulled by digest has no tags but still a digest reference.
+      // The containerd image store's prune keeps it; the graphdriver store's
+      // dangling prune removes it too — so it is not counted as dangling, and
+      // pruneNothingText never claims "nothing to prune" while one is listed.
       const digests = (validated.RepoDigests ?? []).filter(d => d && d !== '<none>@<none>');
       return {
         id: shortId(validated.Id.replace('sha256:', '')),

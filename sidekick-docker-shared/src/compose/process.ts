@@ -1,4 +1,5 @@
 import { spawn } from 'child_process';
+import { existsSync } from 'node:fs';
 import { StringDecoder } from 'node:string_decoder';
 
 export interface ComposeExecResult {
@@ -86,7 +87,15 @@ export function runProcess(cmd: string, args: string[], opts: RunProcessOptions 
     proc.on('error', (err: NodeJS.ErrnoException) => {
       cleanup();
       // "spawn docker ENOENT" told nobody what to do. Keep `code` so callers
-      // that branch on a missing binary still can.
+      // that branch on a missing binary still can. Spawn also reports ENOENT
+      // for a missing working directory — don't blame the binary for that.
+      if (err.code === 'ENOENT' && opts.cwd && !existsSync(opts.cwd)) {
+        reject(Object.assign(
+          new Error(`The working directory ${opts.cwd} does not exist.`, { cause: err }),
+          { code: err.code },
+        ));
+        return;
+      }
       if (err.code === 'ENOENT') {
         reject(Object.assign(
           new Error(`The ${cmd} CLI was not found on PATH. Install it, or add it to PATH.`, { cause: err }),

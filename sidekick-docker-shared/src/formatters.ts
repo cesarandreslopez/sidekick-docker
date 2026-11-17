@@ -151,6 +151,7 @@ export type PruneKind = 'containers' | 'images' | 'volumes' | 'networks';
 interface PruneCandidateFields {
   state?: string;
   isDangling?: boolean;
+  repoTags?: readonly string[];
   isInUse?: boolean;
   anonymous?: boolean;
   pruneScope?: VolumePruneScope;
@@ -214,19 +215,37 @@ const PRUNE_NOTHING: Record<PruneKind, string> = {
 };
 
 /**
- * When the listed items show a prune of `kind` would remove nothing, the text
- * to show instead of asking a red "cannot be undone" confirmation; null when
- * there is something to prune or the count is unknown (a volume prune on a
- * daemon whose version could not be read).
+ * When the listed items prove a prune of `kind` would remove nothing, the text
+ * to show instead of asking a red "cannot be undone" confirmation; null
+ * whenever the daemon might still remove something, so the user is asked as
+ * before (the result then says honestly if nothing went).
+ *
+ * Only certain where the listing carries the daemon's own rule:
+ * - images: any untagged image might go — the graphdriver store's dangling
+ *   prune also removes digest-only images, which `isDangling` leaves out
+ *   (the containerd store keeps them);
+ * - networks: the daemon prunes a network with only stopped containers
+ *   attached, which the listing cannot tell apart, so only "no non-default
+ *   network at all" is certain;
+ * - volumes: unknown when the daemon version (prune scope) is unknown.
  */
 export function pruneNothingText(kind: PruneKind, items: readonly PruneCandidateFields[]): string | null {
   if (pruneCandidateCount(kind, items) > 0) return null;
-  if (kind === 'volumes') {
-    switch (volumePruneScopeOf(items)) {
-      case 'unknown': return null;
-      case 'anonymous': return 'No unused anonymous volumes to prune — named volumes are kept';
-      default: break;
-    }
+  switch (kind) {
+    case 'images':
+      if (items.some(i => realImageTags(i.repoTags ?? []).length === 0)) return null;
+      break;
+    case 'networks':
+      if (items.some(n => !n.isDefault)) return null;
+      break;
+    case 'volumes':
+      switch (volumePruneScopeOf(items)) {
+        case 'unknown': return null;
+        case 'anonymous': return 'No unused anonymous volumes to prune — named volumes are kept';
+        default: break;
+      }
+      break;
+    default: break;
   }
   return PRUNE_NOTHING[kind];
 }

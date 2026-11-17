@@ -76,11 +76,24 @@ describe('prune wording', () => {
   it('skips the confirmation when the listed items show nothing to prune', () => {
     expect(pruneNothingText('containers', [{ state: 'running' }])).toBe('No stopped containers to prune');
     expect(pruneNothingText('containers', [{ state: 'exited' }])).toBeNull();
-    expect(pruneNothingText('images', [{ isDangling: false }])).toBe('No dangling images to prune');
+    expect(pruneNothingText('images', [{ isDangling: false, repoTags: ['nginx:latest'] }])).toBe('No dangling images to prune');
     expect(pruneNothingText('networks', [{ isDefault: true }])).toBe('No unused networks to prune');
     expect(pruneNothingText('volumes', [{ isInUse: false, anonymous: false, pruneScope: 'anonymous' }]))
       .toBe('No unused anonymous volumes to prune — named volumes are kept');
     expect(pruneNothingText('volumes', [{ isInUse: true, pruneScope: 'all' }])).toBe('No unused volumes to prune');
+  });
+
+  it('still asks when the daemon might remove an image the count leaves out', () => {
+    // Digest-only (untagged, not counted as dangling): the graphdriver store prunes it.
+    expect(pruneNothingText('images', [{ isDangling: false, repoTags: ['<none>:<none>'] }])).toBeNull();
+    expect(pruneNothingText('images', [{ isDangling: false, repoTags: [] }])).toBeNull();
+    // No tag information: not certain either.
+    expect(pruneNothingText('images', [{ isDangling: false }])).toBeNull();
+  });
+
+  it('still asks while any non-default network is listed (stopped containers do not keep one)', () => {
+    expect(pruneNothingText('networks', [{ isDefault: true }, { isDefault: false, containers: ['stopped'] }])).toBeNull();
+    expect(pruneNothingText('networks', [])).toBe('No unused networks to prune');
   });
 
   it('still asks when the volume count is unknown', () => {
