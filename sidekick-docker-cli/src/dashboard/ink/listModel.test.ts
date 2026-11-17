@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { orderItems, resolveSelection, isPinGone } from './listModel';
+import { orderItems, resolveSelection, isPinGone, listStateOf } from './listModel';
 import type { PanelItem } from '../panels/types';
 
 const item = (id: string, sortKey: number, data: unknown = {}): PanelItem => ({ id, label: id, sortKey, data });
@@ -69,5 +69,17 @@ describe('isPinGone (T1)', () => {
     expect(isPinGone('z', [], 'ready')).toBe(false);
     expect(isPinGone('z', all, 'loading')).toBe(false);
     expect(isPinGone('z', all, 'disconnected')).toBe(false);
+  });
+});
+
+describe('listStateOf (T7)', () => {
+  it('says connecting until the first refresh lands, even when flagged disconnected', () => {
+    expect(listStateOf(false, null)).toBe('loading');
+    expect(listStateOf(true, null)).toBe('loading');
+  });
+
+  it('reports a lost daemon only once data has been fetched', () => {
+    expect(listStateOf(false, new Date())).toBe('disconnected');
+    expect(listStateOf(true, new Date())).toBe('ready');
   });
 });

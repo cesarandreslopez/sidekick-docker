@@ -2,8 +2,18 @@ import React from 'react';
 import { execFallback } from '../dashboard/execFallback.js';
 import { resolveExecShell } from '../dashboard/execShell';
 import type { Command } from 'commander';
-import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId, errorMessage, browserHostForEndpoint } from 'sidekick-docker-shared';
+import { ComposeClient, EventWatcher, StatsSampler, dockerCliEnv, shortId, errorMessage, browserHostForEndpoint, describeDockerEndpoint } from 'sidekick-docker-shared';
 import { debugLog } from '../utils/debug';
+import { ansi } from '../formatters';
+import {
+  DASHBOARD_EXIT_SIGNALS,
+  connectingLine,
+  createFatalHandler,
+  execFallbackBanner,
+  inkStdout,
+  installFatalGuard,
+  signalExitCode,
+} from './dashboardLifecycle';
 import { connectOrExit } from '../utils/connect';
 import { copyToClipboard } from '../utils/clipboard';
 import { openUrl } from '../utils/openUrl';
@@ -24,8 +34,11 @@ import type { DashboardViewState } from '../dashboard/ink/Dashboard';
 export async function dashboardAction(_opts: Record<string, unknown>, cmd: Command): Promise<void> {
   const globalOpts = cmd.optsWithGlobals();
 
-  // Create Docker client and verify the daemon is reachable
+  // Create Docker client and verify the daemon is reachable. A slow endpoint
+  // (ssh://, a remote tcp://) used to be a blank wait with no hint of where
+  // it was connecting.
   const socket = globalOpts.socket as string | undefined;
+  if (process.stderr.isTTY) process.stderr.write(`${ansi.dim(connectingLine(describeDockerEndpoint(socket)))}\n`);
   const client = await connectOrExit({ socket });
 
   // Subprocesses cannot see the endpoint dockerode was configured with, so
@@ -370,13 +383,17 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   const onExecFallback = async (containerId: string, containerName: string): Promise<void> => {
     externalExec = true;
     try {
+      // Ink has left the alternate screen by now: say where the dashboard went.
+      process.stderr.write(`${ansi.dim(execFallbackBanner(containerName))}\n`);
       await execFallback(containerId, cliEnv, execAbort.signal, execShell, containerName);
     } finally {
       externalExec = false;
     }
   };
 
-  // Render with Ink
+  // Render with Ink, in the alternate screen: the user's scrollback and shell
+  // output come back untouched on exit. Ctrl+C is the dashboard's own key —
+  // with Ink's default exitOnCtrlC it never reached the embedded exec shell.
   const { render } = await import('ink');
 
   const instance = render(
@@ -391,6 +408,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       execShell,
       mouse,
     }),
+    { alternateScreen: true, exitOnCtrlC: false, stdout: inkStdout(process.stdout) },
   );
 
   const streamManagers = [logManager, secondaryLogManager, statsManager, composeLogManager, secondaryComposeLogManager];
@@ -461,25 +479,39 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   }
 
   // Registering a listener suppresses Node's default exit-on-signal, so the
-  // handler has to finish the job: stop everything, unmount Ink (restoring the
-  // terminal — alternate screen, cursor, raw mode) and let waitUntilExit()
-  // below exit. Previously SIGTERM only disposed the streams and left a frozen
-  // TUI running. The timer is a backstop if unmounting itself hangs.
-  const shutdown = () => {
+  // handler has to finish the job: stop everything, unmount Ink (which leaves
+  // the alternate screen and restores the cursor and raw mode) and let
+  // waitUntilExit() below exit with the signal's status (SIGINT 130, SIGTERM
+  // 143), not 0. The timer is a backstop if unmounting itself hangs.
+  let exitCode = 0;
+  const onSignal = (signal: NodeJS.Signals) => {
+    // During the `docker exec` fallback the child owns the terminal and Ctrl+C
+    // belongs to it.
+    if (signal === 'SIGINT' && externalExec) return;
+    exitCode = signalExitCode(signal);
     cleanup();
     instance.unmount();
-    setTimeout(() => process.exit(0), 2000).unref();
+    setTimeout(() => process.exit(exitCode), 2000).unref();
   };
-  // During the `docker exec` fallback the child owns the terminal and Ctrl+C
-  // belongs to it.
-  const onSigint = () => { if (!externalExec) shutdown(); };
-  process.on('SIGINT', onSigint);
-  process.on('SIGTERM', shutdown);
+  for (const signal of DASHBOARD_EXIT_SIGNALS) process.on(signal, onSignal);
+
+  // An uncaught error used to be printed into the alternate screen (or a raw
+  // terminal) and vanish with it: restore the terminal first, then report.
+  const removeFatalGuard = installFatalGuard(createFatalHandler({
+    teardown: () => { cleanup(); instance.unmount(); },
+    write: (text) => { process.stderr.write(text); },
+    exit: (code) => process.exit(code),
+    describe: errorMessage,
+    verbose: globalOpts.verbose === true || Boolean(process.env.DEBUG),
+  }));
 
   // Wait for exit
-  await instance.waitUntilExit();
-  process.removeListener('SIGINT', onSigint);
-  process.removeListener('SIGTERM', shutdown);
-  cleanup();
-  process.exit(0);
+  try {
+    await instance.waitUntilExit();
+  } finally {
+    for (const signal of DASHBOARD_EXIT_SIGNALS) process.removeListener(signal, onSignal);
+    removeFatalGuard();
+    cleanup();
+  }
+  process.exit(exitCode);
 }

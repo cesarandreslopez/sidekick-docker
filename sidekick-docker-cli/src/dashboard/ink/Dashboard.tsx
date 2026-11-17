@@ -37,7 +37,7 @@ import { maxScrollOffset } from './windowLines';
 import { appendExecOutput, ExecOutputBuffer, isDetachKey } from './execOutput';
 import { buildHelpSections, layoutHelp } from './helpLayout';
 import { toastDuration } from './toastLayout';
-import { orderItems, resolveSelection, isPinGone } from './listModel';
+import { orderItems, resolveSelection, isPinGone, listStateOf } from './listModel';
 import { detailTabSuffix } from './tabLayout';
 import { contextMenuTitle } from './overlayHitTest';
 import { DEFAULT_EXEC_SHELL, describeExecExit } from '../execShell';
@@ -418,9 +418,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const sideWidth = state.layoutMode === 'expanded' ? 0
     : state.layoutMode === 'wide' ? wideWidth
     : SIDE_PANEL_WIDTH;
-  const listState: 'disconnected' | 'loading' | 'ready' = !metrics.daemonConnected
-    ? 'disconnected'
-    : metrics.lastRefresh == null ? 'loading' : 'ready';
+  const listState = listStateOf(metrics.daemonConnected, metrics.lastRefresh);
 
   // Merge log filter UI state into metrics. Panels receive this everywhere —
   // getItems as well as tab renders — so actions such as Copy Logs see the

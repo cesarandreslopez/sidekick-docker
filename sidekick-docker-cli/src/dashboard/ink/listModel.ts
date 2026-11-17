@@ -69,6 +69,19 @@ export function resolveSelection(
   return { index: clamped, id: items[clamped].id, replaced: id !== null };
 }
 
+export type ListState = 'disconnected' | 'loading' | 'ready';
+
+/**
+ * What an empty side list means. Nothing fetched yet is "connecting" even
+ * when the daemon is flagged down: the first refresh failing used to say
+ * "Docker daemon unreachable — waiting to reconnect" before anything had
+ * been tried twice.
+ */
+export function listStateOf(daemonConnected: boolean, lastRefresh: Date | null | undefined): ListState {
+  if (lastRefresh == null) return 'loading';
+  return daemonConnected ? 'ready' : 'disconnected';
+}
+
 /**
  * Whether a compare pin points at an item that no longer exists. Checked
  * against the unfiltered list, so typing a filter or hiding stopped
@@ -78,7 +91,7 @@ export function resolveSelection(
 export function isPinGone(
   pinnedId: string | null,
   allItems: readonly PanelItem[],
-  listState: 'disconnected' | 'loading' | 'ready',
+  listState: ListState,
 ): boolean {
   if (pinnedId === null || listState !== 'ready' || allItems.length === 0) return false;
   return !allItems.some(it => it.id === pinnedId);
