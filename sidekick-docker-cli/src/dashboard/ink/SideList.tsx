@@ -4,6 +4,7 @@ import type { PanelItem } from '../panels/types';
 import { windowLines } from './windowLines';
 import { layoutSideRow } from './sideListLayout';
 import { ACCENT } from '../../theme';
+import { wrapText } from './overlayHitTest';
 
 export type ListState = 'disconnected' | 'loading' | 'ready';
 
@@ -24,7 +25,12 @@ interface SideListProps {
   listState?: ListState;
   /** Containers hidden by the running-only toggle (a), for its empty state. */
   hiddenByRunningOnly?: number;
+  /** Why this panel's resource could not be listed (the last refresh's error), for its empty state. */
+  unavailableReason?: string;
 }
+
+/** Rows the reason may wrap to inside the empty-state block. */
+const REASON_MAX_LINES = 3;
 
 /** Empty-state hint per panel: gray lines, then the command to run (last line, accent). */
 const EMPTY_HINTS: Record<string, string[]> = {
@@ -36,7 +42,7 @@ const EMPTY_HINTS: Record<string, string[]> = {
   services: ['Found from compose labels', 'or a compose file in CWD.', 'Start a compose project:', '  docker compose up -d'],
 };
 
-export function SideList({ items, selectedIndex, scrollOffset, focused, width, viewportHeight, panelTitle, filterString, panelId, totalCount, runningCount, compareItemId, listState = 'ready', hiddenByRunningOnly = 0 }: SideListProps): React.ReactElement {
+export function SideList({ items, selectedIndex, scrollOffset, focused, width, viewportHeight, panelTitle, filterString, panelId, totalCount, runningCount, compareItemId, listState = 'ready', hiddenByRunningOnly = 0, unavailableReason }: SideListProps): React.ReactElement {
   // viewportHeight already excludes the title row (RESERVED_UI_ROWS);
   // windowLines budgets the ▲/▼ indicator rows inside it.
   const win = windowLines(items, scrollOffset, viewportHeight);
@@ -54,6 +60,8 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
 
   // Inner width available for item content (minus 2 for border chars)
   const innerWidth = width - 2;
+  // Indented one space, like the rest of the empty-state text.
+  const reasonLines = unavailableReason ? wrapText(unavailableReason, innerWidth - 1, REASON_MAX_LINES) : [];
 
   return (
     // flexShrink 0: every row is laid out to exactly `width` (and the mouse
@@ -141,7 +149,20 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
       {items.length === 0 && !filterString && listState === 'disconnected' && (
         <Box flexDirection="column" paddingTop={1}>
           <Text color="red" wrap="truncate">{' \u25CB Docker daemon unreachable'}</Text>
+          {reasonLines.map((line, i) => (
+            <Text key={i} color="gray" wrap="truncate">{` ${line}`}</Text>
+          ))}
           <Text color="gray" dimColor wrap="truncate">{' Waiting to reconnect\u2026'}</Text>
+        </Box>
+      )}
+      {items.length === 0 && !filterString && listState === 'ready' && reasonLines.length > 0 && (
+        <Box flexDirection="column" paddingTop={1}>
+          {/* Listing failed: "No images found" would claim there are none. */}
+          <Text color="yellow" wrap="truncate">{` \u26A0 ${panelTitle} unavailable`}</Text>
+          {reasonLines.map((line, i) => (
+            <Text key={i} color="gray" wrap="truncate">{` ${line}`}</Text>
+          ))}
+          <Text color="gray" dimColor wrap="truncate">{' Ctrl+R to retry'}</Text>
         </Box>
       )}
       {items.length === 0 && !filterString && listState === 'loading' && (
@@ -149,14 +170,14 @@ export function SideList({ items, selectedIndex, scrollOffset, focused, width, v
           <Text color="gray" wrap="truncate">{' Connecting to Docker\u2026'}</Text>
         </Box>
       )}
-      {items.length === 0 && !filterString && listState === 'ready' && hiddenByRunningOnly > 0 && (
+      {items.length === 0 && !filterString && listState === 'ready' && reasonLines.length === 0 && hiddenByRunningOnly > 0 && (
         <Box flexDirection="column" paddingTop={1}>
           {/* Running-only (a) with nothing running is not "no containers". */}
           <Text color="gray" wrap="truncate">{' \u2500 No running containers'}</Text>
           <Text color="gray" dimColor wrap="truncate">{` Press a to show all (${hiddenByRunningOnly})`}</Text>
         </Box>
       )}
-      {items.length === 0 && !filterString && listState === 'ready' && hiddenByRunningOnly === 0 && (
+      {items.length === 0 && !filterString && listState === 'ready' && reasonLines.length === 0 && hiddenByRunningOnly === 0 && (
         <Box flexDirection="column" paddingTop={1}>
           <Text color="gray" wrap="truncate">{` \u2500 No ${panelTitle.toLowerCase()} found`}</Text>
           {panelId && EMPTY_HINTS[panelId] && (

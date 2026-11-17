@@ -1,8 +1,8 @@
 import type { ContainerInfo, ContainerDetails } from 'sidekick-docker-shared';
-import { DockerClient, shortId, publishedPortUrls, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneConfirmFor, pruneResultText, removeContainerConfirmMessage, actionText } from 'sidekick-docker-shared';
+import { DockerClient, shortId, publishedPortUrls, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneConfirmFor, pruneResultText, pruneNothingText, removeContainerConfirmMessage, actionText, emptyLogMessage } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
-import { panelData, detailFetchError, copyLogsAction, emptyLogMessage } from './types';
+import { panelData, detailFetchError, copyLogsAction, emptyStatsMessage } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, ansi, formatFileChange, formatLogTemplate, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
 
@@ -40,6 +40,13 @@ const HEALTH_COLORS: Record<NonNullable<ContainerInfo['healthStatus']>, string> 
   unhealthy: 'red',
   starting: 'yellow',
 };
+
+/**
+ * Positions of the Containers detail tabs, for the code that decides what to
+ * stream or fetch for the tab on screen (kept beside `detailTabs`; a test
+ * checks the labels still line up).
+ */
+export const CONTAINER_TAB = { logs: 0, stats: 1, env: 2, config: 3, labels: 4, files: 5, patterns: 6 } as const;
 
 export class ContainersPanel implements SidePanel {
   readonly id = 'containers';
@@ -90,9 +97,7 @@ export class ContainersPanel implements SidePanel {
         if (c.state !== 'running') return 'Container is not running.';
 
         const latest = metrics.statsCollector.getLatest(c.id);
-        if (!latest) {
-          return 'Loading stats...';
-        }
+        if (!latest) return emptyStatsMessage(metrics.statsStreamState);
 
         const cpuSeries = metrics.statsCollector.getCpuSeries(c.id);
         const memSeries = metrics.statsCollector.getMemorySeries(c.id);
@@ -329,6 +334,7 @@ export class ContainersPanel implements SidePanel {
         label: 'Prune',
         confirm: true,
         confirmMessage: () => pruneConfirmFor('containers', this.lastMetrics?.containers ?? []),
+        nothingToDo: () => pruneNothingText('containers', this.lastMetrics?.containers ?? []),
         confirmSeverity: 'batch',
         actionType: 'prune',
         targetName: () => 'stopped containers',

@@ -25,7 +25,7 @@ import { MouseProvider } from './mouse';
 import { LogFilterOverlay } from './LogFilterOverlay';
 import { VersionOverlay } from './VersionOverlay';
 import { SortOverlay } from './SortOverlay';
-import { getRandomPhrase, matchesRunningOnly } from 'sidekick-docker-shared';
+import { getRandomPhrase, matchesRunningOnly, emptyLogMessage } from 'sidekick-docker-shared';
 import type { ContainerInfo } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes, renderLogLines } from '../../formatters';
@@ -41,6 +41,7 @@ import { toastDuration } from './toastLayout';
 import { orderItems, resolveSelection, isPinGone, listStateOf } from './listModel';
 import { detailTabSuffix } from './tabLayout';
 import { contextMenuTitle } from './overlayHitTest';
+import { refreshResultText } from './resourceErrors';
 import { DEFAULT_EXEC_SHELL, describeExecExit } from '../execShell';
 
 
@@ -271,8 +272,10 @@ interface DashboardProps {
   execShell?: string;
   /** Endpoint overrides for the spawned `docker exec` process (see `dockerCliEnv`). */
   dockerEnv?: Record<string, string>;
-  /** Re-fetch everything now; resolves with the resources that could not be refreshed. */
-  onRefresh?: () => Promise<string[]>;
+  /** Re-fetch everything now; resolves with the resources that could not be refreshed, and why. */
+  onRefresh?: () => Promise<Record<string, string>>;
+  /** Shown once as a warning toast on mount (resources the first refresh could not list). */
+  startupWarning?: string | null;
   /** Initial mouse capture (false for --no-mouse); M toggles it at runtime. */
   mouse?: boolean;
 }
@@ -285,7 +288,7 @@ export interface DashboardViewState {
   compareItemId: string | null;
 }
 
-export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh, execShell = DEFAULT_EXEC_SHELL, mouse = true }: DashboardProps): React.ReactElement {
+export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh, startupWarning, execShell = DEFAULT_EXEC_SHELL, mouse = true }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, mouse, (enabled): DashboardUIState => ({ ...initialState, mouseEnabled: enabled }));
   const { columns, rows } = useTerminalSize();
   const { exit, suspendTerminal } = useApp();
@@ -351,6 +354,12 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const removeToast = useCallback((id: number) => {
     dispatch({ type: 'REMOVE_TOAST', id });
   }, []);
+
+  // Once, on mount: what the first refresh could not list, and why.
+  const startupWarningRef = useRef(startupWarning);
+  useEffect(() => {
+    if (startupWarningRef.current) addToast(startupWarningRef.current, 'warning');
+  }, [addToast]);
 
   // Populate exec trigger ref so external code can start exec sessions
   useEffect(() => {
@@ -561,16 +570,16 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     const opts = { timestamps: compareTimestamps };
     if (panel.id === 'containers') {
       const logs = enrichedMetrics.secondaryContainerLogs;
-      if (logs.length === 0) return ['Waiting for logs...'];
+      if (logs.length === 0) return [emptyLogMessage(enrichedMetrics.secondaryLogStreamState, 'container')];
       return renderLogLines(logs, state.logFilterString, state.logFilterMode, enrichedMetrics.secondaryLogSeverityCounts, opts);
     }
     if (panel.id === 'services') {
       const logs = enrichedMetrics.secondaryComposeLogs;
-      if (logs.length === 0) return ['Waiting for logs...'];
+      if (logs.length === 0) return [emptyLogMessage(enrichedMetrics.secondaryComposeLogStreamState, 'service')];
       return renderLogLines(logs, state.logFilterString, state.logFilterMode, null, opts);
     }
     return [];
-  }, [isCompareActive, compareTimestamps, panel.id, enrichedMetrics.secondaryContainerLogs, enrichedMetrics.secondaryComposeLogs, enrichedMetrics.secondaryLogSeverityCounts, state.logFilterString, state.logFilterMode]);
+  }, [isCompareActive, compareTimestamps, panel.id, enrichedMetrics.secondaryContainerLogs, enrichedMetrics.secondaryComposeLogs, enrichedMetrics.secondaryLogSeverityCounts, enrichedMetrics.secondaryLogStreamState, enrichedMetrics.secondaryComposeLogStreamState, state.logFilterString, state.logFilterMode]);
 
   // The compare pane tails on its own flag (K pauses it, J to the bottom
   // resumes), compared against the target like the primary — re-running only
@@ -646,10 +655,10 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const refresh = useCallback(() => {
     if (!onRefresh) return;
     const id = addToast('Refreshing…', 'info', undefined, { progress: true });
-    onRefresh().then((failed) => {
+    onRefresh().then((errors) => {
       removeToast(id);
-      if (failed.length) addToast(`Refreshed — ${failed.join(', ')} unavailable`, 'warning');
-      else addToast('Refreshed', 'success', 1500);
+      const result = refreshResultText(errors);
+      addToast(result.text, result.severity, result.severity === 'success' ? 1500 : undefined);
     }, (err: unknown) => {
       removeToast(id);
       addToast(`Refresh failed: ${err instanceof Error ? err.message : String(err)}`, 'error');
@@ -715,6 +724,8 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                 compareItemId={compareItemId || undefined}
                 listState={listState}
                 hiddenByRunningOnly={hiddenByRunningOnly}
+                // Why the list is empty when its resource could not be listed.
+                unavailableReason={metrics.resourceErrors?.[panel.id]}
               />
             )}
             <Box flexDirection="column" flexGrow={1}>

@@ -1,5 +1,5 @@
 import type { ImageInfo } from 'sidekick-docker-shared';
-import { DockerClient, pruneConfirmFor, pruneResultText, imageDisplayName, removeImageConfirmMessage, actionText } from 'sidekick-docker-shared';
+import { DockerClient, pruneConfirmFor, pruneResultText, pruneNothingText, imageDisplayName, removeImageConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
 import { panelData, detailFetchError } from './types';
@@ -109,6 +109,7 @@ export class ImagesPanel implements SidePanel {
         label: 'Prune',
         confirm: true,
         confirmMessage: () => pruneConfirmFor('images', this.lastMetrics?.images ?? []),
+        nothingToDo: () => pruneNothingText('images', this.lastMetrics?.images ?? []),
         confirmSeverity: 'batch',
         actionType: 'prune',
         targetName: () => 'dangling images',

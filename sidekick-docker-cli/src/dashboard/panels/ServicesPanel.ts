@@ -1,8 +1,8 @@
 import type { ComposeService, ComposeProject, ComposeExecResult, ComposeCommandOptions } from 'sidekick-docker-shared';
 import type { ActionType } from 'sidekick-docker-shared';
-import { ComposeClient, throwIfComposeFailed, resolveComposeOptions, composeDownConfirmMessage, actionText } from 'sidekick-docker-shared';
+import { ComposeClient, throwIfComposeFailed, resolveComposeOptions, composeDownConfirmMessage, actionText, emptyLogMessage } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
-import { panelData, copyLogsAction, emptyLogMessage } from './types';
+import { panelData, copyLogsAction } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, colorizeDetailKey, colorizeState, colorizeId, renderLogLines } from '../../formatters';
 
@@ -18,6 +18,9 @@ function getProjectName(d: ServiceItemData): string {
 function getTargetName(d: ServiceItemData): string {
   return d.type === 'service' ? d.service.name : d.project.name;
 }
+
+/** Positions of the Services detail tabs (see CONTAINER_TAB). */
+export const SERVICE_TAB = { info: 0, logs: 1 } as const;
 
 export class ServicesPanel implements SidePanel {
   readonly id = 'services';

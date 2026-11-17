@@ -1,5 +1,5 @@
 import type { VolumeInfo } from 'sidekick-docker-shared';
-import { DockerClient, pruneConfirmFor, pruneResultText, removeVolumeConfirmMessage, actionText } from 'sidekick-docker-shared';
+import { DockerClient, pruneConfirmFor, pruneResultText, pruneNothingText, removeVolumeConfirmMessage, actionText } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { panelData } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
@@ -81,6 +81,7 @@ export class VolumesPanel implements SidePanel {
         label: 'Prune',
         confirm: true,
         confirmMessage: () => pruneConfirmFor('volumes', this.lastMetrics?.volumes ?? []),
+        nothingToDo: () => pruneNothingText('volumes', this.lastMetrics?.volumes ?? []),
         confirmSeverity: 'batch',
         actionType: 'prune',
         targetName: () => 'unused volumes',

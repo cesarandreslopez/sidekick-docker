@@ -14,12 +14,14 @@ import {
   installFatalGuard,
   signalExitCode,
 } from './dashboardLifecycle';
+import { createViewScheduler, sameComposeTarget, viewTargets } from './viewTargets';
+import type { ViewTargets } from './viewTargets';
 import { connectOrExit } from '../utils/connect';
 import { copyToClipboard } from '../utils/clipboard';
 import { openUrl } from '../utils/openUrl';
 import { DockerState } from '../dashboard/DockerState';
 import type { DetailKind } from '../dashboard/DockerState';
-import { ContainersPanel } from '../dashboard/panels/ContainersPanel';
+import { ContainersPanel, CONTAINER_TAB } from '../dashboard/panels/ContainersPanel';
 import { ServicesPanel } from '../dashboard/panels/ServicesPanel';
 import { ImagesPanel } from '../dashboard/panels/ImagesPanel';
 import { VolumesPanel } from '../dashboard/panels/VolumesPanel';
@@ -30,6 +32,7 @@ import { ComposeLogStreamManager } from '../dashboard/ComposeLogStreamManager';
 import type { SidePanel } from '../dashboard/panels/types';
 import { Dashboard } from '../dashboard/ink/Dashboard';
 import type { DashboardViewState } from '../dashboard/ink/Dashboard';
+import { startupWarningText } from '../dashboard/ink/resourceErrors';
 
 export async function dashboardAction(_opts: Record<string, unknown>, cmd: Command): Promise<void> {
   const globalOpts = cmd.optsWithGlobals();
@@ -55,10 +58,20 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   let stateChanged = () => {};
   const state = new DockerState(client, cwd, () => stateChanged(), { cliEnv });
   await state.refresh();
+  // Resources the first refresh could not list (and why), shown once on mount.
+  const startupWarning = startupWarningText(state.getMetrics().resourceErrors);
 
-  // Ctrl+R: an explicit refresh also re-reads the compose file.
-  const onRefresh = () => state.refresh({ reloadCompose: true })
-    .then(() => Object.keys(state.getMetrics().resourceErrors ?? {}));
+  // Ctrl+R: an explicit refresh also re-reads the compose file, and drops the
+  // selected item's cached inspect, diff and layers — they used to stay as
+  // first fetched until the item was removed. Replaying the view fetches them
+  // again. Resolves with the resources that could not be listed, and why.
+  const onRefresh = () => {
+    if (lastView?.itemId) state.invalidateDetails(lastView.itemId);
+    return state.refresh({ reloadCompose: true }).then(() => {
+      viewScheduler.flush();
+      return state.getMetrics().resourceErrors ?? {};
+    });
+  };
 
   // Action callback — refresh state after any mutation
   const onAction = () => {
@@ -87,6 +100,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           onExecFallback,
           dockerEnv: cliEnv,
           onRefresh,
+          startupWarning,
           execShell,
           mouse,
         }),
@@ -231,96 +245,64 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     });
   }
 
+  const flushAllLogsNow = () => {
+    flushLogsNow();
+    flushComposeLogsNow();
+    flushSecondaryLogsNow();
+    flushSecondaryComposeLogsNow();
+  };
+
+  // What each manager streams, as last applied. Mutable: release() stops a
+  // stream ahead of the debounced apply and records that here.
+  let applied: ViewTargets | null = null;
+
+  /** Start the streams and fetches the view needs (debounced; see viewScheduler). */
+  const applyView = (view: DashboardViewState) => {
+    const t = viewTargets(view);
+    applied = { ...t };
+    // Sorting by a stats field compares every row, so it needs a sample per
+    // running container, not just the selected one.
+    statsSampler.setIds(t.sampleAllStats ? state.getRunningContainerIds() : []);
+    void logManager.select(t.log);
+    void statsManager.select(t.stats);
+    void secondaryLogManager.select(t.secondaryLog);
+    void composeLogManager.selectCompose(t.compose.project, t.compose.service);
+    void secondaryComposeLogManager.selectCompose(t.secondaryCompose.project, t.secondaryCompose.service);
+    flushAllLogsNow();
+    const { details, changes, layers } = t;
+    if (details) fetchDetail('details', details, state.getContainerDetails(details), () => client.getContainerDetails(details), d => state.setContainerDetails(details, d));
+    if (changes) fetchDetail('changes', changes, state.getContainerChanges(changes), () => client.getContainerChanges(changes), c => state.setContainerChanges(changes, c));
+    if (layers) fetchDetail('layers', layers, state.getImageLayers(layers), () => client.getImageHistory(layers), l => state.setImageLayers(layers, l));
+  };
+
+  /** Runs on every view change: stop at once whatever the new view no longer streams. */
+  const releaseView = (view: DashboardViewState) => {
+    const was = applied;
+    if (!was) return;
+    const next = viewTargets(view);
+    let released = false;
+    if (was.log !== null && was.log !== next.log) { void logManager.select(null); was.log = null; released = true; }
+    if (was.stats !== null && was.stats !== next.stats) { void statsManager.select(null); was.stats = null; released = true; }
+    if (was.secondaryLog !== null && was.secondaryLog !== next.secondaryLog) { void secondaryLogManager.select(null); was.secondaryLog = null; released = true; }
+    if (was.compose.project !== null && !sameComposeTarget(was.compose, next.compose)) {
+      void composeLogManager.selectCompose(null, null);
+      was.compose = { project: null, service: null };
+      released = true;
+    }
+    if (was.secondaryCompose.project !== null && !sameComposeTarget(was.secondaryCompose, next.secondaryCompose)) {
+      void secondaryComposeLogManager.selectCompose(null, null);
+      was.secondaryCompose = { project: null, service: null };
+      released = true;
+    }
+    if (released) flushAllLogsNow();
+  };
+
+  const viewScheduler = createViewScheduler<DashboardViewState>({ apply: applyView, release: releaseView });
+
   let lastView: DashboardViewState | null = null;
   const onViewStateChange = (viewState: DashboardViewState) => {
     lastView = viewState;
-    const { panelId, itemId, detailTabIndex, sortField, compareItemId } = viewState;
-    const wantsLiveStats = sortField === 'cpu'
-      || sortField === 'mem'
-      || sortField === 'net'
-      || sortField === 'io'
-      || sortField === 'pids';
-
-    // Sorting compares every row, so it needs a sample per container — not
-    // just the selected one. Running containers only; stopped ones report zeros.
-    statsSampler.setIds(
-      wantsLiveStats && panelId === 'containers'
-        ? state.getRunningContainerIds()
-        : [],
-    );
-
-    if (panelId === 'containers') {
-      // The log stream runs on every Containers tab: Patterns and the Stats
-      // tab's log sparkline read its analytics, Copy Logs reads its buffer,
-      // and stopping it on a tab switch threw away up to 1000 lines.
-      void logManager.select(itemId);
-      void statsManager.select(itemId && (detailTabIndex === 1 || wantsLiveStats) ? itemId : null);
-      void composeLogManager.selectCompose(null, null);
-      // Secondary compare stream: only when on Logs tab and a compare item is pinned
-      void secondaryLogManager.select(detailTabIndex === 0 && compareItemId ? compareItemId : null);
-      void secondaryComposeLogManager.selectCompose(null, null);
-      flushLogsNow();
-      flushComposeLogsNow();
-      flushSecondaryLogsNow();
-      flushSecondaryComposeLogsNow();
-      if (itemId) {
-        fetchDetail('details', itemId, state.getContainerDetails(itemId), () => client.getContainerDetails(itemId), d => state.setContainerDetails(itemId, d));
-        fetchDetail('changes', itemId, state.getContainerChanges(itemId), () => client.getContainerChanges(itemId), changes => state.setContainerChanges(itemId, changes));
-      }
-    } else if (panelId === 'services' && itemId) {
-      void logManager.select(null);
-      void statsManager.select(null);
-      void secondaryLogManager.select(null);
-      if (detailTabIndex === 1) {
-        const parts = itemId.split(':');
-        if (parts[0] === 'project') {
-          void composeLogManager.selectCompose(parts.slice(1).join(':'), null);
-        } else if (parts[0] === 'service') {
-          void composeLogManager.selectCompose(parts[1], parts.slice(2).join(':'));
-        }
-        // Secondary compose compare stream
-        if (compareItemId) {
-          const cParts = compareItemId.split(':');
-          if (cParts[0] === 'project') {
-            void secondaryComposeLogManager.selectCompose(cParts.slice(1).join(':'), null);
-          } else if (cParts[0] === 'service') {
-            void secondaryComposeLogManager.selectCompose(cParts[1], cParts.slice(2).join(':'));
-          }
-        } else {
-          void secondaryComposeLogManager.selectCompose(null, null);
-        }
-      } else {
-        void composeLogManager.selectCompose(null, null);
-        void secondaryComposeLogManager.selectCompose(null, null);
-      }
-      flushLogsNow();
-      flushComposeLogsNow();
-      flushSecondaryLogsNow();
-      flushSecondaryComposeLogsNow();
-    } else if (panelId === 'images') {
-      void logManager.select(null);
-      void statsManager.select(null);
-      void composeLogManager.selectCompose(null, null);
-      void secondaryLogManager.select(null);
-      void secondaryComposeLogManager.selectCompose(null, null);
-      flushLogsNow();
-      flushComposeLogsNow();
-      flushSecondaryLogsNow();
-      flushSecondaryComposeLogsNow();
-      if (itemId) {
-        fetchDetail('layers', itemId, state.getImageLayers(itemId), () => client.getImageHistory(itemId), layers => state.setImageLayers(itemId, layers));
-      }
-    } else {
-      void logManager.select(null);
-      void statsManager.select(null);
-      void composeLogManager.selectCompose(null, null);
-      void secondaryLogManager.select(null);
-      void secondaryComposeLogManager.selectCompose(null, null);
-      flushLogsNow();
-      flushComposeLogsNow();
-      flushSecondaryLogsNow();
-      flushSecondaryComposeLogsNow();
-    }
+    viewScheduler.change(viewState);
   };
 
   // Create panels (onExec wired below after render is available)
@@ -342,16 +324,27 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       // details; re-fetch at once if its Env or Config tab is on screen.
       const view = lastView;
       if (view?.panelId === 'containers' && view.itemId === event.resourceId
-        && (view.detailTabIndex === 2 || view.detailTabIndex === 3)) {
+        && (view.detailTabIndex === CONTAINER_TAB.env || view.detailTabIndex === CONTAINER_TAB.config)) {
         const id = view.itemId;
         fetchDetail('details', id, state.getContainerDetails(id), () => client.getContainerDetails(id), d => state.setContainerDetails(id, d), true);
       }
     },
     onError: (err) => {
       debugLog('event watcher error:', err);
+      // The event stream failing is usually the daemon going away: refresh
+      // now, so the dashboard says so instead of waiting for the 30 s poll.
+      state.refresh().then(() => scheduleRender()).catch((e: unknown) => { debugLog('refresh after event error failed:', e); });
     },
   });
   watcher.start();
+
+  // While the daemon is unreachable, look for it every 5 s: the 30 s fallback
+  // below was the only retry, so a restarted Docker Desktop took up to half a
+  // minute to come back.
+  const reconnectPoll = setInterval(() => {
+    if (state.isDaemonConnected()) return;
+    state.refresh().then(() => scheduleRender()).catch((e: unknown) => { debugLog('reconnect poll failed:', e); });
+  }, 5_000);
 
   // Periodic refresh fallback (30s)
   const refreshInterval = setInterval(() => {
@@ -405,6 +398,7 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       onExecFallback,
       dockerEnv: cliEnv,
       onRefresh,
+      startupWarning,
       execShell,
       mouse,
     }),
@@ -448,6 +442,9 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     m.secondaryLogSeverityTimeSeries = secondaryLogManager.getSeverityTimeSeries();
     m.logStreamState = logManager.getStreamState();
     m.composeLogStreamState = composeLogManager.getStreamState();
+    m.secondaryLogStreamState = secondaryLogManager.getStreamState();
+    m.secondaryComposeLogStreamState = secondaryComposeLogManager.getStreamState();
+    m.statsStreamState = statsManager.getStreamState();
     return m;
   }
 
@@ -469,6 +466,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
     try { if (secondaryComposeLogFlushTimer) clearTimeout(secondaryComposeLogFlushTimer); } catch { /* ignore */ }
     try { if (renderTimer) clearTimeout(renderTimer); } catch { /* ignore */ }
     try { clearInterval(refreshInterval); } catch { /* ignore */ }
+    try { clearInterval(reconnectPoll); } catch { /* ignore */ }
+    try { viewScheduler.dispose(); } catch { /* ignore */ }
     try { if (debugInterval) clearInterval(debugInterval); } catch { /* ignore */ }
     try { watcher.stop(); } catch { /* ignore */ }
     try { state.dispose(); } catch { /* ignore */ }

@@ -47,6 +47,10 @@ export interface DockerDashboardMetrics {
   /** Lifecycle of the selected container's / compose target's log stream (null: none). */
   logStreamState: FollowStreamState | null;
   composeLogStreamState: FollowStreamState | null;
+  /** The compare pane's streams, and the selected container's stats stream. */
+  secondaryLogStreamState: FollowStreamState | null;
+  secondaryComposeLogStreamState: FollowStreamState | null;
+  statsStreamState: FollowStreamState | null;
 }
 
 /** Lazy per-tab fetches whose failures are recorded (see detailErrors). */
@@ -232,6 +236,23 @@ export class DockerState {
     return this.imageLayers.get(imageId);
   }
 
+  /**
+   * Forget everything fetched lazily for one item (container inspect and
+   * diff, image layers) and why those fetches failed, so the next look
+   * fetches it fresh (Ctrl+R).
+   */
+  invalidateDetails(id: string): void {
+    this.containerDetails.delete(id);
+    this.containerChanges.delete(id);
+    this.imageLayers.delete(id);
+    for (const kind of ['details', 'changes', 'layers'] as const) this.detailErrors.delete(DockerState.detailErrorKey(kind, id));
+  }
+
+  /** Whether the last refresh reached the daemon. */
+  isDaemonConnected(): boolean {
+    return this.store.getSnapshot().daemonConnected;
+  }
+
   static detailErrorKey(kind: DetailKind, id: string): string {
     return `${kind}:${id}`;
   }
@@ -273,6 +294,9 @@ export class DockerState {
       secondaryLogSeverityTimeSeries: [],
       logStreamState: null,
       composeLogStreamState: null,
+      secondaryLogStreamState: null,
+      secondaryComposeLogStreamState: null,
+      statsStreamState: null,
     };
   }
 }

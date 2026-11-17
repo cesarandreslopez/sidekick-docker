@@ -61,6 +61,23 @@ export function actionToastText(action: PanelAction, item: PanelItem): {
  *   and a synchronous throw becomes an error toast rather than escaping into
  *   Ink's input handler, where it would tear down the app.
  */
+/**
+ * Actions whose progress toast is still up, keyed by action and target. A
+ * second press (or a second click through the menu) used to start the same
+ * restart or compose up again while the first was running.
+ */
+const inFlight = new Set<string>();
+
+/** Identity of an action run: the action and what it acts on (a prune's target is the whole kind). */
+export function actionRunKey(action: PanelAction, item: PanelItem): string {
+  return `${action.label}\u0000${action.targetName?.(item) ?? item.id}`;
+}
+
+/** Whether this action is already running for this target. */
+export function isActionInFlight(action: PanelAction, item: PanelItem): boolean {
+  return inFlight.has(actionRunKey(action, item));
+}
+
 export function executeAction(
   action: PanelAction,
   item: PanelItem,
@@ -68,8 +85,18 @@ export function executeAction(
   addToast: AddToast,
   removeToast: (id: number) => void,
 ): void {
+  const runKey = actionRunKey(action, item);
+  // Already running: its progress toast is on screen; a re-press is ignored.
+  if (inFlight.has(runKey)) return;
+  // Nothing to do (e.g. nothing to prune): say so, and skip the confirm.
+  const nothing = action.nothingToDo?.(item);
+  if (nothing) {
+    addToast(nothing, 'info');
+    return;
+  }
   const text = actionToastText(action, item);
   const run = () => {
+    if (inFlight.has(runKey)) return;
     let result: ReturnType<PanelAction['handler']>;
     try {
       result = action.handler(item);
@@ -78,6 +105,7 @@ export function executeAction(
       return;
     }
     if (isPromise(result)) {
+      inFlight.add(runKey);
       const progressId = addToast(text.progress, 'info', undefined, { progress: true });
       result
         .then((msg) => {
@@ -87,7 +115,8 @@ export function executeAction(
         .catch((err: unknown) => {
           removeToast(progressId);
           addToast(text.failed(errorMessage(err)), 'error');
-        });
+        })
+        .finally(() => { inFlight.delete(runKey); });
     } else if (typeof result === 'string') {
       addToast(result, 'success');
     } else {

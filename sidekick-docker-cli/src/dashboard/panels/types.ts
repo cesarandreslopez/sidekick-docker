@@ -57,6 +57,12 @@ export interface PanelAction {
   confirmMessage?: string | ((item: PanelItem) => string);
   /** Risk level for confirmation dialog: 'low' (yellow), 'high' (red, default), 'batch' (red, shows count). */
   confirmSeverity?: 'low' | 'high' | 'batch';
+  /**
+   * Checked before the confirm opens: text when the action would do nothing
+   * (a prune with nothing to prune). The text is shown as an info toast and
+   * the action is skipped — no red "cannot be undone" dialog for a no-op.
+   */
+  nothingToDo?: (item: PanelItem) => string | null;
 }
 
 /** The item's plain name: `name`, else the label without its leading icon. */
@@ -65,17 +71,16 @@ export function itemName(item: PanelItem): string {
 }
 
 /**
- * What an empty Logs tab says, from the stream's state. It used to read
- * "Select a container" while one was selected, whether the stream was still
- * connecting, the container was stopped, or the stream had been lost.
+ * What an empty Stats tab says, from the stats stream's state. It read
+ * "Loading stats..." forever once the stream had ended or given up.
  */
-export function emptyLogMessage(state: FollowStreamState | null, subject: 'container' | 'service'): string {
+export function emptyStatsMessage(state: FollowStreamState | null): string {
   switch (state) {
-    case 'reconnecting': return 'Log stream interrupted — reconnecting…';
+    case 'reconnecting': return 'Stats stream interrupted — reconnecting…';
     case 'ended':
-    case 'empty': return `No log output — the ${subject} is stopped.`;
-    case 'error': return 'Log stream lost after several retries. Select another item and come back to retry.';
-    default: return 'Waiting for log output…';
+    case 'empty': return 'No stats — the stream ended (the container may have stopped).';
+    case 'error': return 'Stats stream lost after several retries. Select another item and come back to retry.';
+    default: return 'Loading stats…';
   }
 }
 

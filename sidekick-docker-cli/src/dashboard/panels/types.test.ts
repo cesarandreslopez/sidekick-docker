@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { collectLogText, copyLogsAction, emptyLogMessage, itemName } from './types';
+import { collectLogText, copyLogsAction, emptyStatsMessage, itemName } from './types';
 import type { DockerDashboardMetrics } from '../DockerState';
 import type { LogEntry } from 'sidekick-docker-shared';
 
@@ -71,14 +71,13 @@ describe('copyLogsAction off the Logs tab (Services)', () => {
   });
 });
 
-describe('emptyLogMessage (T20)', () => {
-  it('describes the stream instead of asking to select what is selected', () => {
-    expect(emptyLogMessage(null, 'container')).toBe('Waiting for log output…');
-    expect(emptyLogMessage('loading', 'container')).toBe('Waiting for log output…');
-    expect(emptyLogMessage('reconnecting', 'container')).toContain('reconnecting');
-    expect(emptyLogMessage('empty', 'container')).toBe('No log output — the container is stopped.');
-    expect(emptyLogMessage('ended', 'service')).toBe('No log output — the service is stopped.');
-    expect(emptyLogMessage('error', 'container')).toContain('lost');
+describe('emptyStatsMessage (Missed-3)', () => {
+  it('says why the Stats tab is empty instead of loading forever', () => {
+    expect(emptyStatsMessage(null)).toBe('Loading stats…');
+    expect(emptyStatsMessage('loading')).toBe('Loading stats…');
+    expect(emptyStatsMessage('reconnecting')).toContain('reconnecting');
+    expect(emptyStatsMessage('ended')).toContain('ended');
+    expect(emptyStatsMessage('error')).toContain('lost');
   });
 });
 
