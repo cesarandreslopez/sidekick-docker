@@ -133,7 +133,12 @@ checks nothing.
   `matchesRunningOnly` (the `a` toggle: running/paused/restarting), `pruneConfirmFor` (count + wording from
   the listed items — prefer it over `pruneCandidateCount`/`pruneConfirmMessage`), `pruneResultText`,
   `removeContainerConfirmMessage`, `removeImageConfirmMessage`, `removeVolumeConfirmMessage`,
-  `removeNetworkConfirmMessage`, `composeDownConfirmMessage`, `imageDisplayName` (`<none> (id)` for
+  `removeNetworkConfirmMessage`, `composeDownConfirmMessage`, `pruneNothingText` (a prune the listed items
+  *prove* would remove nothing → an info toast instead of the red confirm; null whenever the daemon might still
+  remove something: an unknown volume scope, any untagged image (digest-only images are pruned by the graphdriver
+  store), any non-default network (one with only stopped containers is pruned)),
+  `containerStateGroup`/`containerStateRank` (Running = exactly what `matchesRunningOnly` keeps; the webview list
+  and the tree both group by it), `emptyLogMessage` (why a log pane is empty), `imageDisplayName` (`<none> (id)` for
   untagged), `sortDirectionLabel`, `publishedPortUrls`/`browserHostForEndpoint`, `actionText` +
   `actionFailedText(type, name, message)`, plus the Config-tab helpers (`summarizeHealth`,
   `summarizeRestartPolicy`, `formatMount`). Change behaviour there so both surfaces move together
@@ -142,12 +147,14 @@ checks nothing.
   `com.docker.volume.anonymous` label) and `pruneScope` (`anonymous`/`all`/`unknown`), so the browser-safe
   prune wording can count honestly. `removeImage` untags a multi-tag image by name (Docker refuses delete-by-ID
   with several tags), refuses up front if any container descends from it, and reports half-removed tags.
-  Untagged images: API ≥ 1.43 sends `RepoTags: []`; use `realImageTags` (`docker/utils.ts`)
-- VI keybindings: j/k navigation, g/G top/bottom, h/l focus, 1-5 panel switch, [/] detail tabs,
-  PgUp/PgDn + Ctrl+D/U paging, Ctrl+R refresh, `M` mouse-capture toggle (`--no-mouse` starts it off, so
-  the terminal can select text). TUI global bindings live in `ink/keyRegistry.ts` — the single
-  source of truth driving dispatch, the help overlay, and status-bar hints; add new global keys
-  there, not in `useKeyboardHandler`
+  Untagged images: API ≥ 1.43 sends `RepoTags: []`; use `realImageTags` (`docker/utils.ts`). Start/stop treat
+  304 (already in that state) as success. `errorMessage` strips docker-modem's `(HTTP code N) reason - ` wrapper,
+  so toasts carry the daemon's own message. `formatTimestampTime` is **local** time (it was a UTC slice)
+- VI keybindings: j/k navigation, g/G (and Home/End) top/bottom, h/l focus, 1-5 panel switch, [/] detail tabs,
+  PgUp/PgDn + Ctrl+D/U paging, Ctrl+R refresh, `w` wrap long detail lines (same key in the webview, where wrap
+  defaults on), `M` mouse-capture toggle (`--no-mouse` starts it off, so the terminal can select text).
+  TUI global bindings live in `ink/keyRegistry.ts` — the single source of truth driving dispatch, the help
+  overlay, and status-bar hints; add new global keys there, not in `useKeyboardHandler`
 - **`keyRegistry` matching is first-hit.** `useKeyboardHandler` runs the first binding whose `match()`
   returns true, so order matters only between bindings whose predicates overlap — today none do
   (`keyRegistry.test.ts` asserts every key resolves to exactly one binding, and `ink/keyConflicts.test.ts`
@@ -155,19 +162,54 @@ checks nothing.
   check that no earlier binding already matches it, and note that a global whose `isAvailable` is false
   swallows the key with a "Not available here" toast rather than falling through to a panel action.
   Panel action shortcuts (`getActions()` keys) fire directly, without the `x` menu, but never on a
-  Ctrl/Meta chord (`findPanelAction`)
+  Ctrl/Meta chord (`findPanelAction`). **Globals go through `findGlobalBinding(input, key)`**: while Ctrl or
+  Meta is held only bindings marked `chord: true` (Ctrl+R, Ctrl+D/U, Ctrl+C) can match, so Ctrl+Z/Ctrl+Q/Alt+x
+  never run `z`/`q`/`x`; the Actions menu and the confirm (`overlayInput.ts`) apply the same rule (Ctrl+Y does not
+  confirm). A held `j`/`k` can arrive as one `"jjj"` input — navigation moves by the run length through reducer
+  deltas (never by looping a binding: `ctx` values are stale closures); mixed text is ignored, so a paste never
+  fires commands. While the too-small screen shows, only `q`/Ctrl+C act. Filter prompts drop control characters
+  (`stripControlCharacters`, `ink/inputText.ts`)
 - Confirmation modal required for all destructive actions (remove, prune); confirm messages
   name their target (`confirmMessage` accepts a function of the item) — prunes name a count, removing a
   running container says it is force-stopped first; Enter cancels (safe default)
 - **Panel action handlers returning a string set the success-toast text** (e.g. "Pruned — 1.2 GB
   reclaimed"); returning nothing falls back to the action label. `confirm: true` stores the wrapped
   closure in reducer state instead of executing it — clearing that closure is what closes the modal
+- **Boxed overlays paint every cell**: `backgroundColor={OVERLAY_FILL}` (`theme.ts`, the unknown colour
+  `'none'` — Ink fills the box with unstyled spaces, so log text no longer shows through padding). Any new
+  boxed overlay needs it; `ink/overlayFill.test.ts` pins the behaviour with Ink's `renderToString`
 - **Overlay geometry is shared with mouse hit-testing.** `ink/overlayHitTest.ts` exports both the origins
   the overlay components render at *and* the hit functions `useMouseHandler` uses. Change an overlay's
   JSX rows and you must update the matching hit function, or clicks silently miss. Confirm messages wrap
   (≤3 lines) through one pure function both sides call. **Never render `<Text>{''}</Text>` as a spacer** —
   Ink measures empty text as zero rows, so the row collapses and everything below shifts (this put the
   confirm buttons two rows above their hit targets); use `' '`
+- **TUI lifecycle** (`commands/dashboardLifecycle.ts`): the dashboard renders with
+  `{ alternateScreen: true, exitOnCtrlC: false, stdout: inkStdout() }` — `inkStdout` is a Proxy over
+  `process.stdout` whose `write` strips `ESC[3J` (Ink's full-screen clear would otherwise erase the user's
+  scrollback, terminal-dependent even from the alt screen). Ink itself leaves/re-enters the alt screen around
+  `suspendTerminal`. Signals exit 128+signo (`signalExitCode`; SIGINT/SIGTERM/SIGHUP); the fatal guard unmounts
+  (leaving the alt screen) *before* printing, else the message vanishes with the alt screen. Ctrl+C is handled by
+  `useKeyboardHandler` (so it reaches an embedded exec shell). During the `docker exec -it` fallback
+  `pauseTerminalRead` stops Node's pending TTY read (private `stdin._handle.readStop/readStart`, mirroring
+  `net.Socket#pause`) — Ink's suspend leaves it armed and the dashboard would steal the shell's keystrokes.
+  `Connecting to <endpoint>…` goes to stderr before the ping
+- **Log text is sanitised before it is filtered or drawn** (`sanitizeLogText`, `cli/src/formatters.ts`):
+  tabs expanded, CR/BEL/other C0 dropped (Ink measures a tab as 0 columns), app SGR kept only when colour is on;
+  filtering and highlighting run on the plain text. stderr lines keep token colouring plus a dim `┃` gutter.
+  Wrapping (`w`) is a pure pre-wrap of the detail lines *before* scroll/window math (never Ink `wrap="wrap"`,
+  which breaks the row budget and mouse rows); off in compare mode
+- **Selection-driven work settles first** (`commands/viewTargets.ts`): the first view applies at once; after
+  that the old selection's streams stop immediately and the new log/inspect/stats starts once the selection has
+  been still for `VIEW_SETTLE_MS` (150). `docker diff` is fetched only when the Files tab is active; Ctrl+R
+  drops the selected item's cached details/changes. EventWatcher errors trigger a refresh, and while
+  disconnected the consumer polls every ~5 s (the store stays passive)
+- **Panel actions can decline before confirming**: `PanelAction.nothingToDo(item)` returning a string shows it as
+  an info toast and skips the confirm (prunes use the shared `pruneNothingText`). `executeAction` ignores a
+  second press of the same action+target while its progress toast is live (the target is
+  `runKey ?? targetName ?? item.id` — set `runKey` when the display name repeats, as Services' `web` does across
+  projects); the Actions-menu cursor is stored as
+  the action *key*, not an index, so a refresh cannot move it onto a different action
 - **TUI selection is by id.** The reducer keeps `selectedItemId` beside the index; `RESOLVE_SELECTION`
   re-finds it after refresh/sort/filter without resetting scroll, and a vanished item falls back to
   `SELECT_ITEM` (which does reset). Sorting and filtering are pure (`ink/listModel.ts`); list row layout —
@@ -191,7 +233,9 @@ checks nothing.
   (Ink delivers stdin as utf8 strings, so match `'\x1d'`, not a byte). VSCode creates a `vscode.Terminal`
   with `shellPath: 'docker'` and `exec.defaultShell`
 - **Endpoint resolution lives in `shared/src/docker/endpoint.ts`** — `parseDockerEndpoint`,
-  `describeDockerEndpoint`, and `dockerCliEnv` (which exists because spawned `docker compose` subprocesses
+  `describeDockerEndpoint` (the default is described as `defaultDockerSocket()`, which mirrors docker-modem: the
+  Windows named pipe, else Docker Desktop's `~/.docker/run/docker.sock` when present, else `/var/run/docker.sock`),
+  and `dockerCliEnv` (which exists because spawned `docker compose` subprocesses
   don't inherit dockerode's endpoint). There is **no `docker context` detection** anywhere in the repo
 - **Zod guards both trust boundaries**: `shared/src/docker/schemas.ts` validates raw daemon responses;
   `vscode/src/types/messageSchemas.ts` (`WebviewMessageSchema`) `safeParse`s every inbound webview message.
@@ -202,6 +246,23 @@ checks nothing.
 - **VSCode has two independent surfaces** — the TreeView (`ContainerWatcherService`, its own `DockerClient`
   and a containers-only `DockerStateStore`) and the webview dashboard (`DockerDashboardProvider`, its own
   `DockerService` with a full store). They poll separately; the dashboard stops polling while hidden
+- **VS Code connection lifecycle**: the dashboard reconnects only when the always-on watcher sees Docker come back
+  (`onConnectionChanged(true)` → `dashboardProvider.retryIfDisconnected()`) or the panel becomes visible — never a
+  dashboard timer. `retryIfDisconnected` is a no-op unless the panel exists, the webview is ready, there is no
+  service and no connect in flight (`initializing` + `initGeneration`). `_initializeService` posts
+  `connectionState: 'connecting'`; the webview keeps the stale list inert (keys except `?`/`V` blocked) until
+  `connected`. A watcher rebuild (endpoint/trust) clears the tree and shows connecting (`rebuildWatcher` in
+  `extension.ts`); a refresh-interval change applies in place (`setRefreshInterval`) so logs and sparklines survive.
+  The status-bar text/tooltip is the pure `providers/statusBar.ts`; palette pickers refuse while offline through
+  `providers/connectionGuard.ts` (`requireConnected`, reason + Retry)
+- **Compose actions in VS Code** run through `providers/composeRunner.ts`: output streams (shared
+  `ComposeCommandOptions.onOutput`) into one lazily created `LogOutputChannel` "Sidekick Docker"; up/down/restart
+  progress is cancellable (token → `AbortSignal` → `runProcess`); a cancelled run (`ComposeError.cancelled`) is
+  reported as info, never "Failed to…"; failures offer "Show Output". `providers/inFlight.ts` ignores a repeated
+  action+target (tree, palette and dashboard). A dashboard action failing while the panel is hidden also raises a
+  native notification ("Open Dashboard")
+- **`socketPath` and `exec.defaultShell` are `machine-overridable`** as well as restricted: in a remote window they
+  come from the remote's settings, so a local path does not follow the user into Remote-SSH/WSL/Dev Containers
 - **Tree menu `when` clauses list container states explicitly** (`/^container-(running|paused|…)$/`) —
   never `/^container-/`, which also matches the group header (`container-group`). Command handlers take
   their target through `containerIdFromArg` (an `instanceof ContainerTreeItem` guard). `getSettings()` has
@@ -228,6 +289,8 @@ checks nothing.
 |------|------|
 | CLI entry | `sidekick-docker-cli/src/cli.ts` (Commander.js setup) |
 | Dashboard action | `sidekick-docker-cli/src/commands/dashboard.ts` (wires everything) |
+| TUI lifecycle (alt screen, exit codes, fatal guard) | `sidekick-docker-cli/src/commands/dashboardLifecycle.ts` |
+| TUI selection settle / stream targets | `sidekick-docker-cli/src/commands/viewTargets.ts` |
 | Main TUI component | `sidekick-docker-cli/src/dashboard/ink/Dashboard.tsx` |
 | Panel interface | `sidekick-docker-cli/src/dashboard/panels/types.ts` (`SidePanel`) |
 | Domain state (CLI wrapper) | `sidekick-docker-cli/src/dashboard/DockerState.ts` |
@@ -243,6 +306,7 @@ checks nothing.
 | VSCode activation | `sidekick-docker-vscode/src/extension.ts` |
 | VSCode Docker state owner | `sidekick-docker-vscode/src/services/DockerService.ts` |
 | Webview provider | `sidekick-docker-vscode/src/providers/DockerDashboardProvider.ts` |
+| VS Code compose runner + output channel | `sidekick-docker-vscode/src/providers/composeRunner.ts` |
 | Webview HTML/CSS template | `sidekick-docker-vscode/src/providers/dashboardHtml.ts` |
 | Webview panel interface | `sidekick-docker-vscode/src/webview/panels/types.ts` (`PanelDefinition`) |
 | Webview message protocol | `sidekick-docker-vscode/src/types/messages.ts` + `messageSchemas.ts` |
@@ -261,7 +325,7 @@ checks nothing.
 - **Render throttling**: `scheduleRender()` batches at 200ms and **drops the frame** when `process.stdout.writableLength > writableHighWaterMark` (backpressure guard); stream callbacks add a further 100ms flush debounce. `SIDEKICK_DEBUG_STREAMS=1` dumps heap/stdout diagnostics every 60s.
 - **Compose detection**: Primary from container labels (`com.docker.compose.*`), secondary from `docker compose config`. Merged to show running + planned services.
 - **esbuild** (CLI): bundles `ssh2` with its optional native accelerators (`cpu-features`, `sshcrypto.node`) stubbed to throw so ssh2 uses its JS fallback (`scripts/native-fallbacks.cjs`, shared with vscode); stubs `react-devtools-core`; externalizes `node-pty`; injects `__CLI_VERSION__`; the banner adds the shebang and the `NO_COLOR` → `FORCE_COLOR=0` mapping; the output is chmodded 0755.
-- **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts` (13 `ExtensionMessage` extension→webview, 15 `WebviewMessage` webview→extension variants — `copyText` copies a toast; `copyLogs` is only for logs). `updateChanges` carries the host's `fetchedAt`; the snapshot's optional `composeAllowed` hides compose actions in untrusted workspaces. Lazy detail loads use `DetailKind = 'inspect' | 'changes' | 'layers'`; `inspect` is one `DockerClient.getContainerDetails()` call (env, restart policy + count, mounts, exit code/OOM/error, health log) delivered as `updateInspect` (formerly `updateEnv`).
+- **VSCode webview protocol**: Extension ↔ webview communicate via `postMessage()` with typed messages defined in `sidekick-docker-vscode/src/types/messages.ts` (13 `ExtensionMessage` extension→webview, 15 `WebviewMessage` webview→extension variants — `copyText` copies a toast; `copyLogs` is only for logs). `connectionState` is `connecting | connected | disconnected` (the webview treats anything but `connected` as a stale list). `updateChanges` carries the host's `fetchedAt`; the snapshot's optional `composeAllowed` hides compose actions in untrusted workspaces. Lazy detail loads use `DetailKind = 'inspect' | 'changes' | 'layers'`; `inspect` is one `DockerClient.getContainerDetails()` call (env, restart policy + count, mounts, exit code/OOM/error, health log) delivered as `updateInspect` (formerly `updateEnv`).
 
 ## Module Architecture
 
@@ -326,14 +390,16 @@ Checker semantics worth knowing before trusting a green result:
 
 ## Testing Reality
 
-Don't go looking for test infrastructure that doesn't exist. 69 co-located test files (shared 27, cli 29,
-vscode 13), **no `ink-testing-library`**, no `__mocks__`, no `setupFiles`, and **no coverage tooling at all**.
-Two tests render real UI, both without a harness library: `cli/src/dashboard/ink/execFallback.test.tsx` (the
+Don't go looking for test infrastructure that doesn't exist. 92 co-located test files (shared 27, cli 46,
+vscode 19), **no `ink-testing-library`**, no `__mocks__`, no `setupFiles`, and **no coverage tooling at all**.
+Three tests render real UI, all without a harness library: `cli/src/dashboard/ink/overlayFill.test.ts` renders
+overlays over filler text with Ink's `renderToString` to prove `OVERLAY_FILL` hides what is beneath; `cli/src/dashboard/ink/execFallback.test.tsx` (the
 only `.test.tsx`) mounts `Dashboard` with Ink's own `render()` over `PassThrough` streams, mocking
 `ExecManager`/mouse/terminal-size; `vscode/src/providers/dashboard.dom.test.ts` esbuild-bundles the webview
 and runs it in `jsdom`. The one genuinely shared test double is `sidekick-docker-vscode/src/test/vscode.ts`
-(121 LOC: `workspace` incl. `isTrusted`, `window` incl. `showQuickPick`/`withProgress`, `Uri.parse`,
-`env.asExternalUri`/`openExternal`/`clipboard`, `TreeItem`/`ThemeIcon`/`ThemeColor`), aliased over the `vscode` module for that package's tests and seeded/inspected via its
+(`workspace` incl. `isTrusted`, `window` incl. `showQuickPick`/`withProgress` (with cancellation tokens)/
+`createOutputChannel`/`setStatusBarMessage`, `Uri.parse`/`joinPath`, `env.asExternalUri`/`openExternal`/`clipboard`,
+`TreeItem`/`ThemeIcon`/`ThemeColor`), aliased over the `vscode` module for that package's tests and seeded/inspected via its
 exported `__mock`; shared and cli have no shared helpers.
 
 Testability comes from deliberately extracting pure logic out of components — `reducer`/`initialState` are
@@ -359,10 +425,10 @@ examples: `listModel.ts`, `sideListLayout.ts`, `helpLayout.ts`, `toastLayout.ts`
 
 ## Known Technical Debt
 
-- `webview/dashboard.ts` is still large (1367 LOC; keyboard/overlays/HTML extracted to their own modules).
-  `providers/dashboardHtml.ts` is 1283 LOC, nearly all one inline `<style>` block.
-  `services/DockerService.ts` is 850 LOC now that refresh/event policy lives in `DockerStateStore`
-  and log streams in `LogSlot`. `Dashboard.tsx` ~811 LOC
+- `webview/dashboard.ts` is still large (1521 LOC; keyboard/overlays/HTML extracted to their own modules).
+  `providers/dashboardHtml.ts` is 1319 LOC, nearly all one inline `<style>` block.
+  `services/DockerService.ts` is 879 LOC now that refresh/event policy lives in `DockerStateStore`
+  and log streams in `LogSlot`. `Dashboard.tsx` ~851 LOC
 - `noUncheckedIndexedAccess` not yet enabled — 213 errors under each package's own tsconfig (shared 20,
   cli 73, vscode 120; some of vscode's are in `.test.ts`, which only its tsconfig type-checks). Also absent
   are `noUnusedLocals`, `noUnusedParameters`, and `exactOptionalPropertyTypes`

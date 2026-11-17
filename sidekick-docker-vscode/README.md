@@ -44,8 +44,8 @@ Sidekick Docker: Open Dashboard
 
 or press `Ctrl+Alt+D` — `Ctrl`, not `Cmd`, on macOS too (macOS reserves `Cmd+Opt+D`
 for the Dock). The dashboard opens as a webview panel with the terminal TUI's layout,
-panels and keys, and survives window reloads. A few keys differ: `F5` refreshes, and exec opens a VS
-Code terminal. See [Dashboard keys](https://cesarandreslopez.github.io/sidekick-docker/features/vscode/#dashboard-keys).
+panels and keys, and survives window reloads. A few keys differ: `F5` refreshes, exec opens a VS
+Code terminal, and `w` toggles log wrapping (on by default). See [Dashboard keys](https://cesarandreslopez.github.io/sidekick-docker/features/vscode/#dashboard-keys).
 
 ### Commands
 
@@ -58,15 +58,20 @@ Code terminal. See [Dashboard keys](https://cesarandreslopez.github.io/sidekick-
 | `Sidekick Docker: Exec into Container...` | Quick-pick a running container and open a terminal in it (`exec.defaultShell`) |
 | `Sidekick Docker: Show Container Logs...` | Quick-pick a container and open a terminal running `docker logs -f --tail 200` |
 | `Open in Dashboard` *(tree only)* | Open the dashboard on a container |
-| `Compose Up` / `Compose Restart` / `Compose Down` *(tree only)* | Run on a Compose project group; Restart and Down for running projects, Down asks first; hidden in untrusted workspaces |
+| `Compose Up` / `Compose Restart` / `Compose Down` *(tree only)* | Run on a Compose project group; Restart and Down whenever any of the project's containers is live, Down asks first; hidden in untrusted workspaces |
 
 The activity-bar **Containers** tree groups containers by state (and by Compose
 project), with start/stop/restart/pause/unpause/remove, Exec, Show Logs and
 **Open in Dashboard** in the context menu — only the actions valid for the
-container's state. It says **Connecting to Docker…** during the first connect and,
-when Docker is offline, shows why (permission denied, missing socket, connection
-refused…). The status-bar item shows running/total counts and an unhealthy count;
+container's state. It says **Connecting to Docker…** while connecting (also after the
+endpoint setting changes) and, when Docker is offline, shows why (permission denied,
+missing socket, connection refused…) with a link to the setting. The status-bar item
+shows a spinner while connecting, then running/total counts and an unhealthy count;
 its tooltip names the endpoint or the offline reason.
+
+Compose Up, Down and Restart stream their full output into the **Sidekick Docker**
+output channel and can be cancelled from their progress notification; failures offer
+**Show Output**.
 
 ### Settings
 
@@ -79,7 +84,9 @@ its tooltip names the endpoint or the offline reason.
 
 In an untrusted workspace, `socketPath` and `exec.defaultShell` are read from user
 settings only (they are restricted settings), and Compose is disabled. Trusting the
-folder applies the workspace values and reconnects.
+folder applies the workspace values and reconnects. Both settings are also
+*machine-overridable*: in a Remote-SSH, WSL or Dev Container window they come from that
+remote's settings, not your local user settings.
 
 ## Features
 
@@ -97,7 +104,7 @@ folder applies the workspace values and reconnects.
 - **Filesystem inspector** — view all filesystem changes inside containers (Files tab)
 - **Image layer explorer** — inspect image layer history with sizes and Dockerfile instructions (Layers tab)
 - **Exec into containers** — open an interactive terminal inside a container (shell configurable via `sidekick-docker.exec.defaultShell`)
-- **Connection awareness** — status-bar connection indicator, a disconnected banner and toast that give the real reason (permission denied, missing socket, refused…) with one-click Retry, and a "Retry Connection" action in the Containers view
+- **Connection awareness** — status-bar connection indicator, a disconnected banner and toast that give the real reason (permission denied, missing socket, refused…) with one-click Retry, a "Retry Connection" action in the Containers view, and a dashboard that reconnects by itself when Docker comes back
 - **Mouse-friendly** — click rows and tabs to select, right-click a container row for its action menu, clickable status-bar hint chips
 - **Accessible** — ARIA roles, labels, and live regions; list rows named with state, health and pin status; arrow keys move between tabs (roving tabindex); a focusable context menu with `aria-activedescendant`; high-contrast focus outlines
 - **Workspace-aware Compose** — detect workspace projects, preserve recorded override files for lifecycle actions, and display running/total replicas for scaled services

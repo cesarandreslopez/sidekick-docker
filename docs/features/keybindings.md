@@ -6,15 +6,15 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 
 | Key | Action |
 |-----|--------|
-| `j` / `Down` | Move down |
+| `j` / `Down` | Move down (holding the key keeps moving, even when the terminal batches the repeats) |
 | `k` / `Up` | Move up |
-| `g` | Jump to top |
-| `G` | Jump to bottom. While log follow is paused, `G` resumes it first, wherever focus is |
+| `g` / `Home` | Jump to top |
+| `G` / `End` | Jump to bottom. While log follow is paused, `G` resumes it first, wherever focus is |
 | `PgUp` / `PgDn` | Page up / down |
 | `Ctrl+U` / `Ctrl+D` | Half page up / down |
 | `Tab` | Toggle focus between side list and detail pane |
 | `Enter` / `l` / `Right` | Focus detail pane |
-| `Esc` | Back to side list / close overlay / clear filter |
+| `Esc` | Close an overlay; otherwise clear the filter, then end a log comparison, then go back to the side list |
 | `h` / `Left` | Back to side list (when in detail pane) |
 
 ## Panels & Tabs
@@ -34,14 +34,17 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `a` | Toggle all/running containers (Containers panel) |
 | `o` | Open sort menu (Containers panel) |
 | `R` | Reverse sort direction (Containers panel) |
-| `m` | Pin/unpin item for log comparison (Containers/Services) |
+| `m` | Pin the item for log comparison (Containers/Services); while comparing, `m` (or `Esc`) ends it |
 | `J` / `K` | Scroll the pinned comparison pane (while comparing) |
 | `z` | Cycle layout (Normal/Wide/Expanded) |
 | `M` | Toggle mouse capture. Off lets the terminal select and copy text (`--no-mouse` starts with it off) |
+| `w` | Wrap long lines in the detail pane instead of cutting them off (not in compare mode) |
 | `Ctrl+R` | Refresh now (the status bar shows `(Ctrl+R)` once the last refresh is a minute old) |
 | `?` | Show help overlay |
 | `V` | Show version |
 | `q` / `Ctrl+C` | Quit |
+
+Letter keys ignore `Ctrl` and `Alt`: `Ctrl+Z`, `Ctrl+Q` or `Alt+x` do nothing rather than running `z`, `q` or `x`. Only the chords listed here (`Ctrl+R`, `Ctrl+D`/`Ctrl+U`, `Ctrl+C`) act. While the terminal is too small for the dashboard, only `q` and `Ctrl+C` work.
 
 ## Item Actions
 
@@ -62,16 +65,16 @@ offered; others are ignored.
 | `e` | Exec into container |
 | `b` | Open a published port in the browser (running containers with a published TCP port) |
 | `c` | Copy logs to clipboard (what the Logs tab shows, respecting the log filter) |
-| `P` | Prune — remove all stopped containers (confirmation names the count) |
+| `P` | Prune — remove all stopped containers (confirmation names the count; with no stopped containers it says so instead of asking) |
 
-Embedded exec sessions detach with `Ctrl+]`; ending the shell (`exit` / `Ctrl+D`) also returns to the dashboard.
+Embedded exec sessions detach with `Ctrl+]`; ending the shell (`exit` / `Ctrl+D`) also returns to the dashboard, and `Ctrl+C` goes to the shell. Without the embedded terminal (npm installs), `e` hands the terminal to `docker exec -it` and prints which container you are in; `exit` returns to the dashboard.
 
 ### Images, Volumes and Networks
 
 | Key | Action |
 |-----|--------|
 | `d` | Remove the selected image / volume / network (with confirmation) |
-| `P` | Prune — remove dangling images, unused anonymous volumes (Engine 23+ keeps named ones), or unused networks (confirmation names the count) |
+| `P` | Prune — remove dangling images, unused anonymous volumes (Engine 23+ keeps named ones), or unused networks (confirmation names the count; when the list proves there is nothing to remove it says so instead of asking — any untagged image or non-default network still asks, since the daemon may prune it) |
 
 Remove is offered only where it can succeed: volumes that are not in use, and
 networks that are neither built-in nor still attached to a container.
@@ -80,8 +83,8 @@ networks that are neither built-in nor still attached to a container.
 
 | Key | Action |
 |-----|--------|
-| `u` | Up (start project) |
-| `D` | Down — `docker compose down`: removes the project's containers and networks, keeps volumes (with confirmation) |
+| `u` | Up project — `docker compose up -d` for the whole project, from any of its rows |
+| `D` | Down project — `docker compose down`: removes the project's containers and networks, keeps volumes (with confirmation) |
 | `r` | Restart |
 | `S` | Stop |
 | `c` | Copy logs to clipboard |
@@ -102,7 +105,7 @@ any width.
 | Click panel tab / detail tab | Switch panel / detail tab |
 | Click overlay buttons | Activate them (clicks outside an overlay dismiss it) |
 | Right-click item | Open the actions menu for it |
-| Scroll wheel | Over the list: move the selection. Over the details: scroll them; scrolling up in a logs tab pauses follow — scroll back to the bottom or press `G` to resume. In the help overlay: scroll it |
+| Scroll wheel | Over the list: move the selection. Over the details: scroll them; scrolling up in a logs tab pauses follow — scroll back to the bottom or press `G` to resume. In compare mode, the column under the pointer scrolls. In the help overlay: scroll it |
 
 ## Overlay Keyboard Hints
 
@@ -114,5 +117,5 @@ Interactive overlays display inline keyboard hints:
 | **Sort Menu** | `j`/`k` select, `Enter` apply, `R` reverse, `Esc` close |
 | **Confirmation Modal** | `y` confirms; `n` / `Esc` / `Enter` / `q` cancel (Enter is deliberately the safe default) |
 | **Filter Overlay** | `Enter` to apply, `Esc` to cancel |
-| **Log Filter Overlay** | `Tab` to toggle mode, `Esc` to clear |
+| **Log Filter Overlay** | `Tab` to toggle mode, `Esc` to clear (pasted line breaks and tabs are dropped from both filter prompts) |
 | **Detail Tab Bar** | `[`/`]` cycle tabs |

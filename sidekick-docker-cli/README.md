@@ -90,13 +90,13 @@ Exec runs `/bin/sh` unless you pick another shell with `--shell` or `SIDEKICK_DO
 |-----|--------|
 | `j` / `Down` | Move down |
 | `k` / `Up` | Move up |
-| `g` | Jump to top |
-| `G` | Jump to bottom. While log follow is paused, `G` resumes it first, wherever focus is |
+| `g` / `Home` | Jump to top |
+| `G` / `End` | Jump to bottom. While log follow is paused, `G` resumes it first, wherever focus is |
 | `PgUp` / `PgDn` | Page up / down |
 | `Ctrl+U` / `Ctrl+D` | Half page up / down |
 | `Tab` | Toggle focus between side list and detail pane |
 | `Enter` / `l` / `Right` | Focus detail pane |
-| `Esc` | Back to side list / close overlay / clear filter |
+| `Esc` | Close an overlay; otherwise clear the filter, end a comparison, or go back to the side list |
 | `h` / `Left` | Back to side list (when in detail pane) |
 
 ### Panels & Tabs
@@ -116,10 +116,11 @@ Exec runs `/bin/sh` unless you pick another shell with `--shell` or `SIDEKICK_DO
 | `a` | Toggle all/running containers (Containers panel) |
 | `o` | Open sort menu (Containers panel) |
 | `R` | Reverse sort direction (Containers panel) |
-| `m` | Pin/unpin item for log comparison (Containers/Services) |
+| `m` | Pin the item for log comparison (Containers/Services); `m` or `Esc` ends it |
 | `J` / `K` | Scroll the pinned comparison pane (while comparing) |
 | `z` | Cycle layout (Normal → Wide → Expanded) |
 | `M` | Toggle mouse capture (off lets the terminal select and copy text) |
+| `w` | Wrap long lines in the detail pane |
 | `Ctrl+R` | Refresh now |
 | `?` | Show help overlay (scroll with `j`/`k`, `PgUp`/`PgDn`, `g`/`G`) |
 | `V` | Show version |
@@ -152,8 +153,8 @@ Item actions below work directly on the selected item or from the `x` menu; only
 
 | Key | Action |
 |-----|--------|
-| `u` | Up (start project) |
-| `D` | Down — `docker compose down`: removes containers and networks, keeps volumes (with confirmation) |
+| `u` | Up project (`docker compose up -d` for the whole project) |
+| `D` | Down project — `docker compose down`: removes containers and networks, keeps volumes (with confirmation) |
 | `r` | Restart |
 | `S` | Stop |
 | `c` | Copy logs to clipboard |
@@ -182,7 +183,7 @@ Press `M` to turn mouse capture off so the terminal can select and copy text
 - **Filter** — press `/` to filter any list by name
 - **Confirmation modals** — destructive actions always ask before executing
 - **Mouse support** — click items to select, scroll to navigate; `M` releases the mouse for text selection
-- **Toast notifications** — non-blocking feedback for actions; errors wrap to three lines and stay up longer
+- **Toast notifications** — non-blocking feedback for actions; errors, warnings and info wrap to three lines and stay up longer
 - **Readable on any terminal** — accent colour tuned for dark and light backgrounds; `NO_COLOR` or `--no-color` makes the whole dashboard monochrome
 
 ## Configuration

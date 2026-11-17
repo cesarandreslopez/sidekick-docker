@@ -39,24 +39,28 @@ The activity-bar **Containers** view groups containers by state (and by Compose 
 
 Right-click a **Compose project group** for **Compose Up**, and for a project with live containers (running, paused or restarting) **Compose Restart** and **Compose Down** (Down asks for confirmation). They run `docker compose` with the project's recorded files, against the same endpoint as the rest of the extension. Compose actions are hidden, and refused, in an untrusted workspace, because running them would execute the workspace's compose file.
 
-While the first connection is in progress the view says **Connecting to Docker…**. When the daemon is unreachable, the view shows *why* (permission denied on the socket, socket not found, connection refused, host unreachable…) and offers a **Retry Connection** action.
+While the first connection is in progress the view says **Connecting to Docker…**, and it says so again after the endpoint setting or workspace trust changes, instead of showing the previous daemon's containers. When the daemon is unreachable, the view shows *why* (permission denied on the socket, socket not found, connection refused, host unreachable…) and offers a **Retry Connection** action (progress shows in the view) and a link to the `socketPath` setting. A brief drop of the event stream (for example after sleep) is re-checked at once rather than emptying the tree. Paused and restarting containers are grouped under **Running**, and a Compose project offers Restart and Down whenever any of its containers is live, whichever state group you right-click it in.
 
-The status-bar item shows running/total counts, plus a warning count of unhealthy containers, and opens the dashboard on click. Its tooltip names the endpoint (or, when offline, the reason), and it carries an accessibility label for screen readers.
+The status-bar item shows a spinner while connecting, then running/total counts (running includes paused and restarting, as in the list), plus a warning count of unhealthy containers, and opens the dashboard on click. Its tooltip names the endpoint (or, when offline, the reason), and it carries an accessibility label for screen readers.
 
 ## Settings
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `sidekick-docker.socketPath` | `""` | Docker endpoint: socket path, `unix://`, or `tcp://host[:port]`. Empty uses the platform default (or `DOCKER_HOST`). |
+| `sidekick-docker.socketPath` | `""` | Docker endpoint: socket path, `unix://`, or `tcp://host[:port]`. Empty uses the platform default (or `DOCKER_HOST`). Machine-overridable — see below. |
 | `sidekick-docker.refreshIntervalSeconds` | `30` | Fallback full-refresh interval in seconds (minimum 5). |
 | `sidekick-docker.statusBar.visible` | `true` | Show the status-bar container counts. |
 | `sidekick-docker.exec.defaultShell` | `/bin/sh` | Shell used when opening an exec terminal into a container. |
 
-Settings apply immediately — the extension reconnects without a window reload.
+Settings apply immediately — the extension reconnects without a window reload. Changing the refresh interval applies in place, so the dashboard keeps its logs and sparklines.
+
+### Remote windows
+
+`socketPath` and `exec.defaultShell` are *machine-overridable*: in a Remote-SSH, WSL or Dev Container window they are read from that remote's settings (or the workspace), not from your local user settings, because the extension runs on the remote host. A local path such as `~/.colima/default/docker.sock` therefore no longer follows you into a remote window where it does not exist. If you relied on a `tcp://` endpoint set in local user settings inside a remote window, set it in that remote's settings (**Preferences: Open Remote Settings**).
 
 ### Restricted Mode
 
-In an untrusted workspace (Restricted Mode), `sidekick-docker.socketPath` and `sidekick-docker.exec.defaultShell` are read from your user settings only — VS Code ignores the workspace's values, so a cloned repository's `.vscode/settings.json` cannot point the extension at another daemon or shell. Compose is disabled there too. Granting trust re-reads the settings and reconnects both the tree view and the dashboard.
+In an untrusted workspace (Restricted Mode), `sidekick-docker.socketPath` and `sidekick-docker.exec.defaultShell` are read from your user settings only — VS Code ignores the workspace's values, so a cloned repository's `.vscode/settings.json` cannot point the extension at another daemon or shell. Compose is disabled there too (the warning offers **Manage Workspace Trust**). Granting trust re-reads the settings and reconnects both the tree view and the dashboard.
 
 ## Features
 
@@ -123,6 +127,7 @@ dashboard for the same list. Where the two differ:
 | `m` | Pin / unpin for log comparison (switches to the Logs tab) |
 | `J`/`K` | Scroll the pinned comparison pane |
 | `a` | Show all containers / only those with a live process |
+| `w` | Wrap long log lines, or keep them on one line (wrapping is on by default and remembered) |
 | `o` | Sort menu (Containers) |
 | `R` | Reverse the sort (Containers) |
 | `PgUp`/`PgDn`, `Ctrl+D`/`Ctrl+U` | Page / half-page scroll |
@@ -130,6 +135,8 @@ dashboard for the same list. Where the two differ:
 | `F5` | Refresh |
 | `V` | Version |
 | `?` | Help |
+
+Compose **Up**, **Down** and **Restart** stream their full output into the **Sidekick Docker** output channel and can be cancelled from their progress notification; a cancelled run is reported as cancelled, not as a failure, and failures offer **Show Output**. Pressing an action again while the same one is still running is ignored. When an action fails while the dashboard is hidden, a VS Code notification reports it (with **Open Dashboard**). When the listed items prove a prune would remove nothing, it says so instead of asking (with any untagged image, or any non-default network, it still asks, since the daemon may remove those).
 
 Item actions keep their TUI letters (`s` Start, `S` Stop, `r` Restart, `p` Pause, `u` Unpause
 (containers) or Up (Compose), `e` Exec, `d` Remove, `P` Prune, `D` Down, `c` Copy Logs, `b` Open in
@@ -140,6 +147,6 @@ for confirmation, and `Enter` on the dialog cancels.
 
 Use Tab and Shift+Tab to move between webview controls. Tab strips use a roving tab index — arrow keys (and Home/End) move between tabs. List rows have accessible names that include state, health and pin status; the context menu is focusable and announces the active item via `aria-activedescendant`; focus outlines follow high-contrast themes. The terminal dashboard keeps its own Tab focus toggle. Browser and editor shortcuts using Ctrl, Cmd, or Alt are preserved, apart from the documented Ctrl+D/Ctrl+U scroll commands. Dialogs keep focus inside their controls until closed.
 
-Selecting another item keeps the current detail tab. Filtering or removing the selected item selects the first visible item, or clears the selection if nothing matches. Failed detail loads and disconnected streams provide Retry controls; partial refresh failures identify the affected resource while retaining the last successful data. When the connection fails, the disconnected banner and the error toast give the actual reason (permission denied, missing socket, connection refused…).
+Selecting another item keeps the current detail tab. Filtering or removing the selected item selects the first visible item, or clears the selection if nothing matches. Failed detail loads and disconnected streams provide Retry controls; partial refresh failures identify the affected resource while retaining the last successful data. When the connection fails, the disconnected banner and the error toast give the actual reason (permission denied, missing socket, connection refused…). While disconnected or reconnecting, the last list stays visible but inert, so nothing on it can be acted on by mistake. A dashboard whose connection failed reconnects by itself when Docker comes back (or when you return to it). The Menu key or Shift+F10 on the list opens the actions menu for the selected row. Empty log panes say why (waiting for output, the container is stopped, or the stream was lost), and an empty list says whether the filter or "running only" hides everything.
 
 The Patterns tab updates as the selected container produces logs. Pinned comparison panes update independently, so a quiet primary stream does not hide output from the pinned container or service. Log, stats, and Compose streams stop when the dashboard is hidden or their selection changes, and the dashboard stops polling while hidden. The logs of a stopped container end instead of reconnecting (and resume when it starts again); streams that repeatedly end without output eventually stop retrying and offer an explicit Retry control.

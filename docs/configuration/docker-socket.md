@@ -4,11 +4,12 @@ By default, Sidekick Docker connects to the Docker daemon via the local Unix soc
 
 ## Default Socket
 
-```
-/var/run/docker.sock
-```
+Without `--socket`, the `socketPath` setting or `DOCKER_HOST`, Sidekick Docker uses the same default as the Docker client library:
 
-This is the standard location on Linux and macOS. Docker Desktop also exposes this socket.
+- Windows: the named pipe `//./pipe/docker_engine`
+- Linux and macOS: Docker Desktop's per-user socket `~/.docker/run/docker.sock` when it exists, otherwise `/var/run/docker.sock`
+
+Error messages and the startup line ("Connecting to the default Docker socket (…)…") name whichever of these is in use. Docker *contexts* (`docker context use …`) are not read; if `docker ps` works only through a context, point Sidekick Docker at that context's endpoint (see `docker context inspect`).
 
 ## Custom Endpoint
 
@@ -46,6 +47,8 @@ The VS Code extension reads the same endpoint formats from the `sidekick-docker.
 ```
 
 Leave it empty to use the platform default socket (or `DOCKER_HOST` if set). An invalid value is ignored with a warning and the default socket is used. Changes apply immediately — the extension reconnects without a window reload.
+
+In a remote window (Remote-SSH, WSL, Dev Containers) the extension runs on the remote host, so `socketPath` is *machine-overridable*: it is read from that remote's settings, not your local user settings.
 
 `socketPath` (like `exec.defaultShell`) is a *restricted* setting: in an untrusted workspace VS Code ignores a value set in the workspace's `.vscode/settings.json` and only your user settings apply, so a cloned repository cannot point the extension at a daemon of its choosing. Trusting the folder applies the workspace value and reconnects.
 
