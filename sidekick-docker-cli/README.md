@@ -5,19 +5,28 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/cesarandreslopez/sidekick-docker/blob/main/LICENSE)
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/cesarandreslopez/sidekick-docker)
 
-A terminal dashboard for Docker. Manage containers, Compose projects, images, volumes, and networks — all from a single, keyboard-driven TUI. Includes scriptable `ps`, `logs`, `images`, `volumes`, `networks`, `stats`, `df` and `inspect` commands for non-interactive use.
+**A live Docker dashboard for your terminal.** Containers, Compose services, logs, stats, images, volumes and networks in one keyboard-driven view that stays current from Docker's event stream, so you stop juggling `docker ps`, `docker logs -f`, `docker stats` and `docker compose ps`. The same binary has scriptable `ps`, `logs`, `images`, `volumes`, `networks`, `stats`, `df` and `inspect` commands.
 
-<p align="center">
-  <img src="../assets/sidekick_docker_cli.gif" alt="Sidekick Docker CLI Demo" width="800">
-</p>
+![The Sidekick Docker dashboard on a Compose stack: every container with live, highlighted logs; an unhealthy container's failing health check; Compose services with replica counts; and a prune that reports what it reclaimed](https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/demo/v1/cli-dashboard.gif)
+
+- **Logs you can read**: highlighting, a filter that works as you type, severity counts, repeated lines grouped into patterns, and two streams side by side.
+- **Why it broke**: a failing health check's last output, exit codes, OOM kills and restart counts, without `docker inspect`.
+- **Compose-aware**: projects and replicas, services not yet created, and up, restart and down.
+- **Safe by default**: removes and prunes ask first and name their target; a prune reports what it reclaimed.
+- **Wherever Docker runs**: a local socket, `tcp://`, or `DOCKER_HOST=ssh://`, including on a server over SSH.
+
+Also available as a [VS Code extension](https://github.com/cesarandreslopez/sidekick-docker/tree/main/sidekick-docker-vscode#readme) with the same dashboard.
 
 ## Install
 
 ```bash
 npm install -g sidekick-docker
+sidekick-docker
 ```
 
-**Prerequisites:** Node.js >= 22.12, Docker running.
+**Prerequisites:** Node.js >= 22.12, Docker running, and the `docker` CLI on your `PATH` (Compose actions run `docker compose`; exec runs `docker exec -it`). The dashboard needs a terminal of at least 60×15.
+
+Sidekick Docker uses `DOCKER_HOST` when it is set, otherwise the default socket. It does not read `docker context`: with Colima, OrbStack or rootless Docker, pass `--socket` or set `DOCKER_HOST`.
 
 ## Usage
 
@@ -35,7 +44,7 @@ sidekick-docker ps -q                   # container IDs only
 sidekick-docker logs <container>
 sidekick-docker logs <container> --no-follow --tail 50
 
-# Inventory (all support --format json; images, volumes, networks and stats also support -q)
+# Inventory (--format json and -q, like ps)
 sidekick-docker images
 sidekick-docker volumes
 sidekick-docker networks
@@ -43,7 +52,7 @@ sidekick-docker networks
 # One-shot resource usage, like `docker stats --no-stream`
 sidekick-docker stats
 
-# Disk usage, including build cache — like `docker system df`
+# Disk usage, including build cache — like `docker system df` (--format json too)
 sidekick-docker df
 
 # Raw inspect payload for a container (name, full ID, or ID prefix)
@@ -54,7 +63,7 @@ sidekick-docker inspect <container> | jq .State.Health
 
 | Flag | Description |
 |------|-------------|
-| `--socket <endpoint>` | Docker endpoint: socket path, `unix://` or `tcp://host[:port]` URL |
+| `--socket <endpoint>` | Docker endpoint: socket path, `unix://` or `tcp://host[:port]` URL (`ssh://` works only through `DOCKER_HOST`) |
 | `--no-color` | Disable colored output, including the dashboard (also honors `NO_COLOR` / `FORCE_COLOR`) |
 | `--verbose` | Show full error details |
 | `--shell <path>` | Shell for Exec in the dashboard (default: `$SIDEKICK_DOCKER_SHELL`, else `/bin/sh`) |
@@ -114,13 +123,13 @@ Exec runs `/bin/sh` unless you pick another shell with `--shell` or `SIDEKICK_DO
 | `f` | Open log filter (when on Logs tab) |
 | `/` | Open filter |
 | `a` | Toggle all/running containers (Containers panel) |
-| `o` | Open sort menu (Containers panel) |
+| `o` | Open sort menu (Containers panel): State, Name, CPU %, Memory %, Network I/O, Block I/O, PIDs |
 | `R` | Reverse sort direction (Containers panel) |
 | `m` | Pin the item for log comparison (Containers/Services); `m` or `Esc` ends it |
 | `J` / `K` | Scroll the pinned comparison pane (while comparing) |
 | `z` | Cycle layout (Normal → Wide → Expanded) |
 | `M` | Toggle mouse capture (off lets the terminal select and copy text) |
-| `w` | Wrap long lines in the detail pane |
+| `w` | Wrap long lines in the detail pane (not while comparing) |
 | `Ctrl+R` | Refresh now |
 | `?` | Show help overlay (scroll with `j`/`k`, `PgUp`/`PgDn`, `g`/`G`) |
 | `V` | Show version |
@@ -169,6 +178,8 @@ Press `M` to turn mouse capture off so the terminal can select and copy text
 
 ## Features
 
+![Logs in the dashboard: a filter narrowing to errors as you type, the Patterns tab, then two containers' logs side by side](https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/demo/v1/cli-logs.gif)
+
 - **Real-time log streaming** — follows container logs with token-level syntax highlighting (HTTP methods, status codes, URLs, IPs, timestamps, JSON keys)
 - **Dual-log compare** — pin a second container or service with `m` to view both log streams side by side
 - **Log search & filter** — press `f` on the Logs tab to search within log output with exact or fuzzy matching and match highlighting
@@ -180,7 +191,7 @@ Press `M` to turn mouse capture off so the terminal can select and copy text
 - **Open in browser** — `b` opens a running container's published port (`xdg-open` / `open` / `rundll32`, never via a shell; the daemon's host for `tcp://` and `ssh://` endpoints)
 - **Container details** — health check failures, exit code and OOM kills, restart policy, mounts in the Config tab
 - **Compose detection** — automatically discovers projects from container labels, merges with compose file config
-- **Filter** — press `/` to filter any list by name
+- **Filter** — press `/` to filter any list (containers match name, image and state; images every tag; volumes and networks also their driver)
 - **Confirmation modals** — destructive actions always ask before executing
 - **Mouse support** — click items to select, scroll to navigate; `M` releases the mouse for text selection
 - **Toast notifications** — non-blocking feedback for actions; errors, warnings and info wrap to three lines and stay up longer
@@ -218,12 +229,12 @@ Full documentation is available at the [docs site](https://cesarandreslopez.gith
 
 ## See Also
 
-**[Sidekick Agent Hub](https://github.com/cesarandreslopez/sidekick-agent-hub)** — Multi-provider AI coding agent monitor. Real-time visibility into Claude Code, OpenCode, and Codex CLI sessions with token tracking, context management, and session intelligence. Available as a [TUI on npm](https://www.npmjs.com/package/sidekick-agent-hub) and a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-for-max).
+**[Sidekick Agent Hub](https://github.com/cesarandreslopez/sidekick-agent-hub)**: see what your AI coding agents are doing, and what they cost. Live monitoring for Claude Code, Codex and OpenCode, as a [terminal dashboard on npm](https://www.npmjs.com/package/sidekick-agent-hub) and a [VS Code extension](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-for-max).
 
 ## Contributing
 
-Contributions are welcome! See [CONTRIBUTING.md](../CONTRIBUTING.md) for setup instructions and guidelines.
+Contributions are welcome! See [CONTRIBUTING.md](https://github.com/cesarandreslopez/sidekick-docker/blob/main/CONTRIBUTING.md) for setup instructions and guidelines.
 
 ## License
 
-[MIT](../LICENSE)
+[MIT](https://github.com/cesarandreslopez/sidekick-docker/blob/main/LICENSE)
