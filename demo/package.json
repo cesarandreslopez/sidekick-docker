@@ -1,0 +1,17 @@
+{
+  "name": "sidekick-docker-demo",
+  "private": true,
+  "type": "module",
+  "description": "Reproducible demo recordings for the Sidekick Docker READMEs and docs. Not published.",
+  "scripts": {
+    "stack": "node lib/stack.mjs",
+    "record": "node record.mjs",
+    "review": "node review.mjs",
+    "sync": "node sync.mjs"
+  },
+  "devDependencies": {
+    "@fontsource/jetbrains-mono": "5.2.5",
+    "@vscode/vsce": "3.9.2",
+    "playwright": "1.63.0"
+  }
+}

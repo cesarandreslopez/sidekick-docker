@@ -1,0 +1,6 @@
+{
+  "name": "storefront-app",
+  "version": "1.4.2",
+  "private": true,
+  "description": "Demo-only log and traffic generator for the Sidekick Docker recordings."
+}

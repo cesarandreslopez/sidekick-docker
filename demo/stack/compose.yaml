@@ -1,0 +1,149 @@
+# The invented "storefront" shop the demos record. Every name, host and address
+# in it is made up (hosts are example.com). It runs on the recording-only dind
+# daemon (lib/sandbox.mjs), never on your own Docker.
+#
+# No bind mounts: compose runs on the host but the containers live inside dind,
+# so a host path would resolve inside the dind container instead.
+name: storefront
+
+x-app: &app
+  image: storefront/app:1.4.2
+  pull_policy: never
+  init: true
+  networks: [backend]
+
+services:
+  web:
+    image: nginx:1.29-alpine
+    ports: ["8080:80"]
+    configs:
+      - source: nginx-site
+        target: /etc/nginx/conf.d/default.conf
+    depends_on: [api]
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1/healthz >/dev/null || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks: [frontend, backend]
+
+  api:
+    <<: *app
+    build: ./app
+    environment:
+      MODE: api
+      PORT: "3000"
+      DATABASE_URL: postgres://storefront@db:5432/storefront
+      REDIS_URL: redis://cache:6379
+    deploy:
+      replicas: 3
+    depends_on:
+      db: { condition: service_healthy }
+      cache: { condition: service_started }
+    healthcheck:
+      test: ["CMD", "node", "/app/probe.js", "api"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  worker:
+    <<: *app
+    environment:
+      MODE: worker
+      QUEUES: emails,thumbnails,exports
+    deploy:
+      replicas: 2
+
+  payments:
+    <<: *app
+    environment:
+      MODE: payments
+      PAYMENTS_UPSTREAM: https://pay.example.com
+    healthcheck:
+      test: ["CMD", "node", "/app/probe.js", "payments"]
+      interval: 4s
+      timeout: 3s
+      retries: 2
+
+  reports:
+    <<: *app
+    environment:
+      MODE: reports
+
+  mailer:
+    <<: *app
+    environment:
+      MODE: mailer
+      SMTP_HOST: smtp.example.com
+    restart: on-failure:5
+
+  migrate:
+    <<: *app
+    environment:
+      MODE: migrate
+    restart: "no"
+
+  loadgen:
+    <<: *app
+    environment:
+      MODE: loadgen
+      TARGET: http://web
+    depends_on: [web]
+    networks: [frontend]
+
+  cache-warmer:
+    image: alpine:3.22
+    command: ["sh", "-c", "echo 'INFO  warming product cache'; echo 'INFO  loading catalog into memory'; head -c 400m /dev/zero | tail"]
+    mem_limit: 32m
+    memswap_limit: 32m
+    restart: "no"
+    networks: [backend]
+
+  # Declared but started with --scale search=0, so it shows as not created.
+  search:
+    <<: *app
+    environment:
+      MODE: search
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: storefront
+      POSTGRES_PASSWORD: example
+      POSTGRES_DB: storefront
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storefront"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks: [backend]
+
+  cache:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    networks: [backend]
+
+volumes:
+  db-data: {}
+
+networks:
+  frontend: {}
+  backend: {}
+
+configs:
+  nginx-site:
+    content: |
+      log_format storefront '$$remote_addr "$$request" $$status $${request_time}s "$$http_user_agent"';
+      upstream api { server api:3000; }
+      server {
+        listen 80;
+        access_log /dev/stdout storefront;
+        location = /healthz { access_log off; return 200 'ok'; }
+        location /api/ { proxy_pass http://api; }
+      }

@@ -1,0 +1,7 @@
+# A second, stopped project so the Services panel shows more than one state.
+name: status-page
+
+services:
+  uptime:
+    image: nginx:1.29-alpine
+    restart: "no"
