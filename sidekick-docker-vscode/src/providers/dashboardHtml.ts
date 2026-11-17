@@ -145,7 +145,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
     #side-list .side-group-header {
       padding: 6px 12px 2px;
-      font-size: 10px;
+      font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       color: var(--vscode-descriptionForeground);
@@ -203,6 +203,16 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       outline: 1px solid var(--vscode-contrastActiveBorder, transparent);
       outline-offset: -1px;
     }
+    /*
+     * After the rule above, which is more specific than :focus-visible: a
+     * keyboard-focused active tab drew that (usually transparent) outline, so
+     * focus on it was invisible outside high-contrast themes.
+     */
+    #tab-bar .tab:focus-visible,
+    #detail-tab-bar .detail-tab:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
+    }
     #side-list .side-item.selected .side-badge {
       color: var(--vscode-list-activeSelectionForeground);
       opacity: 0.7;
@@ -246,7 +256,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
     #side-list .side-item .health-badge {
       margin-left: 4px;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 600;
       flex-shrink: 0;
     }
@@ -573,13 +583,13 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       color: var(--vscode-errorForeground, #f85149);
       font-weight: 600;
       text-transform: uppercase;
-      font-size: 9px;
+      font-size: 11px;
       margin-left: 4px;
       letter-spacing: 0.5px;
     }
     .sparkline-row {
       font-family: var(--vscode-editor-font-family, 'Courier New', monospace);
-      font-size: 10px;
+      font-size: 11px;
       line-height: 1;
       letter-spacing: 0;
       margin-top: 2px;
@@ -658,11 +668,16 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       flex-shrink: 0;
       white-space: nowrap;
     }
+    /*
+     * The warning foreground is chosen against the warning background: alone,
+     * on the status-bar colour, it could fall well below a readable contrast.
+     */
     #status-bar .filter-indicator {
-      color: var(--vscode-statusBarItem-warningForeground, var(--vscode-editorWarning-foreground, #cca700));
+      color: var(--vscode-statusBarItem-warningForeground, var(--vscode-statusBar-foreground, #fff));
+      background: var(--vscode-statusBarItem-warningBackground, transparent);
       padding: 0 8px;
-      border-left: 1px solid var(--vscode-statusBar-border, var(--vscode-contrastBorder, transparent));
-      border-right: 1px solid var(--vscode-statusBar-border, var(--vscode-contrastBorder, transparent));
+      border-radius: 3px;
+      white-space: nowrap;
     }
     #status-bar .connection {
       display: flex;
@@ -683,6 +698,11 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
     }
     #status-bar .hint-chip:hover {
       background: var(--vscode-statusBarItem-hoverBackground, var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.2)));
+    }
+    /* The editor's focus border can vanish against the status-bar colour; themes set this one for it. */
+    #status-bar .hint-chip:focus-visible {
+      outline: 1px solid var(--vscode-statusBarItem-focusBorder, var(--vscode-focusBorder));
+      outline-offset: -1px;
     }
 
     /* ─── KV grid ──────────────────────────────────────────────── */
@@ -1100,7 +1120,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       right: 20px;
       top: calc(var(--detail-tab-height) + 4px);
       z-index: 50;
-      font-size: 10px;
+      font-size: 11px;
       color: var(--vscode-descriptionForeground);
       pointer-events: none;
       display: flex;
@@ -1120,7 +1140,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
 
     /* ─── Status bar indicators ─────────────────────────────────── */
     #status-bar .status-indicator {
-      font-size: 10px;
+      font-size: 11px;
       padding: 1px 6px;
       border-radius: 3px;
       background: var(--vscode-statusBarItem-hoverBackground, var(--vscode-toolbar-hoverBackground, rgba(128,128,128,0.15)));
@@ -1129,7 +1149,7 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
 
     /* ─── Sparkline labels ──────────────────────────────────────── */
     .sparkline-label {
-      font-size: 9px;
+      font-size: 11px;
       color: var(--vscode-descriptionForeground);
       opacity: 0.7;
       margin: 0 2px;
@@ -1211,30 +1231,40 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       background: var(--vscode-button-background);
       color: var(--vscode-button-foreground);
     }
-    #disconnected-banner #retry-connect:hover {
+    #disconnected-banner #retry-connect:hover:not(:disabled) {
       background: var(--vscode-button-hoverBackground);
+    }
+    /* A reconnect in progress: the banner stays, its button says so. */
+    #disconnected-banner #retry-connect:disabled {
+      opacity: 0.6;
+      cursor: default;
     }
 
     /* ─── Reduced motion ─────────────────────────────────────────── */
+    /*
+     * Everything, not a list: a list kept missing things (tab and detail-tab
+     * hovers, overlay and menu fades, the toast slide). Durations go to
+     * ~0 rather than "none" so animationend/transitionend still fire.
+     */
     @media (prefers-reduced-motion: reduce) {
-      /* These four were missed: the stat bars, side-row hover, and the
-         confirm/context-menu scale transforms all still animated. */
-      .stat-bar-fill { transition: none !important; }
-      #side-list .side-item { transition: none !important; }
-      #confirm-overlay .dialog { transition: none !important; transform: none !important; }
-      #context-menu { transition: none !important; transform: none !important; }
-
-      .dot.connected,
-      .dot.connecting,
-      .stats-spinner,
-      .toast,
-      .toast.dismissing,
-      #detail-content.fade-in,
-      #side-list .skeleton-row {
-        animation: none;
-        transition: none;
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
       }
+      #confirm-overlay .dialog, #context-menu { transform: none !important; }
     }
+    /* VS Code's own workbench.reduceMotion setting puts this class on the
+       webview body; honour it like the OS preference. */
+    body.vscode-reduce-motion *,
+    body.vscode-reduce-motion *::before,
+    body.vscode-reduce-motion *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+    body.vscode-reduce-motion #confirm-overlay .dialog,
+    body.vscode-reduce-motion #context-menu { transform: none !important; }
   </style>
 </head>
 <body>
