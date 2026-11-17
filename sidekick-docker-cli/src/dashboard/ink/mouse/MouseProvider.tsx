@@ -6,7 +6,7 @@
 import React, { useEffect, useRef } from 'react';
 import { useInput } from 'ink';
 import { enableMouse, disableMouse } from './mouseProtocol';
-import { parseMouseEvent } from './parseMouseEvent';
+import { parseMouseEvents } from './parseMouseEvent';
 import type { TerminalMouseEvent } from './parseMouseEvent';
 
 interface MouseProviderProps {
@@ -41,10 +41,7 @@ export function MouseProvider({ onMouse, enabled = true, children }: MouseProvid
     enableMouse();
 
     const handler = (data: Buffer) => {
-      const event = parseMouseEvent(data);
-      if (event) {
-        onMouseRef.current(event);
-      }
+      for (const event of parseMouseEvents(data)) onMouseRef.current(event);
     };
 
     process.stdin.on('data', handler);

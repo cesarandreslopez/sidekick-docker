@@ -650,6 +650,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
     selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines,
     detailViewportHeight: scrollViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast,
     detailSuffix, menuTitle, helpMaxScroll,
+    compareActive: isCompareActive, secondaryLineCount: secondaryDetailLines.length,
   });
 
   // Full context for key handlers — adds dispatch/addToast/exit, which close

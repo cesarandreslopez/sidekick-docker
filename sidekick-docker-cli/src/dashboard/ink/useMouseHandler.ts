@@ -4,7 +4,7 @@ import type { TerminalMouseEvent } from './mouse';
 import type { DashboardUIState, Action, AddToast } from './dashboardTypes';
 import { executeAction } from './executeAction';
 import { contextMenuHit, confirmHit, confirmLayout, sortHit } from './overlayHitTest';
-import { windowLines } from './windowLines';
+import { windowLines, compareColumnAt } from './windowLines';
 import { panelTabWidth, detailTabWidth, detailTabWindow, shouldCompactTabs } from './tabLayout';
 import type { DetailTabSuffix } from './tabLayout';
 import { SORT_FIELDS, sortFieldLabel } from './dashboardTypes';
@@ -41,10 +41,14 @@ interface MouseContext {
   menuTitle: string;
   /** How far the help overlay scrolls (the wheel scrolls it). */
   helpMaxScroll: number;
+  /** Compare mode is on: the wheel scrolls the column under the cursor. */
+  compareActive: boolean;
+  /** Rows in the compare (right) column. */
+  secondaryLineCount: number;
 }
 
 export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) => void {
-  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast, detailSuffix, menuTitle, helpMaxScroll } = ctx;
+  const { state, dispatch, panels, panelCounts, currentItems, clampedSelection, selectedItem, applicableActions, sideWidth, sideViewportHeight, sideScroll, detailLines, detailViewportHeight, detailTabs, tabIdx, rows, columns, addToast, removeToast, detailSuffix, menuTitle, helpMaxScroll, compareActive, secondaryLineCount } = ctx;
   const detailSuffixLength = detailSuffix.text.length;
   const detailSuffixReserved = detailSuffix.reserved;
   // Read the individual fields outside the callback: closing over `state` itself would make
@@ -116,6 +120,12 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         sideScroll.setSelected(newIdx);
       } else {
         const delta = event.scrollDirection === 'down' ? 3 : -3;
+        // Comparing: the wheel scrolls the column under the cursor (the right
+        // one used to be reachable only with J/K).
+        if (compareActive && compareColumnAt(x, sideWidth, columns - sideWidth) === 'secondary') {
+          dispatch({ type: 'SCROLL_SECONDARY_DETAIL_DELTA', delta, totalLines: secondaryLineCount, viewportHeight: detailViewportHeight });
+          return;
+        }
         // Wheel-up on a logs tab pauses follow; reaching the bottom resumes it.
         const followTab = detailTabs[tabIdx]?.autoScrollBottom === true;
         dispatch({ type: 'SCROLL_DETAIL_DELTA', delta, totalLines: detailLines.length, viewportHeight: detailViewportHeight, followTab });
@@ -201,5 +211,5 @@ export function useMouseHandler(ctx: MouseContext): (event: TerminalMouseEvent) 
         }
       }
     }
-  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, confirmMessage, detailSuffixLength, detailSuffixReserved, menuTitle, helpMaxScroll, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, columns, layoutMode, addToast, removeToast, dispatch]);
+  }, [overlay, activePanelIndex, confirmAction, confirmSeverity, confirmMessage, detailSuffixLength, detailSuffixReserved, menuTitle, helpMaxScroll, compareActive, secondaryLineCount, sideWidth, sideViewportHeight, currentItems, clampedSelection, selectedItem, applicableActions, sideScroll, detailLines.length, detailViewportHeight, panels, panelCounts, detailTabs, tabIdx, rows, columns, layoutMode, addToast, removeToast, dispatch]);
 }

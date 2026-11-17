@@ -64,6 +64,16 @@ export function compareColumnWidth(paneWidth: number): number {
   return Math.max(10, Math.floor((paneWidth - 5) / 2));
 }
 
+/**
+ * Which compare column a screen column `x` falls in. The pane starts at
+ * `paneLeft` with a one-cell border; the left column is followed by the
+ * " │ " divider, whose middle cell is the boundary.
+ */
+export function compareColumnAt(x: number, paneLeft: number, paneWidth: number): 'primary' | 'secondary' {
+  const divider = paneLeft + 1 + compareColumnWidth(paneWidth) + 1;
+  return x <= divider ? 'primary' : 'secondary';
+}
+
 /** Below this column width the compare view drops log timestamps ("HH:MM:SS.mmm " is 13 cells). */
 export const COMPARE_TIMESTAMP_MIN_WIDTH = 40;
 

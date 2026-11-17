@@ -246,25 +246,27 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     id: 'compare-pin',
     keys: ['m'],
     match: (input) => input === 'm',
-    label: 'Pin/unpin log comparison',
+    label: 'Pin / clear log comparison',
     category: 'View',
     isAvailable: (ctx) => (ctx.panel.id === 'containers' || ctx.panel.id === 'services') && ctx.selectedItem !== undefined,
-    hint: () => 'm:Compare',
+    hint: (ctx) => (ctx.state.compareItemIds[ctx.panel.id] ? 'm:End compare' : 'm:Compare'),
     run: (ctx) => {
       const item = ctx.selectedItem;
       if (!item) return;
-      const currentCompare = ctx.state.compareItemIds[ctx.panel.id] ?? null;
+      // With a pin, m ends the comparison — it used to re-pin the selected
+      // item instead, so turning compare off meant selecting the pinned one.
+      if (ctx.state.compareItemIds[ctx.panel.id]) {
+        ctx.dispatch({ type: 'CLEAR_COMPARE', panelId: ctx.panel.id });
+        ctx.addToast('Comparison cleared', 'info');
+        return;
+      }
       ctx.dispatch({ type: 'PIN_COMPARE', panelId: ctx.panel.id, itemId: item.id });
-      if (currentCompare === item.id) {
-        ctx.addToast('Unpinned comparison', 'info');
-      } else {
-        ctx.addToast(`Pinned ${itemName(item)} for comparison — select another to compare`, 'info');
-        // The split view only renders on the logs tab — switch so it appears immediately.
-        if (!isAutoScrollTab(ctx)) {
-          const logsTabIdx = ctx.detailTabs.findIndex(t => t.autoScrollBottom);
-          if (logsTabIdx >= 0) {
-            ctx.dispatch({ type: 'SET_DETAIL_TAB', index: logsTabIdx });
-          }
+      ctx.addToast(`Pinned ${itemName(item)} for comparison — select another to compare`, 'info');
+      // The split view only renders on the logs tab — switch so it appears immediately.
+      if (!isAutoScrollTab(ctx)) {
+        const logsTabIdx = ctx.detailTabs.findIndex(t => t.autoScrollBottom);
+        if (logsTabIdx >= 0) {
+          ctx.dispatch({ type: 'SET_DETAIL_TAB', index: logsTabIdx });
         }
       }
     },
@@ -454,11 +456,16 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     id: 'escape',
     keys: ['Esc'],
     match: (_input, key) => key.escape,
-    label: 'Clear filter / back to list',
+    label: 'Clear filter / end compare / back to list',
     category: 'Navigation',
     run: (ctx) => {
       if (ctx.state.filterString) {
         ctx.dispatch({ type: 'SET_FILTER', value: '' });
+        return;
+      }
+      if (ctx.state.compareItemIds[ctx.panel.id]) {
+        ctx.dispatch({ type: 'CLEAR_COMPARE', panelId: ctx.panel.id });
+        ctx.addToast('Comparison cleared', 'info');
         return;
       }
       if (ctx.state.focusTarget === 'detail') {

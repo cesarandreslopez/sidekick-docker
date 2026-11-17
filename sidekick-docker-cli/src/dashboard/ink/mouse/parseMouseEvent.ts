@@ -15,6 +15,7 @@ export interface TerminalMouseEvent {
 
 // SGR mouse sequence: ESC [ < Cb ; Cx ; Cy M/m
 const SGR_MOUSE_RE = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/;
+const SGR_MOUSE_ALL_RE = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
 
 /**
  * Try to parse an SGR mouse event from raw stdin data.
@@ -23,8 +24,25 @@ const SGR_MOUSE_RE = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/;
 export function parseMouseEvent(data: Buffer | string): TerminalMouseEvent | null {
   const str = typeof data === 'string' ? data : data.toString('utf-8');
   const match = SGR_MOUSE_RE.exec(str);
-  if (!match) return null;
+  return match ? eventFromMatch(match) : null;
+}
 
+/**
+ * Every SGR mouse report in a chunk, in order. A fast wheel spin arrives as
+ * several reports in one read, and only the first used to count, so the
+ * pane scrolled a fraction of what the wheel moved.
+ */
+export function parseMouseEvents(data: Buffer | string): TerminalMouseEvent[] {
+  const str = typeof data === 'string' ? data : data.toString('utf-8');
+  const events: TerminalMouseEvent[] = [];
+  for (const match of str.matchAll(SGR_MOUSE_ALL_RE)) {
+    const event = eventFromMatch(match);
+    if (event) events.push(event);
+  }
+  return events;
+}
+
+function eventFromMatch(match: RegExpMatchArray | RegExpExecArray): TerminalMouseEvent | null {
   const code = parseInt(match[1], 10);
   const cx = parseInt(match[2], 10);
   const cy = parseInt(match[3], 10);
