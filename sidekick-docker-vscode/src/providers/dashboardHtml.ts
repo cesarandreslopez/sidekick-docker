@@ -342,6 +342,12 @@ export function getDashboardHtml(webview: vscode.Webview, extensionUri: vscode.U
       white-space: pre;
       overflow-x: auto;
     }
+    /* w (on by default): wrap long lines instead of scrolling sideways. */
+    #detail-content.wrap-logs .log-content {
+      white-space: pre-wrap;
+      overflow-x: hidden;
+    }
+    #detail-content.wrap-logs .log-msg { overflow-wrap: anywhere; }
 
     /* ─── Compare layout ─────────────────────────────────────────── */
     .log-compare-container {

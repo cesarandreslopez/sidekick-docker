@@ -34,6 +34,8 @@ export interface PersistedViewState {
   sortReversed: boolean;
   layoutMode: LayoutMode;
   showAllContainers: boolean;
+  /** `w`: wrap long log lines (default) or keep them on one line and scroll sideways. */
+  logWrap: boolean;
 }
 
 export interface ToastEntry {
@@ -106,6 +108,7 @@ export interface WebviewState {
 
   // Layout
   layoutMode: LayoutMode;
+  logWrap: boolean;
 
   // Compare mode
   compareItemIds: Record<string, string | null>;
@@ -152,6 +155,9 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
     sortOverlayVisible: false,
     sortMenuIndex: 0,
     layoutMode: restored?.layoutMode ?? 'normal',
+    // On by default: a long line (a stack trace, a JSON blob) is readable
+    // without scrolling sideways; `w` turns it off.
+    logWrap: restored?.logWrap ?? true,
     confirmVisible: false,
     confirmMessage: '',
     confirmCallback: null,

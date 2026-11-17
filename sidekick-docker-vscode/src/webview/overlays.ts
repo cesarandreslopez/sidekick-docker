@@ -17,6 +17,7 @@ export const GLOBAL_KEYBINDINGS = [
   { key: 'Tab / Shift+Tab', label: 'Next / previous control' },
   { key: '[/]', label: 'Cycle detail tabs' },
   { key: 'z', label: 'Cycle layout (Normal/Wide/Expanded)' },
+  { key: 'w', label: 'Wrap / unwrap long log lines' },
   { key: '/', label: 'Filter items' },
   { key: 'f', label: 'Focus log filter (Logs tab)' },
   { key: 'x', label: 'Actions menu' },

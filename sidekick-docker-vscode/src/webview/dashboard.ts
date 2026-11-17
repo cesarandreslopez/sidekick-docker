@@ -65,6 +65,7 @@ function readPersistedState(): Partial<PersistedViewState> | undefined {
   if (typeof r.sortReversed === 'boolean') out.sortReversed = r.sortReversed;
   if (r.layoutMode === 'normal' || r.layoutMode === 'wide' || r.layoutMode === 'expanded') out.layoutMode = r.layoutMode;
   if (typeof r.showAllContainers === 'boolean') out.showAllContainers = r.showAllContainers;
+  if (typeof r.logWrap === 'boolean') out.logWrap = r.logWrap;
   return out;
 }
 
@@ -87,6 +88,7 @@ function persistViewState(): void {
     sortReversed: state.sortReversed,
     layoutMode: state.layoutMode,
     showAllContainers: state.showAllContainers,
+    logWrap: state.logWrap,
   };
   vscode.setState(persisted);
 }
@@ -401,6 +403,9 @@ function renderAll(): void {
   // Apply layout mode class
   const mainArea = document.getElementById('main-area')!;
   mainArea.className = `layout-${state.layoutMode}`;
+  // A class on the static pane, not in the rendered markup: toggling it never
+  // re-renders the log lines, so in-place patching keeps working.
+  $detailContent.classList.toggle('wrap-logs', state.logWrap);
 
   // Apply focus indicator
   $sideList.classList.toggle('focused', state.focusTarget === 'side');
@@ -1073,6 +1078,42 @@ function scrollComparePane(delta: number): void {
   if (pane) pane.scrollTop += delta * 24;
 }
 
+/** The first log line at least partly in view in a scroller, to hold still across a re-wrap. */
+function firstVisibleLogLine(scroller: HTMLElement): HTMLElement | null {
+  const top = scroller.getBoundingClientRect().top;
+  for (const line of scroller.querySelectorAll<HTMLElement>('.log-line')) {
+    if (line.getBoundingClientRect().bottom > top) return line;
+  }
+  return null;
+}
+
+/**
+ * `w`: wrap long log lines or keep them on one line. Line heights change, so
+ * each log scroller keeps its place: one following the tail stays at the
+ * bottom; one reading older lines keeps the first visible line where it was.
+ */
+function toggleLogWrap(): void {
+  const scrollers = [activeScroller(), ...$detailContent.querySelectorAll<HTMLElement>('[data-compare="secondary"] .log-shell')];
+  const anchors = scrollers.map((el) => {
+    const line = firstVisibleLogLine(el);
+    return {
+      el,
+      stick: isNearBottom(el),
+      line,
+      offset: line ? line.getBoundingClientRect().top - el.getBoundingClientRect().top : 0,
+    };
+  });
+  state.logWrap = !state.logWrap;
+  $detailContent.classList.toggle('wrap-logs', state.logWrap);
+  for (const { el, stick, line, offset } of anchors) {
+    if (stick) el.scrollTop = el.scrollHeight;
+    else if (line) el.scrollTop += line.getBoundingClientRect().top - el.getBoundingClientRect().top - offset;
+  }
+  addToast(`Wrap: ${state.logWrap ? 'on' : 'off'}`, 'info');
+  persistViewState();
+  renderScrollIndicators();
+}
+
 /** Toggle the compare pin for an item on the active panel (pin button + m key). */
 function toggleComparePin(itemId: string): void {
   const panel = getPanel();
@@ -1135,6 +1176,7 @@ const keyboardContext: KeyboardContext = {
   getDetailPageRows: () => Math.max(1, Math.floor(activeScroller().clientHeight / 24)),
   scrollComparePane,
   toggleComparePin,
+  toggleLogWrap,
   executeAction,
   executeContextAction,
   showFilter,

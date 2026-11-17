@@ -22,6 +22,8 @@ export interface KeyboardContext {
   /** Scroll the secondary compare log pane (Shift+J/K). */
   scrollComparePane(delta: number): void;
   toggleComparePin(itemId: string): void;
+  /** `w`: wrap long log lines or keep them on one line (persisted). */
+  toggleLogWrap(): void;
   executeAction(action: ActionDefinition, itemId: string): void;
   executeContextAction(idx: number, actions: ActionDefinition[]): void;
   showFilter(): void;
@@ -294,6 +296,13 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     state.layoutMode = modes[(curIdx + 1) % modes.length];
     ctx.addToast(`Layout: ${state.layoutMode.charAt(0).toUpperCase() + state.layoutMode.slice(1)}`, 'info');
     ctx.renderAll();
+    return;
+  }
+
+  // Log line wrap (w — same key and wording as the TUI)
+  if (e.key === 'w') {
+    e.preventDefault();
+    ctx.toggleLogWrap();
     return;
   }
 

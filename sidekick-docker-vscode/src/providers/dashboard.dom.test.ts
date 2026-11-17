@@ -9,6 +9,8 @@ vi.mock('vscode', () => ({ Uri: { joinPath: () => 'dashboard.js' } }));
 let bundle: string;
 let dom: JSDOM;
 let sent: WebviewMessage[];
+/** What the webview last saved with setState(). */
+let persisted: unknown;
 function snapshot(ids = ['alpha', 'beta']): DashboardStateSnapshot {
   return {
     containers: ids.map(id => ({ id, name: id, state: 'running', status: 'Up', image: 'test', ports: [], created: '2026-01-01', labels: {} })),
@@ -33,17 +35,20 @@ function lastSelection() { return sent.filter(m => m.type === 'selectItem').at(-
 beforeAll(() => {
   bundle = buildSync({ entryPoints: ['src/webview/dashboard.ts'], bundle: true, write: false, platform: 'browser', format: 'iife', define: { __VERSION__: '"test"' } }).outputFiles[0].text;
 });
-beforeEach(() => {
+/** Load the webview, as after a reload when `restored` is what getState() returns. */
+function boot(restored?: unknown): void {
   sent = [];
+  persisted = undefined;
   const html = getDashboardHtml({ asWebviewUri: () => 'dashboard.js', cspSource: 'test' } as never, {} as never, 'test');
   dom = new JSDOM(html, { runScripts: 'outside-only', pretendToBeVisual: true });
-  Object.assign(dom.window, { acquireVsCodeApi: () => ({ postMessage: (m: WebviewMessage) => sent.push(m), getState: () => undefined, setState: () => {} }) });
+  Object.assign(dom.window, { acquireVsCodeApi: () => ({ postMessage: (m: WebviewMessage) => sent.push(m), getState: () => restored, setState: (s: unknown) => { persisted = s; } }) });
   dom.window.HTMLElement.prototype.scrollIntoView = () => {};
   dom.window.eval(bundle);
   dom.window.document.dispatchEvent(new dom.window.Event('DOMContentLoaded'));
   receive({ type: 'updateState', snapshot: snapshot() });
   element('#side-list').focus();
-});
+}
+beforeEach(() => boot());
 afterEach(() => dom.window.close());
 
 describe('dashboard DOM', () => {
@@ -475,6 +480,41 @@ describe('dashboard DOM', () => {
     element('.sort-item[data-idx="2"]').click(); // CPU %
     key('R');
     expect(element('#toast-container').textContent).toContain('Sort: CPU %,');
+  });
+
+  it('wraps log lines by default, toggles with w (persisted, listed in help), and keeps patching lines in place', () => {
+    const detail = element('#detail-content');
+    expect(detail.classList.contains('wrap-logs')).toBe(true);
+    const line = (n: number) => ({ timestamp: null, stream: 'stdout' as const, message: `line ${n}` });
+    const range = (from: number, to: number) => Array.from({ length: to - from }, (_, i) => line(from + i));
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: range(0, 3) });
+    const first = element('[data-log-content] .log-line');
+
+    key('w');
+    expect(detail.classList.contains('wrap-logs')).toBe(false);
+    expect(element('#toast-container').textContent).toContain('Wrap: off');
+    expect(persisted).toMatchObject({ logWrap: false });
+    // Toggling re-rendered nothing: appends and ring-buffer drops still patch in place.
+    expect(element('[data-log-content] .log-line')).toBe(first);
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: range(0, 5) });
+    expect(element('[data-log-content] .log-line')).toBe(first);
+    const third = element('[data-log-content]').children[2];
+    receive({ type: 'updateLogs', containerId: 'alpha', entries: range(2, 7) });
+    expect(element('[data-log-content]').children[0]).toBe(third);
+    expect([...element('[data-log-content]').children].map(l => l.textContent)).toEqual(['line 2', 'line 3', 'line 4', 'line 5', 'line 6']);
+
+    key('w');
+    expect(detail.classList.contains('wrap-logs')).toBe(true);
+    expect(element('#toast-container').textContent).toContain('Wrap: on');
+
+    key('?');
+    expect(element('#help-overlay').textContent).toContain('Wrap / unwrap long log lines');
+  });
+
+  it('restores the wrap choice after a reload', () => {
+    dom.window.close();
+    boot({ logWrap: false });
+    expect(element('#detail-content').classList.contains('wrap-logs')).toBe(false);
   });
 
   it('leaves F5 to the host keybinding and keeps the status-bar buttons out of the ellipsized hints', () => {
