@@ -7,6 +7,7 @@ import {
   execFallbackBanner,
   inkStdout,
   installFatalGuard,
+  pauseTerminalRead,
   signalExitCode,
   stripScrollbackErase,
 } from './dashboardLifecycle';
@@ -111,6 +112,28 @@ describe('installFatalGuard', () => {
     expect(handler).toHaveBeenCalledTimes(2);
     remove();
     expect(proc.listenerCount('uncaughtException') + proc.listenerCount('unhandledRejection')).toBe(0);
+  });
+});
+
+describe('pauseTerminalRead (exec fallback)', () => {
+  it('cancels the pending read and starts a fresh one on resume', () => {
+    const handle = { reading: true, readStop: vi.fn(() => 0), readStart: vi.fn(() => 0) };
+    const resume = pauseTerminalRead({ _handle: handle } as unknown as NodeJS.ReadStream);
+    expect(handle.readStop).toHaveBeenCalledTimes(1);
+    expect(handle.reading).toBe(false);
+    resume();
+    expect(handle.readStart).toHaveBeenCalledTimes(1);
+    expect(handle.reading).toBe(true);
+    resume();
+    expect(handle.readStart).toHaveBeenCalledTimes(1);
+  });
+
+  it('does nothing without a reading handle', () => {
+    const idle = { reading: false, readStop: vi.fn(), readStart: vi.fn() };
+    pauseTerminalRead({ _handle: idle } as unknown as NodeJS.ReadStream)();
+    expect(idle.readStop).not.toHaveBeenCalled();
+    expect(idle.readStart).not.toHaveBeenCalled();
+    expect(() => pauseTerminalRead({} as NodeJS.ReadStream)()).not.toThrow();
   });
 });
 

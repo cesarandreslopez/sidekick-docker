@@ -13,6 +13,7 @@ import {
   inkStdout,
   installFatalGuard,
   signalExitCode,
+  pauseTerminalRead,
 } from './dashboardLifecycle';
 import { createViewScheduler, sameComposeTarget, viewTargets } from './viewTargets';
 import type { ViewTargets } from './viewTargets';
@@ -381,11 +382,16 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   const execAbort = new AbortController();
   const onExecFallback = async (containerId: string, containerName: string): Promise<void> => {
     externalExec = true;
+    // Ink's suspend drops its stdin listener but leaves a read pending, so
+    // part of what was typed into the shell went to the dashboard instead
+    // (and was replayed as dashboard input on return). See pauseTerminalRead.
+    const resumeRead = pauseTerminalRead(process.stdin);
     try {
       // Ink has left the alternate screen by now: say where the dashboard went.
       process.stderr.write(`${ansi.dim(execFallbackBanner(containerName))}\n`);
       await execFallback(containerId, cliEnv, execAbort.signal, execShell, containerName);
     } finally {
+      resumeRead();
       externalExec = false;
     }
   };

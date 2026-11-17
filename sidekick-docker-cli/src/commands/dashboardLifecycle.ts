@@ -66,6 +66,36 @@ export function execFallbackBanner(containerName: string): string {
   return `Shell in ${containerName} — type exit to return to sidekick-docker`;
 }
 
+interface ReadableHandle {
+  reading?: boolean;
+  readStop?: () => number;
+  readStart?: () => number;
+}
+
+/**
+ * Stop Node reading the terminal while a child owns it (the `docker exec -it`
+ * fallback); returns the function that starts reading again.
+ *
+ * Ink's suspend removes its stdin listener but leaves a read armed —
+ * `pause()` does not cancel it on a TTY — so a chunk of what was typed into
+ * the shell (a whole line, at the second prompt) went to the dashboard
+ * instead, and was replayed as dashboard input on return. The stop mirrors
+ * what `net.Socket#pause` does for sockets that can stop reading, the
+ * restart what Node's own read start does. Both are no-ops when the stream
+ * has no such handle.
+ */
+export function pauseTerminalRead(stream: NodeJS.ReadStream = process.stdin): () => void {
+  const handle = (stream as unknown as { _handle?: ReadableHandle })._handle;
+  if (!handle?.reading || typeof handle.readStop !== 'function' || typeof handle.readStart !== 'function') return () => {};
+  handle.reading = false;
+  handle.readStop();
+  return () => {
+    if (handle.reading) return;
+    handle.reading = true;
+    handle.readStart?.();
+  };
+}
+
 export interface FatalHandlerOptions {
   /** Stop streams and unmount Ink, which leaves the alternate screen. */
   teardown: () => void;
