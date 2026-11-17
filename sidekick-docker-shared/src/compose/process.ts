@@ -5,6 +5,8 @@ export interface ComposeExecResult {
   exitCode: number;
   stdout: string;
   stderr: string;
+  /** True when the run was stopped through its AbortSignal. */
+  cancelled?: boolean;
 }
 
 export interface RunProcessOptions {
@@ -16,6 +18,8 @@ export interface RunProcessOptions {
   signal?: AbortSignal;
   /** Grace between SIGTERM and SIGKILL once the deadline passes. */
   killGraceMs?: number;
+  /** Called with each decoded chunk as it arrives. */
+  onOutput?: (text: string, stream: 'stdout' | 'stderr') => void;
 }
 
 /** Exit code reported for a process killed by its deadline (mirrors coreutils `timeout`). */
@@ -71,8 +75,13 @@ export function runProcess(cmd: string, args: string[], opts: RunProcessOptions 
       opts.signal?.removeEventListener('abort', onAbort);
     };
 
-    proc.stdout.on('data', (data: Buffer) => { stdout += outDecoder.write(data); });
-    proc.stderr.on('data', (data: Buffer) => { stderr += errDecoder.write(data); });
+    const emit = (text: string, stream: 'stdout' | 'stderr') => {
+      if (text && opts.onOutput) {
+        try { opts.onOutput(text, stream); } catch { /* a sink must not break the run */ }
+      }
+    };
+    proc.stdout.on('data', (data: Buffer) => { const t = outDecoder.write(data); stdout += t; emit(t, 'stdout'); });
+    proc.stderr.on('data', (data: Buffer) => { const t = errDecoder.write(data); stderr += t; emit(t, 'stderr'); });
 
     proc.on('error', (err: NodeJS.ErrnoException) => {
       cleanup();
@@ -89,8 +98,12 @@ export function runProcess(cmd: string, args: string[], opts: RunProcessOptions 
     });
     proc.on('close', (code) => {
       cleanup();
-      stdout += outDecoder.end();
-      stderr += errDecoder.end();
+      const outTail = outDecoder.end();
+      const errTail = errDecoder.end();
+      stdout += outTail;
+      stderr += errTail;
+      emit(outTail, 'stdout');
+      emit(errTail, 'stderr');
       if (timedOut) {
         const secs = Math.round((opts.timeoutMs ?? 0) / 1000);
         const what = [cmd, args[0]].filter(Boolean).join(' ');
@@ -100,6 +113,8 @@ export function runProcess(cmd: string, args: string[], opts: RunProcessOptions 
       }
       if (aborted) {
         stderr += `${stderr && !stderr.endsWith('\n') ? '\n' : ''}cancelled`;
+        resolve({ exitCode: code ?? 1, stdout, stderr, cancelled: true });
+        return;
       }
       resolve({ exitCode: code ?? 1, stdout, stderr });
     });

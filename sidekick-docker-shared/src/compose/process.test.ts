@@ -42,6 +42,23 @@ describe('runProcess', () => {
     const r = await pending;
     expect(r.exitCode).not.toBe(0);
     expect(r.stderr).toMatch(/cancelled$/);
+    expect(r.cancelled).toBe(true);
+  });
+
+  it('streams output to onOutput as it arrives, and still collects it', async () => {
+    const chunks: string[] = [];
+    const r = await runProcess(node, ['-e', 'process.stdout.write("a"); process.stderr.write("b")'], {
+      onOutput: (text, stream) => chunks.push(`${stream}:${text}`),
+    });
+    expect(r.stdout).toBe('a');
+    expect(r.stderr).toBe('b');
+    expect(chunks.sort()).toEqual(['stderr:b', 'stdout:a']);
+    expect(r.cancelled).toBeUndefined();
+  });
+
+  it('keeps running when the output sink throws', async () => {
+    const r = await runProcess(node, ['-e', 'process.stdout.write("x")'], { onOutput: () => { throw new Error('sink'); } });
+    expect(r).toMatchObject({ exitCode: 0, stdout: 'x' });
   });
 
   it('rejects when the command cannot be spawned', async () => {

@@ -49,6 +49,13 @@ describe('throwIfComposeFailed', () => {
 });
 
 describe('composeFailureReason', () => {
+  it('says "cancelled" for a run the user cancelled, and ComposeError flags it', () => {
+    const r = result({ exitCode: 143, stderr: ' Container web  Starting\ncancelled', cancelled: true });
+    expect(composeFailureReason(r)).toBe('cancelled');
+    expect(new ComposeError('up', r).cancelled).toBe(true);
+    expect(new ComposeError('up', result({ exitCode: 1 })).cancelled).toBe(false);
+  });
+
   it('prefers a line that announces an error over trailing progress noise', () => {
     // compose writes progress to stderr even while failing, so the last line
     // is usually " Container x  Stopping" rather than the actual cause.

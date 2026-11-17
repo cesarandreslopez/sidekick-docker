@@ -19,6 +19,8 @@ export class ComposeError extends Error {
   readonly action: string;
   readonly exitCode: number;
   readonly stderr: string;
+  /** The user cancelled the run — report it as such, not as a failure. */
+  readonly cancelled: boolean;
 
   constructor(action: string, result: ComposeExecResult) {
     // The bare reason, not "<action> failed: <reason>". Both frontends render
@@ -30,6 +32,7 @@ export class ComposeError extends Error {
     this.action = action;
     this.exitCode = result.exitCode;
     this.stderr = result.stderr;
+    this.cancelled = result.cancelled === true;
   }
 }
 
@@ -42,6 +45,7 @@ export class ComposeError extends Error {
  * progress line as though it were the cause.
  */
 export function composeFailureReason(result: ComposeExecResult): string {
+  if (result.cancelled) return 'cancelled';
   const lines = result.stderr
     .split('\n')
     .map(l => l.trim())
@@ -88,7 +92,13 @@ export class ComposeClient {
   private exec(args: string[], cwd?: string | ComposeCommandOptions, timeoutMs = this.actionTimeoutMs): Promise<ComposeExecResult> {
     const options = typeof cwd === 'string' ? { cwd } : cwd;
     const files = options?.configFiles?.flatMap(file => ['-f', file]) ?? [];
-    return runProcess('docker', ['compose', ...files, ...args], { cwd: options?.cwd, env: this.extraEnv, timeoutMs });
+    return runProcess('docker', ['compose', ...files, ...args], {
+      cwd: options?.cwd,
+      env: this.extraEnv,
+      timeoutMs,
+      signal: options?.signal,
+      onOutput: options?.onOutput,
+    });
   }
 
   async up(project: string, cwd?: string | ComposeCommandOptions): Promise<ComposeExecResult> {

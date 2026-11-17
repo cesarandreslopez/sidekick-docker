@@ -37,6 +37,10 @@ export function resolveComposeCwd(
 export interface ComposeCommandOptions {
   cwd?: string;
   configFiles?: string[];
+  /** Cancels a running command (SIGTERM, then SIGKILL); the result reports `cancelled`. */
+  signal?: AbortSignal;
+  /** Receives output as it arrives — e.g. to stream `compose up` into an output channel. */
+  onOutput?: (text: string, stream: 'stdout' | 'stderr') => void;
 }
 
 /** Resolve recorded configuration without silently falling back to another project. */
