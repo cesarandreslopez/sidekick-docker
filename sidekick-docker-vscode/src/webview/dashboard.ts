@@ -195,6 +195,14 @@ function getFilteredItems(): PanelItem[] {
   return items;
 }
 
+/** Whether the item filter (on the Containers panel) lets this container through. */
+function filterShowsContainer(id: string): boolean {
+  const snapshot = state.snapshot;
+  const item = snapshot ? containersPanel.getItems(snapshot).find(it => it.id === id) : undefined;
+  if (!snapshot || !item) return false;
+  return containersPanel.getSearchableText(item, snapshot).toLowerCase().includes(state.filterString.toLowerCase());
+}
+
 function fullLabel(item: PanelItem): string {
   return item.label + (item.labelTail ?? '');
 }
@@ -1421,23 +1429,33 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     }
 
     case 'focusContainer': {
-      state.filterString = '';
-      state.showAllContainers = true;
-      hideFilter();
-      // Switch to containers panel and select the specified container
+      // "Open in Dashboard" from the tree used to reset the view: filter
+      // cleared, running-only off, back to the Logs tab. Now only what hides
+      // the target is undone, and the detail tab stays.
+      const id = msg.containerId;
+      const target = state.snapshot?.containers.find(c => c.id === id);
+      // An unknown target (the snapshot predates it) is treated as hidden,
+      // so it shows when the next snapshot brings it.
+      if (!state.showAllContainers && (!target || !matchesRunningOnly(target.state))) state.showAllContainers = true;
       if (state.activePanelIndex !== 0) {
         state.activePanelIndex = 0;
+        // Another panel's filter and tab index mean nothing on Containers.
         state.filterString = '';
+        state.detailTabIndex = 0;
         hideFilter();
         hideContextMenu();
         post({ type: 'switchPanel', panelIndex: 0 });
         post({ type: 'toggleCompareItem', panelId: 'containers', itemId: state.compareItemIds.containers ?? null });
+      } else if (state.filterString && !filterShowsContainer(id)) {
+        state.filterString = '';
+        hideFilter();
       }
-      state.selectedItemId = msg.containerId;
-      pendingFocusId = msg.containerId;
-      state.detailTabIndex = 0;
-      post({ type: 'switchDetailTab', tabIndex: 0 });
-      post({ type: 'selectItem', panelId: 'containers', itemId: msg.containerId });
+      state.selectedItemId = id;
+      pendingFocusId = id;
+      // The host resets its tab on switchPanel: tell it which one is showing.
+      post({ type: 'switchDetailTab', tabIndex: state.detailTabIndex });
+      post({ type: 'selectItem', panelId: 'containers', itemId: id });
+      refetchFilesIfShowing();
       renderAll();
       break;
     }

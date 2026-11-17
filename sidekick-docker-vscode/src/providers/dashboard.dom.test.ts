@@ -164,6 +164,44 @@ describe('dashboard DOM', () => {
     expect(element('.side-item.selected').dataset.id).toBe('gamma');
   });
 
+  it('opens a tree container on the detail tab already showing, re-reading Files when that is the tab', () => {
+    element('[data-tab="2"]').click(); // Env
+    receive({ type: 'focusContainer', containerId: 'beta' });
+    expect(element('[data-tab="2"]').getAttribute('aria-selected')).toBe('true');
+    expect(sent.slice(-2)).toEqual([
+      { type: 'switchDetailTab', tabIndex: 2 },
+      { type: 'selectItem', panelId: 'containers', itemId: 'beta' },
+    ]);
+    element('[data-tab="5"]').click(); // Files
+    receive({ type: 'focusContainer', containerId: 'alpha' });
+    expect(sent.at(-1)).toEqual({ type: 'retryDetail', kind: 'changes', itemId: 'alpha' });
+  });
+
+  it('clears the filter or running-only only when it hides the tree\'s target', () => {
+    key('/');
+    const input = element('#filter-input') as HTMLInputElement;
+    input.value = 'a'; // alpha and beta both match
+    input.dispatchEvent(new dom.window.Event('input'));
+    key('Enter');
+    receive({ type: 'focusContainer', containerId: 'beta' });
+    expect(element('#status-bar').textContent).toContain('Filter: "a"');
+    input.value = 'alp';
+    input.dispatchEvent(new dom.window.Event('input'));
+    receive({ type: 'focusContainer', containerId: 'beta' });
+    expect(element('#status-bar').textContent).not.toContain('Filter:');
+    expect(element('.side-item.selected').dataset.id).toBe('beta');
+
+    const c = (id: string, state: 'running' | 'exited') => ({ id, name: id, state, status: state, image: 'test', ports: [], created: '2026-01-01', labels: {} });
+    receive({ type: 'updateState', snapshot: { ...snapshot(), containers: [c('web', 'running'), c('db', 'exited')] } });
+    element('#side-list').focus();
+    key('a'); // running only
+    receive({ type: 'focusContainer', containerId: 'web' });
+    expect(rowIds()).toEqual(['web']);
+    receive({ type: 'focusContainer', containerId: 'db' });
+    expect(rowIds()).toEqual(['web', 'db']);
+    expect(element('.side-item.selected').dataset.id).toBe('db');
+  });
+
   it('falls back to reconciling when the fresh snapshot lacks the target', () => {
     receive({ type: 'focusContainer', containerId: 'ghost' });
     receive({ type: 'updateState', snapshot: snapshot() });
