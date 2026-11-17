@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-17
+
+Documentation only, with no behaviour changes. The npm and Open VSX pages show the README of the published package, so this release carries the new ones there.
+
+### Changed
+
+- New demo recordings of the terminal dashboard, its log tools (filter, patterns, compare) and the VS Code extension. They are recorded from a script (`demo/`) against an invented Compose stack on an isolated Docker daemon, and replace the GIFs from 0.1, which stay in `assets/` for older READMEs.
+- The READMEs say what Sidekick Docker is and why you would use it before anything else, and the npm README's images and links now work on npmjs.com.
+- The VS Code Marketplace links and badge are gone, because that listing is stuck at 0.4.1. VS Code users install the `.vsix` attached to each GitHub Release; VSCodium and other Open VSX editors install it from Open VSX.
+- The docs site is up to date with 0.7: install paths and prerequisites, endpoints (`ssh://` only through `DOCKER_HOST`), compare, the Files tab, image layers (#1 is the newest), volumes, keybindings, and the architecture and API pages.
+- The npm package includes the MIT `LICENSE` file.
+
 ## [0.7.0] - 2026-11-17
 
 A second, standalone UI/UX audit of both dashboards and the VS Code tree, informed by the sister project sidekick-agent-hub and reviewed adversarially before release.
@@ -728,6 +740,7 @@ A UI/UX audit of both dashboards and the VS Code tree, reviewed adversarially be
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.7.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.1
 [0.7.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0

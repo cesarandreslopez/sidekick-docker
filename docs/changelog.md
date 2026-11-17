@@ -6,6 +6,18 @@ All notable changes to this project will be documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-17
+
+Documentation only, with no behaviour changes. The npm and Open VSX pages show the README of the published package, so this release carries the new ones there.
+
+### Changed
+
+- New demo recordings of the terminal dashboard, its log tools (filter, patterns, compare) and the VS Code extension. They are recorded from a script (`demo/`) against an invented Compose stack on an isolated Docker daemon, and replace the GIFs from 0.1, which stay in `assets/` for older READMEs.
+- The READMEs say what Sidekick Docker is and why you would use it before anything else, and the npm README's images and links now work on npmjs.com.
+- The VS Code Marketplace links and badge are gone, because that listing is stuck at 0.4.1. VS Code users install the `.vsix` attached to each GitHub Release; VSCodium and other Open VSX editors install it from Open VSX.
+- The docs site is up to date with 0.7: install paths and prerequisites, endpoints (`ssh://` only through `DOCKER_HOST`), compare, the Files tab, image layers (#1 is the newest), volumes, keybindings, and the architecture and API pages.
+- The npm package includes the MIT `LICENSE` file.
+
 ## [0.7.0] - 2026-11-17
 
 A second, standalone UI/UX audit of both dashboards and the VS Code tree, informed by the sister project sidekick-agent-hub and reviewed adversarially before release.
@@ -455,21 +467,25 @@ A UI/UX audit of both dashboards and the VS Code tree, reviewed adversarially be
 - New **Files** detail tab on the Containers panel showing all filesystem changes made inside a container
 - Color-coded change markers: green `A` for added, yellow `C` for changed, red `D` for deleted files
 - Uses Docker's `container.changes()` API — works on both running and stopped containers
+- One-shot fetch cached per container selection (same pattern as Env tab)
 - Available in both TUI and VS Code extension
 
 #### Image Layer Explorer
 
 - New **Layers** detail tab on the Images panel showing the full layer history of an image
 - Displays layer number, size, and the Dockerfile instruction that created it
+- Strips `/bin/sh -c #(nop)` prefixes for cleaner instruction display
 - Shows total image size and highlights the largest layer
-- Uses Docker's `image.history()` API
+- Uses Docker's `image.history()` API with Zod validation
 - Available in both TUI and VS Code extension
 
 #### Docker API Layer (`sidekick-docker-shared`)
 
-- `DockerClient.getContainerChanges(id)` — returns typed `FilesystemChange[]`
-- `DockerClient.getImageHistory(nameOrId)` — returns typed `ImageLayer[]`
-- Zod schemas for container changes and image history API responses
+- `DockerClient.getContainerChanges(id)` — returns typed `FilesystemChange[]` with Zod-validated response
+- `DockerClient.getImageHistory(nameOrId)` — returns typed `ImageLayer[]` with Zod-validated response
+- `FilesystemChange` type: `{ path: string; kind: 'added' | 'changed' | 'deleted' }`
+- `ImageLayer` type: `{ id: string; created: Date; createdBy: string; size: number; comment: string }`
+- Zod schemas: `ContainerChangeRawSchema`, `ContainerChangesResponseSchema`, `ImageHistoryItemRawSchema`, `ImageHistoryResponseSchema`
 
 #### VS Code Extension
 
@@ -479,44 +495,50 @@ A UI/UX audit of both dashboards and the VS Code tree, reviewed adversarially be
 
 ### Improved
 
-- Comprehensive Zod runtime validation for all Docker API responses
-- Modular shared package with enforced import DAG and integration tests
-- Sub-path exports eliminating code forks in VSCode package
+#### Code Quality & Architecture
+
+- Comprehensive Zod runtime validation for all Docker API responses (stats, events, container state, ports, volumes, networks, images, prune responses, container inspect, container changes, image history)
+- Zod validation for webview→extension messages
+- Modular shared package with enforced import DAG (`scripts/check-imports.mjs`) and 12 integration tests
+- Sub-path exports (`sidekick-docker-shared/log`, `sidekick-docker-shared/formatters`) eliminating code forks in VSCode package
+- Deduplicated formatters, branding, and phrases across CLI and VSCode
+- Barrel `index.ts` files for compose, docker, and stats sub-modules
 - `BaseStreamManager` extracted from three identical stream manager implementations
-- Async action feedback, contextual hints, and tiered confirmation modals in TUI
+- Additional TypeScript strictness options enabled (`noFallthroughCasesInSwitch`, `noImplicitReturns`)
+
+#### TUI Dashboard UX
+
+- Async action feedback with in-progress toast while actions execute
+- Contextual status bar hints showing available actions for the selected item
+- Tiered confirmation modals (standard vs high-severity with warning styling)
+- Tab scroll position persistence when cycling between detail tabs
 
 ## [0.1.5] - 2026-03-08
 
 ### Added
 
-#### Docker API Layer (`sidekick-docker-shared`)
-
-- `DockerClient.pauseContainer(id)` and `DockerClient.unpauseContainer(id)` methods
-- Health status parsing from Docker `Status` string — extracts `healthy`, `unhealthy`, or `starting` from status text (e.g., "Up 5 minutes (healthy)")
-- `healthStatus` field on `ContainerInfo` type
-- Block I/O stats extraction — `blockRead` and `blockWrite` fields on `ContainerStats`, parsed from `blkio_stats.io_service_bytes_recursive`
-- `StatsCollector.getNetworkRxRateSeries()` / `getNetworkTxRateSeries()` — compute bytes/sec from consecutive cumulative sample deltas
-- `StatsCollector.getBlockReadRateSeries()` / `getBlockWriteRateSeries()` — compute block I/O bytes/sec rates
-- 3 new unit tests for rate series computation (network and block I/O)
-
 #### TUI Dashboard
 
-- Pause (`p`) and Unpause (`u`) container actions in the Containers panel
-- Show all / running-only toggle (`a` key) — filters container list to show only running/paused containers when toggled off
-- Health status indicator in container list items — colored badge (green=healthy, red=unhealthy, yellow=starting) appended to container name
-- Health status in Config detail tab
-- Network I/O sparklines — RX/TX rate sparklines (bytes/sec) below the Net line in the Stats tab
-- Block I/O stats line in Stats tab showing cumulative read/write bytes with rate sparklines
-- Container sorting (`o` key opens sort overlay) — sort by state, name, CPU%, memory%, network I/O, block I/O, or PIDs
-- Reverse sort toggle (`R` key) — reverses current sort direction
-- Sort overlay with j/k navigation, Enter to apply, R to reverse within overlay
-- New keybindings added to Help overlay: `a`, `o`, `R`
+- Pause (`p`) and Unpause (`u`) container actions
+- Show all / running-only toggle (`a` key)
+- Health status badge in container list and Config detail tab
+- Network I/O rate sparklines (RX/TX bytes/sec) in Stats tab
+- Block I/O stats with rate sparklines in Stats tab
+- Container sorting by 7 fields (`o` key opens sort overlay) — state, name, CPU%, memory%, network I/O, block I/O, PIDs
+- Reverse sort toggle (`R` key)
 
 #### VS Code Extension
 
-- Pause and Unpause container actions in context menu and action handler
-- Health status display in Config detail tab (colored: green/red/yellow)
-- Block I/O stats row in Stats detail tab (read/write bytes)
+- Pause and Unpause container actions
+- Health status display in Config detail tab
+- Block I/O stats row in Stats detail tab
+
+#### Docker API Layer (`sidekick-docker-shared`)
+
+- `pauseContainer()` and `unpauseContainer()` methods on DockerClient
+- Health status parsing from Docker status string (`healthy`, `unhealthy`, `starting`)
+- Block I/O stats extraction (`blockRead`, `blockWrite` on `ContainerStats`)
+- Network and block I/O rate series on `StatsCollector`
 
 ## [0.1.4] - 2026-03-07
 
@@ -719,7 +741,23 @@ A UI/UX audit of both dashboards and the VS Code tree, reviewed adversarially be
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.7.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.1
 [0.7.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1
+[0.4.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.0
+[0.3.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.3.0
+[0.2.6]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.6
+[0.2.5]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.5
+[0.2.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.4
+[0.2.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.3
+[0.2.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.2
+[0.2.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.1
+[0.2.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.2.0
+[0.1.5]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.5
+[0.1.4]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.4
+[0.1.3]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.3
+[0.1.2]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.2
+[0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
+[0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0

@@ -5,6 +5,16 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.1] - 2026-11-17
+
+Documentation only, with no behaviour changes.
+
+### Changed
+
+- The README says what Sidekick Docker is and why you would use it before anything else, with a new recording of the extension.
+- Install instructions point VS Code users at the `.vsix` attached to each GitHub Release, and everyone else at Open VSX. The VS Code Marketplace badge is gone, because that listing is stuck at 0.4.1.
+- The docs site is up to date with 0.7, including the VS Code page's install path, compare differences and compose output notes.
+
 ## [0.7.0] - 2026-11-17
 
 ### Fixed
@@ -321,6 +331,7 @@ _No changes — CLI-only bugfix release._
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
 
+[0.7.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.1
 [0.7.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
