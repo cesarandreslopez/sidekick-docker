@@ -7,6 +7,7 @@ import {
   runComposeAction,
   runComposeWithNotifications,
   isComposeCancelled,
+  createComposeOutput,
 } from './composeRunner';
 import type { ComposeOutput } from './composeRunner';
 import { __mock, window } from '../test/vscode';
@@ -26,6 +27,28 @@ describe('warnComposeUntrusted', () => {
     expect(__mock.warningMessages).toEqual(['Compose is disabled in an untrusted workspace — trust the folder to up shop.']);
     expect(__mock.messageItems).toEqual([['Manage Workspace Trust']]);
     await vi.waitFor(() => expect(__mock.executedCommands).toContainEqual(['workbench.trust.manage']));
+  });
+});
+
+describe('createComposeOutput', () => {
+  beforeEach(() => __mock.reset());
+
+  it('creates one "Sidekick Docker" log channel, on its first write', () => {
+    const create = vi.spyOn(window, 'createOutputChannel');
+    try {
+      const output = createComposeOutput();
+      expect(create).not.toHaveBeenCalled();
+      output.info('a');
+      output.error('b');
+      output.show(true);
+      expect(create).toHaveBeenCalledTimes(1);
+      expect(create).toHaveBeenCalledWith('Sidekick Docker', { log: true });
+      expect(lines()).toEqual(['info: a', 'error: b']);
+      expect(__mock.shownChannels).toEqual(['Sidekick Docker']);
+      output.dispose();
+    } finally {
+      create.mockRestore();
+    }
   });
 });
 

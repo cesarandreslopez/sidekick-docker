@@ -25,7 +25,32 @@ export type ComposeAction = 'up' | 'down' | 'restart' | 'stop';
 export type ComposeRunHooks = Pick<ComposeCommandOptions, 'signal' | 'onOutput'>;
 
 /** The part of the "Sidekick Docker" LogOutputChannel compose runs write to. */
-export type ComposeOutput = Pick<vscode.LogOutputChannel, 'info' | 'warn' | 'error' | 'show'>;
+export interface ComposeOutput {
+  info(message: string): void;
+  warn(message: string): void;
+  error(message: string): void;
+  show(preserveFocus?: boolean): void;
+}
+
+/**
+ * The one "Sidekick Docker" log output channel, created on its first write:
+ * the Output panel's list gains no empty entry until a compose action runs,
+ * and activation touches no output API.
+ */
+export function createComposeOutput(): ComposeOutput & vscode.Disposable {
+  let channel: vscode.LogOutputChannel | undefined;
+  const get = (): vscode.LogOutputChannel => (channel ??= vscode.window.createOutputChannel('Sidekick Docker', { log: true }));
+  return {
+    info: message => get().info(message),
+    warn: message => get().warn(message),
+    error: message => get().error(message),
+    show: preserveFocus => get().show(preserveFocus),
+    dispose: () => {
+      channel?.dispose();
+      channel = undefined;
+    },
+  };
+}
 
 /** Collects chunks into whole lines: compose output arrives split anywhere. */
 export function lineSink(write: (line: string) => void): { push(text: string): void; flush(): void } {

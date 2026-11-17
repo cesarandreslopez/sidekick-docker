@@ -10,6 +10,7 @@ import { getDashboardHtml } from './dashboardHtml';
 import { ACTION_META, runDockerAction } from './actionRegistry';
 import { runComposeAction, isComposeCancelled, composeCancelledText, showComposeError } from './composeRunner';
 import type { ComposeAction, ComposeOutput, ComposeRunHooks } from './composeRunner';
+import { InFlightActions, alreadyRunningText } from './inFlight';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import { WebviewMessageSchema } from '../types/messageSchemas';
 import { parseComposeItemId, composeProjectNameOf } from '../types/composeItemId';
@@ -47,6 +48,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
   private workspaceFoldersSubscription: vscode.Disposable;
   /** The "Sidekick Docker" output channel compose actions stream into. */
   private readonly output: ComposeOutput | undefined;
+  /** Actions still running, per item and action (survives a service re-init). */
+  private readonly inFlight = new InFlightActions();
 
   constructor(extensionUri: vscode.Uri, output?: ComposeOutput) {
     this.extensionUri = extensionUri;
@@ -508,35 +511,42 @@ export class DockerDashboardProvider implements vscode.Disposable {
       return undefined;
     };
 
-    try {
-      if (composeAction) {
-        await runComposeAction(composeAction, itemName, this.output, run);
-        this._postMessage({ type: 'toast', message: ACTION_META[composeAction].successMessage(itemName), severity: 'success' });
-      } else if (meta) {
-        // Slow ops get a native progress notification (survives panel hide).
-        // Prefer the action's own outcome text when it has one (prune reports
-        // reclaimed space) over the generic success message.
-        const detail = await runDockerAction(meta, itemName, run);
-        this._postMessage({ type: 'toast', message: detail ?? meta.successMessage(itemName), severity: 'success' });
-      } else {
-        await run();
-        this._postMessage({ type: 'toast', message: actionType, severity: 'success' });
+    // One run per item and action at a time: a second press while the first
+    // still runs is ignored (with a short note) instead of issuing a second
+    // Docker call. Prune is per panel, compose up/down per project.
+    const target = actionType === 'prune' ? '' : panelId === 'services' && (actionType === 'up' || actionType === 'down') ? itemName : itemId;
+    const onDuplicate = () => this._postMessage({ type: 'toast', message: alreadyRunningText(actionType, itemName), severity: 'info' });
+    await this.inFlight.run(`${panelId}:${actionType}:${target}`, async () => {
+      try {
+        if (composeAction) {
+          await runComposeAction(composeAction, itemName, this.output, run);
+          this._postMessage({ type: 'toast', message: ACTION_META[composeAction].successMessage(itemName), severity: 'success' });
+        } else if (meta) {
+          // Slow ops get a native progress notification (survives panel hide).
+          // Prefer the action's own outcome text when it has one (prune reports
+          // reclaimed space) over the generic success message.
+          const detail = await runDockerAction(meta, itemName, run);
+          this._postMessage({ type: 'toast', message: detail ?? meta.successMessage(itemName), severity: 'success' });
+        } else {
+          await run();
+          this._postMessage({ type: 'toast', message: actionType, severity: 'success' });
+        }
+      } catch (err: unknown) {
+        if (composeAction && isComposeCancelled(err)) {
+          // Cancelled from the progress notification: not a failure.
+          this._postMessage({ type: 'toast', message: composeCancelledText(composeAction, itemName), severity: 'info' });
+          return;
+        }
+        // ACTION_META has an entry for exactly the shared ActionTypes.
+        const message = meta ? actionFailedText(actionType as ActionType, itemName, errorMessage(err)) : `${actionType} ${itemName} failed: ${errorMessage(err)}`;
+        // A toast has room for the reason only; compose's full output is in the channel.
+        const toast = composeAction && this.output ? `${message} (full output: Output › Sidekick Docker)` : message;
+        this._postMessage({ type: 'toast', message: toast, severity: 'error' });
+        // A slow action outlives the panel being on screen; its failure must not
+        // land only in a hidden webview.
+        if (!this.panel?.visible) this._notifyHiddenFailure(message, composeAction !== null);
       }
-    } catch (err: unknown) {
-      if (composeAction && isComposeCancelled(err)) {
-        // Cancelled from the progress notification: not a failure.
-        this._postMessage({ type: 'toast', message: composeCancelledText(composeAction, itemName), severity: 'info' });
-        return;
-      }
-      // ACTION_META has an entry for exactly the shared ActionTypes.
-      const message = meta ? actionFailedText(actionType as ActionType, itemName, errorMessage(err)) : `${actionType} ${itemName} failed: ${errorMessage(err)}`;
-      // A toast has room for the reason only; compose's full output is in the channel.
-      const toast = composeAction && this.output ? `${message} (full output: Output › Sidekick Docker)` : message;
-      this._postMessage({ type: 'toast', message: toast, severity: 'error' });
-      // A slow action outlives the panel being on screen; its failure must not
-      // land only in a hidden webview.
-      if (!this.panel?.visible) this._notifyHiddenFailure(message, composeAction !== null);
-    }
+    }, onDuplicate);
   }
 
   private _notifyHiddenFailure(message: string, compose: boolean): void {

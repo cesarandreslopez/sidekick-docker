@@ -279,6 +279,32 @@ describe('DockerDashboardProvider feedback', () => {
     expect(posted).toContainEqual({ type: 'toast', message: 'Failed to take shop down: no such project', severity: 'error' });
   });
 
+  it('ignores a second press of an action still running on the same item', async () => {
+    const svc = serviceInstances[0] as unknown as Record<string, unknown>;
+    svc.getItemDisplayName = () => 'web';
+    let finish!: () => void;
+    const stopContainer = vi.fn(() => new Promise<void>((resolve) => { finish = resolve; }));
+    svc.stopContainer = stopContainer;
+    svc.startContainer = vi.fn(async () => { /* ok */ });
+
+    const first = handle('stop', 'abc', 'containers');
+    await tick();
+    await handle('stop', 'abc', 'containers');
+    expect(stopContainer).toHaveBeenCalledTimes(1);
+    expect(posted).toContainEqual({ type: 'toast', message: 'Already stopping web…', severity: 'info' });
+    // Another action, or the same one on another item, still runs.
+    await handle('start', 'abc', 'containers');
+    expect(svc.startContainer).toHaveBeenCalledTimes(1);
+
+    finish();
+    await first;
+    const again = handle('stop', 'abc', 'containers');
+    await tick();
+    expect(stopContainer).toHaveBeenCalledTimes(2);
+    finish();
+    await again;
+  });
+
   it('words failures with the shared actionFailedText', async () => {
     const svc = serviceInstances[0] as unknown as Record<string, unknown>;
     svc.getItemDisplayName = () => 'web';

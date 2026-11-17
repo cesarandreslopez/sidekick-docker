@@ -6,7 +6,9 @@ import { ContainerWatcherService } from './services/ContainerWatcherService';
 import { statusBarView, runningCount } from './providers/statusBar';
 import type { DockerStatus } from './providers/statusBar';
 import { requireConnected, withViewProgress } from './providers/connectionGuard';
-import { warnComposeUntrusted, runComposeWithNotifications } from './providers/composeRunner';
+import { warnComposeUntrusted, runComposeWithNotifications, createComposeOutput } from './providers/composeRunner';
+import type { ComposeOutput } from './providers/composeRunner';
+import { InFlightActions, alreadyRunningText } from './providers/inFlight';
 import { getSettings, onSettingsChanged, warnIfInvalidEndpoint } from './settings';
 import type { SidekickSettings } from './settings';
 import type { ContainerInfo } from 'sidekick-docker-shared';
@@ -18,7 +20,7 @@ let watcherService: ContainerWatcherService | undefined;
 let treeProvider: ContainerTreeProvider | undefined;
 let treeView: vscode.TreeView<unknown> | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
-let composeOutput: vscode.LogOutputChannel | undefined;
+let composeOutput: (ComposeOutput & vscode.Disposable) | undefined;
 /** Why Docker is unreachable, kept so a later container update keeps saying it. */
 let offlineReason: string | undefined;
 /** Whether the tree's "Connecting…" welcome is still showing. */
@@ -84,21 +86,31 @@ async function withDockerClient(
   await watcherService?.forceRefresh().catch((e: unknown) => console.debug('refresh after action failed:', e));
 }
 
+/** Tree and palette actions still running, per item and action. */
+const inFlight = new InFlightActions();
+
+/** A duplicate press while the action still runs: a brief note, not a second Docker call. */
+function noteAlreadyRunning(type: string, name: string): void {
+  vscode.window.setStatusBarMessage(alreadyRunningText(type, name), 3000);
+}
+
 /**
  * Run a container action with unified feedback: slow ops get a progress
  * notification (via the action registry), success gets a native toast,
- * errors surface through the withDockerClient catch.
+ * errors surface through the withDockerClient catch. A second press of the
+ * same action on the same container while it runs is ignored.
  */
 async function runContainerCommand(
   actionType: 'start' | 'stop' | 'restart' | 'pause' | 'unpause' | 'remove',
-  name: string,
+  target: { id: string; name: string },
   action: (client: InstanceType<typeof import('sidekick-docker-shared').DockerClient>) => Promise<void>,
 ): Promise<void> {
+  const { name } = target;
   const meta = ACTION_META[actionType];
-  await withDockerClient(async (client) => {
+  await inFlight.run(`container:${actionType}:${target.id}`, () => withDockerClient(async (client) => {
     await runDockerAction(meta, name, () => action(client));
     vscode.window.showInformationMessage(meta.successMessage(name));
-  }, message => actionFailedText(actionType, name, message));
+  }, message => actionFailedText(actionType, name, message)), () => noteAlreadyRunning(actionType, name));
 }
 
 function createWatcherService(settings: SidekickSettings): ContainerWatcherService {
@@ -159,8 +171,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // ── Output channel ──────────────────────────────────────────────
   // The full output of compose actions (tree and dashboard alike); failures
-  // offer "Show Output".
-  composeOutput = vscode.window.createOutputChannel('Sidekick Docker', { log: true });
+  // offer "Show Output". One channel, created on its first write.
+  composeOutput = createComposeOutput();
   context.subscriptions.push(composeOutput);
 
   // ── Dashboard provider ──────────────────────────────────────────
@@ -258,39 +270,38 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('sidekick-docker.startContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
-      await runContainerCommand('start', item.container.name, client => client.startContainer(item.container.id));
+      await runContainerCommand('start', item.container, client => client.startContainer(item.container.id));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.stopContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
-      await runContainerCommand('stop', item.container.name, client => client.stopContainer(item.container.id));
+      await runContainerCommand('stop', item.container, client => client.stopContainer(item.container.id));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.restartContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
-      await runContainerCommand('restart', item.container.name, client => client.restartContainer(item.container.id));
+      await runContainerCommand('restart', item.container, client => client.restartContainer(item.container.id));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.pauseContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
-      await runContainerCommand('pause', item.container.name, client => client.pauseContainer(item.container.id));
+      await runContainerCommand('pause', item.container, client => client.pauseContainer(item.container.id));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.unpauseContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
-      await runContainerCommand('unpause', item.container.name, client => client.unpauseContainer(item.container.id));
+      await runContainerCommand('unpause', item.container, client => client.unpauseContainer(item.container.id));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.removeContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
-      const name = item.container.name;
       const choice = await vscode.window.showWarningMessage(
         removeContainerConfirmMessage(item.container),
         { modal: true },
         'Remove',
       );
       if (choice !== 'Remove') return;
-      await runContainerCommand('remove', name, client => client.removeContainer(item.container.id, true));
+      await runContainerCommand('remove', item.container, client => client.removeContainer(item.container.id, true));
     }),
 
     /*
@@ -344,7 +355,7 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to start' }
       );
       if (!picked) return;
-      await runContainerCommand('start', picked.label, client => client.startContainer(picked.containerId));
+      await runContainerCommand('start', { id: picked.containerId, name: picked.label }, client => client.startContainer(picked.containerId));
     }),
 
     // ── Compose project groups (tree context menu) ──────────────
@@ -374,7 +385,7 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to stop' }
       );
       if (!picked) return;
-      await runContainerCommand('stop', picked.label, client => client.stopContainer(picked.containerId));
+      await runContainerCommand('stop', { id: picked.containerId, name: picked.label }, client => client.stopContainer(picked.containerId));
     }),
 
     vscode.commands.registerCommand('sidekick-docker.quickRestart', async () => {
@@ -390,7 +401,7 @@ export function activate(context: vscode.ExtensionContext): void {
         { placeHolder: 'Select a container to restart' }
       );
       if (!picked) return;
-      await runContainerCommand('restart', picked.label, client => client.restartContainer(picked.containerId));
+      await runContainerCommand('restart', { id: picked.containerId, name: picked.label }, client => client.restartContainer(picked.containerId));
     }),
   );
 }
@@ -424,20 +435,23 @@ async function runComposeCommand(action: 'up' | 'down' | 'restart', item?: Compo
     return;
   }
   const shared = await import('sidekick-docker-shared');
-  // Cancellable from the progress notification; output streams into the
-  // "Sidekick Docker" channel; a failure offers Show Output.
-  await runComposeWithNotifications(action, name, composeOutput, async (hooks) => {
-    const settings = getSettings();
-    const source = shared.ComposeDetector.projectSourceFromLabels(item.project.containers[0]?.labels);
-    const options = { ...shared.resolveComposeOptions(source, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath), ...hooks };
-    const compose = new shared.ComposeClient(settings.cliEnv);
-    const run = action === 'up' ? compose.up(name, options)
-      : action === 'down' ? compose.down(name, options)
-      : compose.restart(name, undefined, options);
-    shared.throwIfComposeFailed(await run, action);
-  });
-  // Also after a failure or cancel: compose may have changed some containers.
-  await watcherService?.forceRefresh().catch((e: unknown) => console.debug('refresh after compose failed:', e));
+  // One run per project and action; cancellable from the progress
+  // notification; output streams into the "Sidekick Docker" channel; a
+  // failure offers Show Output.
+  await inFlight.run(`compose:${action}:${name}`, async () => {
+    await runComposeWithNotifications(action, name, composeOutput, async (hooks) => {
+      const settings = getSettings();
+      const source = shared.ComposeDetector.projectSourceFromLabels(item.project.containers[0]?.labels);
+      const options = { ...shared.resolveComposeOptions(source, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath), ...hooks };
+      const compose = new shared.ComposeClient(settings.cliEnv);
+      const run = action === 'up' ? compose.up(name, options)
+        : action === 'down' ? compose.down(name, options)
+        : compose.restart(name, undefined, options);
+      shared.throwIfComposeFailed(await run, action);
+    });
+    // Also after a failure or cancel: compose may have changed some containers.
+    await watcherService?.forceRefresh().catch((e: unknown) => console.debug('refresh after compose failed:', e));
+  }, () => noteAlreadyRunning(action, name));
 }
 
 export function deactivate(): void {
