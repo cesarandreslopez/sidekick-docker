@@ -15,6 +15,15 @@ export function toastDuration(severity: ToastSeverity, message: string, explicit
 }
 
 /**
+ * Rows a toast may wrap to. Errors, warnings and info (the "Refreshed —
+ * images unavailable: …" kind) get three so the reason survives; a success
+ * toast is a short confirmation.
+ */
+export function toastMaxLines(severity: ToastSeverity): number {
+  return severity === 'success' ? 1 : 3;
+}
+
+/**
  * Word-wrap a toast message into at most `maxLines` lines of `width`
  * characters; the last line ends in "…" when text was cut. Errors get three
  * lines so the actual reason survives instead of being truncated away.

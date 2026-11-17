@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { windowLines, maxScrollOffset, clampWindowOffset, compareColumnRows } from './windowLines';
+import { windowLines, maxScrollOffset, clampWindowOffset, compareColumnRows, compareColumnWidth } from './windowLines';
 
 const items = (n: number): number[] => Array.from({ length: n }, (_, i) => i);
 
@@ -99,5 +99,13 @@ describe('compareColumnRows (T1/T25)', () => {
     const rows = compareColumnRows(lines, 5, 10, ' · paused');
     expect(rows.at(-1)).toEqual({ text: '▼ (17 more) · paused', indicator: true, paused: true });
     expect(compareColumnRows(lines, 5, 10).at(-1)).toEqual({ text: '▼ (17 more)', indicator: true, paused: false });
+  });
+});
+
+describe('compareColumnWidth (T15)', () => {
+  it('halves the pane after its borders and the divider, never below 10', () => {
+    expect(compareColumnWidth(85)).toBe(40);
+    expect(compareColumnWidth(86)).toBe(40);
+    expect(compareColumnWidth(20)).toBe(10);
   });
 });

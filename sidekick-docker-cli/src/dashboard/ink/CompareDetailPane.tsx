@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { ansi, clipAnsi } from '../../formatters';
 import { ACCENT } from '../../theme';
 import { FOLLOW_PAUSED_ROW_HINT } from './DetailPane';
-import { compareColumnRows } from './windowLines';
+import { compareColumnRows, compareColumnWidth } from './windowLines';
 import type { ColumnRow } from './windowLines';
 
 interface CompareDetailPaneProps {
@@ -40,8 +40,7 @@ export function CompareDetailPane({
   followPaused,
   secondaryPaused,
 }: CompareDetailPaneProps): React.ReactElement {
-  // 3 chars for divider: space + │ + space
-  const colWidth = Math.max(10, Math.floor((totalWidth - 5) / 2));
+  const colWidth = compareColumnWidth(totalWidth);
 
   // Header row: labels with a divider
   const headerLeft = clipAnsi(ansi.bold(primaryLabel), colWidth);

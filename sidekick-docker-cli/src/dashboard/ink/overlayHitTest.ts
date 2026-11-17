@@ -33,7 +33,9 @@ export const SORT_OVERLAY_WIDTH = SORT_OVERLAY_HINT.length + 4;
  * a long name never widens the box.
  */
 export function contextMenuTitle(name?: string): string {
-  const title = name ? `☰ ${name}` : '☰ Actions';
+  // ≡, not ☰: ☰ is two cells wide, so the box was one column wider than
+  // contextMenuWidth (which counts characters) and clicks missed its edge.
+  const title = name ? `\u2261 ${name}` : '\u2261 Actions';
   return title.length <= CONTEXT_MENU_HINT.length ? title : `${title.slice(0, CONTEXT_MENU_HINT.length - 1)}…`;
 }
 

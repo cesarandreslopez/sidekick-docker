@@ -282,6 +282,21 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     },
   },
   {
+    id: 'wrap-toggle',
+    keys: ['w'],
+    match: (input) => input === 'w',
+    label: 'Wrap long lines (not in compare)',
+    category: 'View',
+    // The compare columns' rows must stay side by side.
+    isAvailable: (ctx) => ctx.secondaryDetailLineCount === 0,
+    hint: (ctx) => (isAutoScrollTab(ctx) ? (ctx.state.wrapLines ? 'w:Unwrap' : 'w:Wrap') : null),
+    run: (ctx) => {
+      ctx.dispatch({ type: 'TOGGLE_WRAP' });
+      // state is pre-toggle here.
+      ctx.addToast(ctx.state.wrapLines ? 'Wrap: off' : 'Wrap: on', 'info');
+    },
+  },
+  {
     id: 'actions-menu',
     keys: ['x'],
     match: (input) => input === 'x',

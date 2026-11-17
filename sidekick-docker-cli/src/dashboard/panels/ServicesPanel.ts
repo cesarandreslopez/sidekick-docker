@@ -73,7 +73,7 @@ export class ServicesPanel implements SidePanel {
       render: (_item, metrics) => {
         const logs = metrics.selectedComposeLogs;
         if (logs.length === 0) return [emptyLogMessage(metrics.composeLogStreamState, 'service')];
-        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode);
+        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode, null, { timestamps: metrics.logTimestamps !== false });
       },
       autoScrollBottom: true,
     },

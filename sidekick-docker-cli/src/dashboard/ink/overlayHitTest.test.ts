@@ -1,3 +1,4 @@
+import stringWidth from 'string-width';
 import { describe, it, expect } from 'vitest';
 import { contextMenuHit, confirmHit, confirmButtonsRow, sortHit, contextMenuWidth, contextMenuTitle, confirmLayout, wrapText, CONTEXT_MENU_ORIGIN, CONFIRM_OVERLAY_ORIGIN, CONTEXT_MENU_HINT } from './overlayHitTest';
 
@@ -24,12 +25,17 @@ describe('contextMenuHit', () => {
 
 describe('contextMenuTitle (T3)', () => {
   it('names the target and never widens the menu', () => {
-    expect(contextMenuTitle('web')).toBe('☰ web');
-    expect(contextMenuTitle()).toBe('☰ Actions');
+    expect(contextMenuTitle('web')).toBe('≡ web');
+    expect(contextMenuTitle()).toBe('≡ Actions');
     const long = contextMenuTitle('a-really-long-container-name-from-a-compose-project-1');
     expect(long.length).toBe(CONTEXT_MENU_HINT.length);
     expect(long.endsWith('…')).toBe(true);
     expect(contextMenuWidth(ACTIONS, long)).toBe(contextMenuWidth(ACTIONS));
+  });
+
+  it('uses a one-cell glyph, so its character count is its drawn width (Missed-6)', () => {
+    const title = contextMenuTitle('web');
+    expect(stringWidth(title)).toBe(title.length);
   });
 
   it('hit-tests with the same title the menu is drawn with', () => {

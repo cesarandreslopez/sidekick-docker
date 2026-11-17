@@ -79,7 +79,7 @@ export class ContainersPanel implements SidePanel {
       render: (_item, metrics) => {
         const logs = metrics.selectedContainerLogs;
         if (logs.length === 0) return [emptyLogMessage(metrics.logStreamState, 'container')];
-        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode, metrics.logSeverityCounts);
+        return renderLogLines(logs, metrics.logFilterString, metrics.logFilterMode, metrics.logSeverityCounts, { timestamps: metrics.logTimestamps !== false });
       },
       autoScrollBottom: true,
     },

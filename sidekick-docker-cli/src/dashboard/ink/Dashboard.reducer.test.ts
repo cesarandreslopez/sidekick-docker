@@ -170,3 +170,10 @@ describe('SCROLL_SIDE at the edge (T22)', () => {
     expect(next.selectedItemIndex).toBe(4);
   });
 });
+
+describe('TOGGLE_WRAP (T11)', () => {
+  it('flips the wrap flag, off by default', () => {
+    expect(initialState.wrapLines).toBe(false);
+    expect(reducer(initialState, { type: 'TOGGLE_WRAP' }).wrapLines).toBe(true);
+  });
+});

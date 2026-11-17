@@ -37,6 +37,8 @@ export interface DockerDashboardMetrics {
   resourceErrors?: Record<string, string>;
   logFilterString: string;
   logFilterMode: FilterMode;
+  /** UI state like the filter: false while narrow compare columns drop log timestamps. */
+  logTimestamps?: boolean;
   logSeverityCounts: SeverityCounts | null;
   logSeverityTimeSeries: { severity: SeverityLevel; total: number }[];
   logTemplates: LogTemplate[];

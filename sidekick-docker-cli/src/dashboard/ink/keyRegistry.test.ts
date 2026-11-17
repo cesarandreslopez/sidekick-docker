@@ -81,6 +81,7 @@ describe('GLOBAL_BINDINGS dispatch table', () => {
       { input: 'R', id: 'sort-reverse' },
       { input: 'm', id: 'compare-pin' },
       { input: 'M', id: 'mouse-toggle' },
+      { input: 'w', id: 'wrap-toggle' },
       { input: 'x', id: 'actions-menu' },
       { input: '[', id: 'detail-tab-cycle' },
       { input: ']', id: 'detail-tab-cycle' },
@@ -326,5 +327,25 @@ describe('navigateBy (T22)', () => {
     const ctx = makeCtx({ currentItems: [] });
     navigateBy(ctx, 2);
     expect(ctx.dispatch).not.toHaveBeenCalled();
+  });
+});
+
+describe('wrap toggle (T11)', () => {
+  it('w toggles wrap and says which way', () => {
+    const off = makeCtx();
+    findMatch('w')!.run(off, 'w', bareKey());
+    expect(off.dispatch).toHaveBeenCalledWith({ type: 'TOGGLE_WRAP' });
+    expect(off.addToast).toHaveBeenCalledWith('Wrap: on', 'info');
+    const on = makeCtx({ state: makeState({ wrapLines: true }) });
+    findMatch('w')!.run(on, 'w', bareKey());
+    expect(on.addToast).toHaveBeenCalledWith('Wrap: off', 'info');
+  });
+
+  it('is unavailable while comparing, and hinted on log tabs', () => {
+    const spec = GLOBAL_BINDINGS.find(b => b.id === 'wrap-toggle')!;
+    expect(spec.isAvailable!(makeCtx({ secondaryDetailLineCount: 12 }))).toBe(false);
+    expect(spec.isAvailable!(makeCtx())).toBe(true);
+    expect(buildContextHint(makeCtx())).toContain('w:Wrap');
+    expect(buildContextHint(makeCtx({ state: makeState({ wrapLines: true }) }))).toContain('w:Unwrap');
   });
 });

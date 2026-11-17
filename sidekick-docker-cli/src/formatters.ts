@@ -27,7 +27,10 @@ function detectColor(): boolean {
 let colorEnabled = detectColor();
 
 export function setColorEnabled(value: boolean): void {
-  if (value !== colorEnabled) colorizedCache = new WeakMap();
+  if (value !== colorEnabled) {
+    colorizedCache = new WeakMap();
+    untimedCache = new WeakMap();
+  }
   colorEnabled = value;
 }
 
@@ -265,15 +268,24 @@ export function logPlainText(entry: LogEntry): string {
 export const STDERR_GUTTER = '┃ ';
 
 let colorizedCache = new WeakMap<LogEntry, string>();
+/** The same lines without their timestamp (narrow compare columns); a cache of its own. */
+let untimedCache = new WeakMap<LogEntry, string>();
 
-export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[]): string {
+export interface LogLineOptions {
+  /** Prefix each line with its local time (default). Narrow compare columns drop it. */
+  timestamps?: boolean;
+}
+
+export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[], opts: LogLineOptions = {}): string {
+  const timestamps = opts.timestamps !== false;
+  const cache = timestamps ? colorizedCache : untimedCache;
   // Cache unfiltered output (filtered highlighting varies per query)
   if (!filterMatches) {
-    const cached = colorizedCache.get(entry);
+    const cached = cache.get(entry);
     if (cached !== undefined) return cached;
   }
 
-  const ts = entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
+  const ts = timestamps && entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
   const tsColored = ts ? ansi.dim(ansi.gray(ts)) + ' ' : '';
   const gutter = entry.stream === 'stderr' ? ansi.dim(ansi.red(STDERR_GUTTER)) : '';
 
@@ -292,7 +304,7 @@ export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[])
   const result = tsColored + gutter + msg;
 
   if (!filterMatches) {
-    colorizedCache.set(entry, result);
+    cache.set(entry, result);
   }
   return result;
 }
@@ -396,6 +408,7 @@ export function renderLogLines(
   filterString: string,
   filterMode: FilterMode,
   severityCounts?: SeverityCounts | null,
+  opts: LogLineOptions = {},
 ): string[] {
   const lines: string[] = [];
 
@@ -415,7 +428,7 @@ export function renderLogLines(
       const result = filterLine(logPlainText(l), filterString, filterMode);
       if (result.matched) {
         matchCount++;
-        lines.push(colorizeLogEntry(l, result.matches));
+        lines.push(colorizeLogEntry(l, result.matches, opts));
       }
     }
     if (lines.length <= (severityCounts ? 1 : 0)) {
@@ -427,7 +440,7 @@ export function renderLogLines(
     }
   } else {
     for (const l of logs) {
-      lines.push(colorizeLogEntry(l));
+      lines.push(colorizeLogEntry(l, undefined, opts));
     }
   }
 

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text } from 'ink';
 import type { ToastEntry } from './dashboardTypes';
-import { wrapToast } from './toastLayout';
+import { wrapToast, toastMaxLines } from './toastLayout';
 import { ACCENT_FILL } from '../../theme';
 
 interface ToastNotificationProps {
@@ -43,8 +43,8 @@ export function ToastNotification({ toast, maxWidth = 80 }: ToastNotificationPro
   // Warning uses black text for contrast against yellow bg
   const textColor = toast.severity === 'warning' ? 'black' : 'white';
 
-  // Errors wrap to three lines so the reason is readable; the rest stay one line.
-  const lines = wrapToast(toast.message, maxWidth - 5, toast.severity === 'error' ? 3 : 1);
+  // Errors, warnings and info wrap to three lines so the reason is readable.
+  const lines = wrapToast(toast.message, maxWidth - 5, toastMaxLines(toast.severity));
   const width = Math.max(...lines.map(l => l.length));
   return (
     <Box flexDirection="column" alignItems="flex-end">

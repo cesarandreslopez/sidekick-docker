@@ -55,6 +55,18 @@ export function clampWindowOffset(offset: number, selectedIndex: number, totalIt
   return Math.max(0, Math.min(next, maxScrollOffset(totalItems, viewportHeight)));
 }
 
+/**
+ * Width of each compare column: the pane minus its borders (2) and the
+ * " │ " divider (3), halved. One function, so the columns that are drawn and
+ * the ones the mouse is tested against cannot drift apart.
+ */
+export function compareColumnWidth(paneWidth: number): number {
+  return Math.max(10, Math.floor((paneWidth - 5) / 2));
+}
+
+/** Below this column width the compare view drops log timestamps ("HH:MM:SS.mmm " is 13 cells). */
+export const COMPARE_TIMESTAMP_MIN_WIDTH = 40;
+
 /** One row of a compare column: content, or a ▲/▼ indicator. */
 export interface ColumnRow {
   text: string;

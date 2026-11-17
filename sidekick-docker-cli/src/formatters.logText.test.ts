@@ -89,3 +89,15 @@ describe('formatLogTemplate', () => {
     expect(formatLogTemplate({ count: 2, pattern: 'GET\t<*>\x07' })).toBe('    2  GET     <*>');
   });
 });
+
+describe('log timestamps option (T12)', () => {
+  it('drops the time without disturbing the cached timed lines', () => {
+    setColorEnabled(false);
+    const timed: LogEntry = { timestamp: '2026-01-02T03:04:05.000Z', stream: 'stdout', message: 'ready' };
+    const withTime = renderLogLines([timed], '', 'exact');
+    expect(withTime[0]).toMatch(/^\d\d:\d\d:\d\d\.\d{3} ready$/);
+    expect(renderLogLines([timed], '', 'exact', null, { timestamps: false })).toEqual(['ready']);
+    expect(renderLogLines([timed], '', 'exact')).toEqual(withTime);
+    expect(renderLogLines([timed], 'rea', 'exact', null, { timestamps: false }).at(-1)).toBe('ready');
+  });
+});

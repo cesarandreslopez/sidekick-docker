@@ -33,7 +33,8 @@ import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboar
 import { SORT_FIELDS } from './dashboardTypes';
 import { buildHelpBindings, buildContextHint } from './keyRegistry';
 import type { KeyContext, KeyQueryContext } from './keyRegistry';
-import { maxScrollOffset } from './windowLines';
+import { maxScrollOffset, compareColumnWidth, COMPARE_TIMESTAMP_MIN_WIDTH } from './windowLines';
+import { wrapDetailLines } from './wrapLines';
 import { appendExecOutput, ExecOutputBuffer, isDetachKey } from './execOutput';
 import { buildHelpSections, layoutHelp } from './helpLayout';
 import { toastDuration } from './toastLayout';
@@ -219,6 +220,8 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
       return { ...state, secondaryFollow: true };
     case 'TOGGLE_MOUSE':
       return { ...state, mouseEnabled: !state.mouseEnabled };
+    case 'TOGGLE_WRAP':
+      return { ...state, wrapLines: !state.wrapLines };
     default:
       return state;
   }
@@ -255,6 +258,7 @@ export const initialState: DashboardUIState = {
   secondaryFollow: true,
   helpScroll: 0,
   mouseEnabled: true,
+  wrapLines: false,
 };
 
 interface DashboardProps {
@@ -509,24 +513,34 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [panel.id, selectedItem?.id, tabIdx, state.sortField, comparedItemId]);
 
-  let detailLines: string[] = [];
-  if (selectedItem && detailTabs.length > 0 && tabIdx >= 0) {
-    const result = detailTabs[tabIdx].render(selectedItem, enrichedMetrics);
-    detailLines = Array.isArray(result) ? result : result.split('\n');
-  } else if (!selectedItem) {
-    detailLines = ['(no item selected)'];
-  }
-  const detailViewportHeight = Math.max(1, rows - RESERVED_UI_ROWS);
-
   // Auto-scroll to bottom when the active tab requests it (e.g. Logs),
   // unless the user paused following by scrolling up.
   const activeTab = detailTabs[tabIdx];
   const shouldAutoScroll = activeTab?.autoScrollBottom ?? false;
   const followPaused = shouldAutoScroll && !state.logFollow;
+  const isCompareActive = comparedItemId != null && shouldAutoScroll;
+
+  // Narrow compare columns drop the log timestamps: 13 of ~30 cells went to
+  // the time, and every message was cut short.
+  const paneWidth = columns - sideWidth;
+  const compareTimestamps = compareColumnWidth(paneWidth) >= COMPARE_TIMESTAMP_MIN_WIDTH;
+  const renderMetrics = isCompareActive && !compareTimestamps ? { ...enrichedMetrics, logTimestamps: false } : enrichedMetrics;
+
+  let renderedLines: string[] = [];
+  if (selectedItem && detailTabs.length > 0 && tabIdx >= 0) {
+    const result = detailTabs[tabIdx].render(selectedItem, renderMetrics);
+    renderedLines = Array.isArray(result) ? result : result.split('\n');
+  } else if (!selectedItem) {
+    renderedLines = ['(no item selected)'];
+  }
+  // Wrap (w) happens here, before any scroll math, so follow, paging and the
+  // mouse count the rows that are drawn. Compare columns are not wrapped:
+  // their rows must stay side by side. Inner width: the pane minus its borders.
+  const detailLines = state.wrapLines && !isCompareActive ? wrapDetailLines(renderedLines, paneWidth - 2) : renderedLines;
+  const detailViewportHeight = Math.max(1, rows - RESERVED_UI_ROWS);
 
   // Compare mode spends one viewport row on its column-header; every scroll
   // clamp must budget it or the newest lines become unreachable.
-  const isCompareActive = comparedItemId != null && shouldAutoScroll;
   const scrollViewportHeight = isCompareActive ? Math.max(1, detailViewportHeight - 1) : detailViewportHeight;
 
   // Follow the tail — including back *up* when the content shrinks. Switching
@@ -544,18 +558,19 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const detailOffset = Math.min(state.detailScrollOffset, followOffset);
   const secondaryDetailLines = React.useMemo(() => {
     if (!isCompareActive) return [];
+    const opts = { timestamps: compareTimestamps };
     if (panel.id === 'containers') {
       const logs = enrichedMetrics.secondaryContainerLogs;
       if (logs.length === 0) return ['Waiting for logs...'];
-      return renderLogLines(logs, state.logFilterString, state.logFilterMode, enrichedMetrics.secondaryLogSeverityCounts);
+      return renderLogLines(logs, state.logFilterString, state.logFilterMode, enrichedMetrics.secondaryLogSeverityCounts, opts);
     }
     if (panel.id === 'services') {
       const logs = enrichedMetrics.secondaryComposeLogs;
       if (logs.length === 0) return ['Waiting for logs...'];
-      return renderLogLines(logs, state.logFilterString, state.logFilterMode);
+      return renderLogLines(logs, state.logFilterString, state.logFilterMode, null, opts);
     }
     return [];
-  }, [isCompareActive, panel.id, enrichedMetrics.secondaryContainerLogs, enrichedMetrics.secondaryComposeLogs, enrichedMetrics.secondaryLogSeverityCounts, state.logFilterString, state.logFilterMode]);
+  }, [isCompareActive, compareTimestamps, panel.id, enrichedMetrics.secondaryContainerLogs, enrichedMetrics.secondaryComposeLogs, enrichedMetrics.secondaryLogSeverityCounts, state.logFilterString, state.logFilterMode]);
 
   // The compare pane tails on its own flag (K pauses it, J to the bottom
   // resumes), compared against the target like the primary — re-running only
@@ -601,7 +616,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   const detailSuffix = detailTabSuffix({
     followPaused,
     itemName: state.layoutMode === 'expanded' && selectedItem ? itemName(selectedItem) : undefined,
-    paneWidth: columns - sideWidth,
+    paneWidth,
     tabLabels: detailTabs.map(t => t.label),
   });
   const menuTitle = contextMenuTitle(selectedItem ? itemName(selectedItem) : undefined);
@@ -703,7 +718,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
               />
             )}
             <Box flexDirection="column" flexGrow={1}>
-              <DetailTabBar tabs={detailTabs} activeIndex={tabIdx} suffix={detailSuffix} width={columns - sideWidth} />
+              <DetailTabBar tabs={detailTabs} activeIndex={tabIdx} suffix={detailSuffix} width={paneWidth} />
               {isCompareActive ? (
                 <CompareDetailPane
                   primaryLines={detailLines}
@@ -711,7 +726,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
                   primaryScrollOffset={detailOffset}
                   secondaryScrollOffset={secondaryOffset}
                   viewportHeight={scrollViewportHeight}
-                  totalWidth={columns - sideWidth}
+                  totalWidth={paneWidth}
                   focused={state.focusTarget === 'detail'}
                   primaryLabel={selectedItem ? itemName(selectedItem) : ''}
                   secondaryLabel={compareItemLabel}
@@ -775,6 +790,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
             matchCount={currentItems.length}
             totalCount={totalItemCount}
             panelTitle={panel.title}
+            width={columns - 2}
           />
         )}
 
@@ -782,6 +798,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
           <LogFilterOverlay
             filterString={state.logFilterString}
             filterMode={state.logFilterMode}
+            width={columns - 2}
           />
         )}
 

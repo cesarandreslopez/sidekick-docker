@@ -69,6 +69,8 @@ export interface DashboardUIState {
   mouseEnabled: boolean;
   /** First visible row of the help overlay (it scrolls when it does not fit). */
   helpScroll: number;
+  /** Soft-wrap long detail lines (w); off in compare mode. */
+  wrapLines: boolean;
 }
 
 export type Action =
@@ -106,7 +108,8 @@ export type Action =
   /** G while comparing: the compare pane tails again (its follow effect scrolls it down). */
   | { type: 'RESUME_SECONDARY_FOLLOW' }
   | { type: 'HELP_SCROLL'; delta: number; max: number }
-  | { type: 'TOGGLE_MOUSE' };
+  | { type: 'TOGGLE_MOUSE' }
+  | { type: 'TOGGLE_WRAP' };
 
 /**
  * The sort fields, in the order the sort menu lists them.

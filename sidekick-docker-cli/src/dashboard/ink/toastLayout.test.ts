@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toastDuration, wrapToast } from './toastLayout';
+import { toastDuration, wrapToast, toastMaxLines } from './toastLayout';
 
 describe('toastDuration', () => {
   it('uses the severity base for short messages and lets callers override', () => {
@@ -29,5 +29,14 @@ describe('wrapToast', () => {
 
   it('hard-breaks a word longer than the width', () => {
     expect(wrapToast('see /var/lib/docker/overlay2/abcdef', 12, 5)).toEqual(['see', '/var/lib/doc', 'ker/overlay2', '/abcdef']);
+  });
+});
+
+describe('toastMaxLines (T23)', () => {
+  it('lets warnings and info wrap like errors; success stays one line', () => {
+    expect(toastMaxLines('error')).toBe(3);
+    expect(toastMaxLines('warning')).toBe(3);
+    expect(toastMaxLines('info')).toBe(3);
+    expect(toastMaxLines('success')).toBe(1);
   });
 });
