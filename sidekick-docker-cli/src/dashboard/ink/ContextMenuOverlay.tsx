@@ -2,7 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { PanelAction } from '../panels/types';
 import { CONTEXT_MENU_ORIGIN, CONTEXT_MENU_HINT, contextMenuWidth } from './overlayHitTest';
-import { ACCENT } from '../../theme';
+import { ACCENT, OVERLAY_FILL } from '../../theme';
 
 interface ContextMenuOverlayProps {
   actions: PanelAction[];
@@ -17,6 +17,7 @@ export function ContextMenuOverlay({ actions, selectedIndex, title, maxWidth }: 
   return (
     <Box
       position="absolute"
+      backgroundColor={OVERLAY_FILL}
       marginTop={CONTEXT_MENU_ORIGIN.top}
       marginLeft={CONTEXT_MENU_ORIGIN.left}
       width={width}

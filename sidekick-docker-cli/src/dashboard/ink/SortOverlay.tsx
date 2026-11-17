@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import type { SortField } from './dashboardTypes';
 import { SORT_OPTIONS } from './dashboardTypes';
 import { SORT_OVERLAY_ORIGIN, SORT_OVERLAY_WIDTH } from './overlayHitTest';
-import { ACCENT } from '../../theme';
+import { ACCENT, OVERLAY_FILL } from '../../theme';
 import { sortDirectionLabel } from 'sidekick-docker-shared';
 
 
@@ -19,6 +19,7 @@ export function SortOverlay({ selectedIndex, currentField, reversed, maxWidth }:
   return (
     <Box
       position="absolute"
+      backgroundColor={OVERLAY_FILL}
       marginTop={SORT_OVERLAY_ORIGIN.top}
       marginLeft={SORT_OVERLAY_ORIGIN.left}
       flexDirection="column"

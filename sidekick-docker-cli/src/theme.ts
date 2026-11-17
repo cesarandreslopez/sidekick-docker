@@ -16,6 +16,15 @@ export const ACCENT_RGB: readonly [number, number, number] = [0x5b, 0x8b, 0xd9];
 /** Background for filled badges and bars that carry white text. */
 export const ACCENT_FILL = '#2B4C7E';
 
+/**
+ * Background for the floating overlays (confirm, actions menu, sort). Ink
+ * paints an absolutely positioned box only where it has text, so the list
+ * and logs underneath showed through its padding and short rows. Any
+ * backgroundColor makes Ink fill the box first; 'none' fills it with plain
+ * spaces — no colour, so it suits dark and light terminals alike.
+ */
+export const OVERLAY_FILL = 'none';
+
 function luminance(hex: string): number {
   const n = parseInt(hex.replace('#', ''), 16);
   const channel = (c: number) => {

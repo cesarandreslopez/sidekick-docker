@@ -19,7 +19,7 @@ function makeCtx(stateOverrides: Partial<DashboardUIState> = {}): OverlayInputCo
     activePanelIndex: 0, selectedItemIndex: 0, detailTabIndex: 0,
     layoutMode: 'normal', focusTarget: 'side', overlay: 'filter',
     filterString: '', detailScrollOffset: 0, detailScrollPerTab: {}, toasts: [],
-    contextMenuIndex: 0, confirmAction: null, confirmMessage: '', confirmSeverity: 'high',
+    contextMenuKey: null, confirmAction: null, confirmMessage: '', confirmSeverity: 'high',
     execOutputLines: [], execContainerId: null, execContainerName: '',
     logFilterString: '', logFilterMode: 'exact', showAllContainers: true,
     sortField: 'state', sortReversed: false, sortMenuIndex: 0,
@@ -131,7 +131,7 @@ describe('confirm overlay input', () => {
 describe('context menu overlay input', () => {
   it('Enter executes the highlighted action and closes', () => {
     const handler = vi.fn();
-    const ctx = makeCtx({ overlay: 'context-menu', contextMenuIndex: 0 });
+    const ctx = makeCtx({ overlay: 'context-menu', contextMenuKey: null });
     ctx.contextActions = [{ key: 's', label: 'Start', handler }];
     OVERLAY_INPUT_HANDLERS['context-menu']('', bareKey({ return: true }), ctx);
     expect(handler).toHaveBeenCalled();
@@ -145,14 +145,14 @@ describe('context menu overlay input', () => {
       { key: 'd', label: 'Remove', handler: vi.fn() },
     ];
     OVERLAY_INPUT_HANDLERS['context-menu']('j', bareKey(), ctx);
-    expect(ctx.dispatched).toContainEqual({ type: 'CONTEXT_MENU_NAV', delta: 1, itemCount: 2 });
+    expect(ctx.dispatched).toContainEqual({ type: 'CONTEXT_MENU_NAV', delta: 1, keys: ['s', 'd'] });
   });
 
   // Regression: the menu-close dispatch used to come AFTER executeAction, so
   // the reducer applied SET_CONFIRM (overlay='confirm') then SET_OVERLAY:null —
   // the confirm modal never appeared and destructive actions silently no-oped.
   it('confirm-requiring actions open the confirm modal after the menu closes (Enter)', () => {
-    const ctx = makeCtx({ overlay: 'context-menu', contextMenuIndex: 0 });
+    const ctx = makeCtx({ overlay: 'context-menu', contextMenuKey: null });
     ctx.contextActions = [{ key: 'd', label: 'Remove', handler: vi.fn(), confirm: true, confirmMessage: 'Remove "web"?' }];
     OVERLAY_INPUT_HANDLERS['context-menu']('', bareKey({ return: true }), ctx);
 
@@ -248,7 +248,7 @@ describe('runs of j/k in menus (T22)', () => {
       { key: 'e', label: 'Exec', handler: vi.fn() },
     ];
     OVERLAY_INPUT_HANDLERS['context-menu']('jj', bareKey(), menu);
-    expect(menu.dispatched).toEqual([{ type: 'CONTEXT_MENU_NAV', delta: 2, itemCount: 3 }]);
+    expect(menu.dispatched).toEqual([{ type: 'CONTEXT_MENU_NAV', delta: 2, keys: ['s', 'd', 'e'] }]);
 
     const sort = makeCtx({ overlay: 'sort' });
     OVERLAY_INPUT_HANDLERS.sort('kkk', bareKey(), sort);
@@ -310,5 +310,26 @@ describe('filter prompts drop control characters (T24)', () => {
     const ctx = makeCtx({ overlay: 'log-filter', logFilterString: 'err' });
     OVERLAY_INPUT_HANDLERS['log-filter']('', bareKey({ escape: true }), ctx);
     expect(ctx.dispatched).toContainEqual({ type: 'SET_LOG_FILTER', value: '' });
+  });
+});
+
+describe('actions-menu cursor follows the action, not the row (T16)', () => {
+  it('Enter runs the highlighted action even after the list shifted under it', () => {
+    const stop = vi.fn();
+    const restart = vi.fn();
+    // Highlighted Restart (key r); Start vanished above it, so Restart moved up a row.
+    const ctx = makeCtx({ overlay: 'context-menu', contextMenuKey: 'r' });
+    ctx.contextActions = [{ key: 'r', label: 'Restart', handler: restart }, { key: 'S', label: 'Stop', handler: stop }];
+    OVERLAY_INPUT_HANDLERS['context-menu']('', bareKey({ return: true }), ctx);
+    expect(restart).toHaveBeenCalled();
+    expect(stop).not.toHaveBeenCalled();
+  });
+
+  it('Enter does nothing when the highlighted action is gone', () => {
+    const start = vi.fn();
+    const ctx = makeCtx({ overlay: 'context-menu', contextMenuKey: 'S' });
+    ctx.contextActions = [{ key: 's', label: 'Start', handler: start }];
+    OVERLAY_INPUT_HANDLERS['context-menu']('', bareKey({ return: true }), ctx);
+    expect(start).not.toHaveBeenCalled();
   });
 });

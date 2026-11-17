@@ -177,3 +177,32 @@ describe('TOGGLE_WRAP (T11)', () => {
     expect(reducer(initialState, { type: 'TOGGLE_WRAP' }).wrapLines).toBe(true);
   });
 });
+
+describe('CONTEXT_MENU_NAV by key (T16)', () => {
+  const keys = ['s', 'r', 'S'];
+  it('starts on the first action and moves by key, wrapping', () => {
+    const opened = reducer(initialState, { type: 'SET_OVERLAY', overlay: 'context-menu' });
+    expect(opened.contextMenuKey).toBeNull();
+    const down = reducer(opened, { type: 'CONTEXT_MENU_NAV', delta: 1, keys });
+    expect(down.contextMenuKey).toBe('r');
+    expect(reducer(down, { type: 'CONTEXT_MENU_NAV', delta: 5, keys }).contextMenuKey).toBe('s');
+    expect(reducer(opened, { type: 'CONTEXT_MENU_NAV', delta: -1, keys }).contextMenuKey).toBe('S');
+  });
+
+  it('moves from wherever the highlighted action now sits', () => {
+    const onStop = { ...initialState, contextMenuKey: 'S' };
+    // Start vanished: Stop is now row 1 of 2, so one up lands on Restart.
+    expect(reducer(onStop, { type: 'CONTEXT_MENU_NAV', delta: -1, keys: ['r', 'S'] }).contextMenuKey).toBe('r');
+  });
+});
+
+describe('contextMenuCursor (T16)', () => {
+  it('derives the row from the key; -1 once the action is gone', async () => {
+    const { contextMenuCursor } = await import('./dashboardTypes');
+    const actions = [{ key: 's' }, { key: 'r' }];
+    expect(contextMenuCursor(actions, null)).toBe(0);
+    expect(contextMenuCursor(actions, 'r')).toBe(1);
+    expect(contextMenuCursor(actions, 'S')).toBe(-1);
+    expect(contextMenuCursor([], null)).toBe(-1);
+  });
+});

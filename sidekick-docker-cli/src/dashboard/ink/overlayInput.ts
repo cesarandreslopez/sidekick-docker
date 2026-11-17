@@ -1,7 +1,7 @@
 import type { Key } from 'ink';
 import type { PanelAction, PanelItem } from '../panels/types';
 import type { Action, DashboardUIState, OverlayKind, ToastSeverity } from './dashboardTypes';
-import { SORT_FIELDS, sortFieldLabel } from './dashboardTypes';
+import { SORT_FIELDS, sortFieldLabel, contextMenuCursor } from './dashboardTypes';
 import { executeAction, findPanelAction } from './executeAction';
 import { navigationRun, stripControlCharacters, tabRun } from './inputText';
 import { sortDirectionLabel } from 'sidekick-docker-shared';
@@ -105,19 +105,19 @@ const contextMenu: OverlayInputHandler = (input, key, ctx) => {
   }
   const run = navigationRun(input);
   if (run !== 0) {
-    dispatch({ type: 'CONTEXT_MENU_NAV', delta: run, itemCount: contextActions.length });
+    dispatch({ type: 'CONTEXT_MENU_NAV', delta: run, keys: contextActions.map(a => a.key) });
     return;
   }
   if (input === 'j' || key.downArrow) {
-    dispatch({ type: 'CONTEXT_MENU_NAV', delta: 1, itemCount: contextActions.length });
+    dispatch({ type: 'CONTEXT_MENU_NAV', delta: 1, keys: contextActions.map(a => a.key) });
     return;
   }
   if (input === 'k' || key.upArrow) {
-    dispatch({ type: 'CONTEXT_MENU_NAV', delta: -1, itemCount: contextActions.length });
+    dispatch({ type: 'CONTEXT_MENU_NAV', delta: -1, keys: contextActions.map(a => a.key) });
     return;
   }
   if (key.return) {
-    const action = contextActions[state.contextMenuIndex];
+    const action = contextActions[contextMenuCursor(contextActions, state.contextMenuKey)];
     if (action && selectedItem) {
       // Close the menu BEFORE executing: executeAction may open the confirm
       // overlay, which a later SET_OVERLAY:null would silently clobber.

@@ -2,6 +2,7 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import { CONFIRM_OVERLAY_ORIGIN, CONFIRM_WARNING, confirmLayout } from './overlayHitTest';
 import type { ConfirmSeverity } from './overlayHitTest';
+import { OVERLAY_FILL } from '../../theme';
 
 interface ConfirmOverlayProps {
   message: string;
@@ -28,6 +29,7 @@ export function ConfirmOverlay({ message, severity, maxWidth }: ConfirmOverlayPr
   return (
     <Box
       position="absolute"
+      backgroundColor={OVERLAY_FILL}
       marginTop={CONFIRM_OVERLAY_ORIGIN.top}
       marginLeft={CONFIRM_OVERLAY_ORIGIN.left}
       width={layout.width}

@@ -30,14 +30,14 @@ import type { ContainerInfo } from 'sidekick-docker-shared';
 import { ExecManager } from '../ExecManager';
 import { stripCursorEscapes, renderLogLines } from '../../formatters';
 import type { LayoutMode, DashboardUIState, Action, SortField } from './dashboardTypes';
-import { SORT_FIELDS } from './dashboardTypes';
+import { SORT_FIELDS, contextMenuCursor } from './dashboardTypes';
 import { buildHelpBindings, buildContextHint } from './keyRegistry';
 import type { KeyContext, KeyQueryContext } from './keyRegistry';
 import { maxScrollOffset, compareColumnWidth, COMPARE_TIMESTAMP_MIN_WIDTH } from './windowLines';
 import { wrapDetailLines } from './wrapLines';
 import { appendExecOutput, ExecOutputBuffer, isDetachKey } from './execOutput';
 import { buildHelpSections, layoutHelp } from './helpLayout';
-import { toastDuration } from './toastLayout';
+import { toastDuration, queueToast } from './toastLayout';
 import { orderItems, resolveSelection, isPinGone, listStateOf } from './listModel';
 import { detailTabSuffix } from './tabLayout';
 import { contextMenuTitle } from './overlayHitTest';
@@ -117,7 +117,7 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
       return {
         ...state,
         overlay: action.overlay,
-        contextMenuIndex: 0,
+        contextMenuKey: null,
         helpScroll: 0,
         // The sort menu opens on the current field, not wherever its cursor was left.
         sortMenuIndex: action.overlay === 'sort' ? Math.max(0, SORT_FIELDS.indexOf(state.sortField)) : state.sortMenuIndex,
@@ -144,13 +144,15 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
       return { ...state, detailScrollOffset: next };
     }
     case 'ADD_TOAST':
-      return { ...state, toasts: [...state.toasts, action.toast].slice(-MAX_QUEUED_TOASTS) };
+      return { ...state, toasts: queueToast(state.toasts, action.toast, MAX_QUEUED_TOASTS) };
     case 'REMOVE_TOAST':
       return { ...state, toasts: state.toasts.filter(t => t.id !== action.id) };
     case 'CONTEXT_MENU_NAV': {
-      if (action.itemCount === 0) return state;
-      const next = (state.contextMenuIndex + action.delta + action.itemCount) % action.itemCount;
-      return { ...state, contextMenuIndex: next };
+      const n = action.keys.length;
+      if (n === 0) return state;
+      const current = Math.max(0, contextMenuCursor(action.keys.map(key => ({ key })), state.contextMenuKey));
+      const next = (((current + action.delta) % n) + n) % n;
+      return { ...state, contextMenuKey: action.keys[next] };
     }
     case 'SCROLL_SIDE': {
       if (action.itemCount === 0) return state;
@@ -240,7 +242,7 @@ export const initialState: DashboardUIState = {
   detailScrollOffset: 0,
   detailScrollPerTab: {},
   toasts: [],
-  contextMenuIndex: 0,
+  contextMenuKey: null,
   confirmAction: null,
   confirmMessage: '',
   confirmSeverity: 'high' as const,
@@ -676,12 +678,14 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
   useKeyboardHandler({ ctx: keyCtx, removeToast });
 
   // Right-click/x can request the menu for an item with no applicable actions;
-  // close it instead of showing an empty shell.
+  // close it instead of showing an empty shell. Likewise when the highlighted
+  // action stops applying while the menu is open.
+  const menuCursor = contextMenuCursor(applicableActions, state.contextMenuKey);
   useEffect(() => {
-    if (state.overlay === 'context-menu' && (!selectedItem || applicableActions.length === 0)) {
+    if (state.overlay === 'context-menu' && (!selectedItem || menuCursor < 0)) {
       dispatch({ type: 'SET_OVERLAY', overlay: null });
     }
-  }, [state.overlay, selectedItem, applicableActions.length]);
+  }, [state.overlay, selectedItem, menuCursor]);
 
   // Render
   if (tooSmall) {
@@ -792,7 +796,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         )}
 
         {state.overlay === 'context-menu' && (
-          <ContextMenuOverlay actions={contextActions} selectedIndex={state.contextMenuIndex} title={menuTitle} maxWidth={columns - 6} />
+          <ContextMenuOverlay actions={contextActions} selectedIndex={Math.max(0, menuCursor)} title={menuTitle} maxWidth={columns - 6} />
         )}
 
         {state.overlay === 'filter' && (

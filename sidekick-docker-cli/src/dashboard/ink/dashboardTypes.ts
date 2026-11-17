@@ -42,7 +42,13 @@ export interface DashboardUIState {
   /** Saved scroll positions per detail tab index. */
   detailScrollPerTab: Record<number, number>;
   toasts: ToastEntry[];
-  contextMenuIndex: number;
+  /**
+   * The actions-menu cursor, as the key of the highlighted action (null:
+   * the first). An index pointed at a different action once the list
+   * changed under the open menu (a container stopping hides Stop), so Enter
+   * ran something other than what had been highlighted.
+   */
+  contextMenuKey: string | null;
   confirmAction: (() => void) | null;
   confirmMessage: string;
   confirmSeverity: 'low' | 'high' | 'batch';
@@ -89,7 +95,7 @@ export type Action =
   | { type: 'SCROLL_DETAIL'; offset: number; followTab?: boolean; totalLines?: number; viewportHeight?: number }
   | { type: 'ADD_TOAST'; toast: ToastEntry }
   | { type: 'REMOVE_TOAST'; id: number }
-  | { type: 'CONTEXT_MENU_NAV'; delta: number; itemCount: number }
+  | { type: 'CONTEXT_MENU_NAV'; delta: number; keys: readonly string[] }
   | { type: 'SCROLL_SIDE'; delta: number; itemCount: number }
   | { type: 'SET_CONFIRM'; action: (() => void) | null; message: string; severity?: 'low' | 'high' | 'batch' }
   | { type: 'EXEC_START'; containerId: string; containerName: string }
@@ -135,4 +141,15 @@ export const SORT_FIELDS: SortField[] = SORT_OPTIONS.map(o => o.field);
 /** Menu label for a sort field ("Memory %"), for toasts — not the raw id ("mem"). */
 export function sortFieldLabel(field: SortField): string {
   return SORT_OPTIONS.find(o => o.field === field)?.label ?? field;
+}
+
+/**
+ * Row of the actions-menu cursor in `actions`: the highlighted action's row,
+ * the first row when nothing has been highlighted yet, or -1 when the
+ * highlighted action is no longer listed (the menu then closes).
+ */
+export function contextMenuCursor(actions: readonly { key: string }[], key: string | null): number {
+  if (actions.length === 0) return -1;
+  if (key === null) return 0;
+  return actions.findIndex(a => a.key === key);
 }

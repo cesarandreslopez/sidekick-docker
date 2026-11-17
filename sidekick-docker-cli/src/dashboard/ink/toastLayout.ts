@@ -1,4 +1,4 @@
-import type { ToastSeverity } from './dashboardTypes';
+import type { ToastEntry, ToastSeverity } from './dashboardTypes';
 
 const BASE_DURATION: Record<ToastSeverity, number> = { error: 6000, warning: 3000, info: 2500, success: 2000 };
 
@@ -51,4 +51,25 @@ export function wrapToast(message: string, width: number, maxLines: number): str
   const last = kept[maxLines - 1];
   kept[maxLines - 1] = `${last.slice(0, Math.max(0, w - 1))}…`;
   return kept;
+}
+
+/**
+ * The toast queue after adding `toast`, at most `max` long.
+ *
+ * - The same message at the same severity replaces the earlier copy instead
+ *   of stacking (three "Not available here" filled the whole stack).
+ * - When full, the oldest toast that is not a progress spinner goes first.
+ *   Evicting the oldest outright could drop a running action's spinner,
+ *   which never expires on its own, while stale results stayed on screen.
+ */
+export function queueToast(toasts: readonly ToastEntry[], toast: ToastEntry, max: number): ToastEntry[] {
+  const kept = toast.progress
+    ? [...toasts]
+    : toasts.filter(t => t.progress || t.message !== toast.message || t.severity !== toast.severity);
+  const queue = [...kept, toast];
+  while (queue.length > max) {
+    const evict = queue.findIndex(t => !t.progress);
+    queue.splice(evict >= 0 ? evict : 0, 1);
+  }
+  return queue;
 }
