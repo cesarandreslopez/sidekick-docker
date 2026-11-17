@@ -5,6 +5,61 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-17
+
+A second, standalone UI/UX audit of both dashboards and the VS Code tree, informed by the sister project sidekick-agent-hub and reviewed adversarially before release.
+
+### Fixed
+
+- Log timestamps are in local time, like every other time on screen. They were UTC.
+- Error toasts carry Docker's own message without the `(HTTP code 409) … -` prefix. Starting an already started container, or stopping a stopped one, is no longer an error.
+- Prune with nothing to prune says so instead of asking a red "cannot be undone" question, when the listed items prove there is nothing to remove. Every empty prune result reads the same way, and image and volume prunes say how many they removed.
+- The default endpoint is named correctly: the named pipe on Windows, or Docker Desktop's `~/.docker/run/docker.sock` when it exists.
+- A missing `docker` CLI is reported as such instead of "spawn docker ENOENT".
+- TUI: Quitting gives you your terminal back. The dashboard runs in the alternate screen and no longer erases scrollback. Signals exit with 128 + the signal number (SIGTERM 143), and a crash prints its error after the dashboard has gone instead of having it wiped.
+- TUI: Ctrl and Alt no longer trigger letter keys. Ctrl+R in the actions menu no longer restarts a container without asking, Ctrl+Y no longer confirms a delete, and Ctrl+Z, Ctrl+Q and Alt+x do nothing.
+- TUI: Keys no longer act on a hidden dashboard behind the "terminal too small" screen.
+- TUI: The confirm, actions and sort overlays hide the log text beneath them.
+- TUI: Holding `j` or `k` keeps moving, even when the terminal batches the key repeats.
+- TUI: Tabs, carriage returns, bells and escape sequences in log lines no longer break the pane, beep, or retitle the terminal. Lines written to stderr keep their highlighting, with a dim gutter mark, instead of turning entirely red. Copy Logs copies plain text.
+- TUI: Compare mode: `m` or `Esc` ends a comparison. The pinned pane says why it is empty, narrow columns drop the timestamps, and the wheel scrolls the column under the pointer. Fast wheel spins are no longer cut short.
+- TUI: The actions menu cursor stays on the same action when the item changes underneath it, so Stop cannot turn into Start.
+- TUI: A burst of toasts no longer pushes out a running action's progress toast. Identical toasts collapse into one, and warnings wrap to three lines like errors.
+- TUI: The Stats tab no longer says "Loading stats…" forever. The Files tab re-reads on Ctrl+R and is fetched only when you open it.
+- TUI: Losing or regaining Docker shows within seconds, and "⚠ … unavailable" says why.
+- TUI: `a` keeps the selection on the same container.
+- TUI: Ctrl+C in an embedded exec session goes to the shell. In the `docker exec -it` fallback every keystroke now reaches the shell (part of what you typed used to go to the dashboard), and a banner says which container you are in.
+- TUI: Filter prompts drop pasted line breaks and tabs, and the filter bars no longer wrap across the screen.
+- TUI: Moving quickly through the list no longer opens a log stream and an inspect call for every row passed.
+- TUI: Restarting a service no longer blocks a restart of a same-named service in another Compose project, and pressing an action again while it still runs is ignored.
+- TUI: A mistyped command suggests the right one (`pss` → "Did you mean ps?").
+- TUI: Copy Logs works over SSH and in WSL (OSC 52, `clip.exe`, `wl-copy`), and can no longer freeze the dashboard waiting on `xclip`.
+- VS Code: The dashboard reconnects by itself when Docker comes back, for example once Docker Desktop has started, instead of waiting for Retry.
+- VS Code: While connecting or reconnecting, the last list stays visible but inert. After the endpoint setting or workspace trust changes, the tree says Connecting… instead of listing the old daemon's containers. Changing the refresh interval keeps the dashboard's logs and sparklines.
+- VS Code: An action that fails while the dashboard is hidden is reported by a VS Code notification.
+- VS Code: The status bar shows a connecting spinner at startup instead of a "Docker offline" warning. Palette commands say Docker is offline, with Retry, instead of "No stopped containers". Retry Connection shows progress, and a brief event-stream drop no longer empties the tree.
+- VS Code: Paused and restarting containers are grouped under Running in the dashboard and the tree. Group headers appear only when sorting by state, and running counts match what "running only" shows.
+- VS Code: A Compose project offers Restart and Down from either of its tree groups.
+- VS Code: Clicking a container in the tree keeps the dashboard's detail tab, filter and "running only" setting, unless they would hide that container.
+- VS Code: Keyboard and screen readers: focused tabs and status-bar chips show a focus ring in every theme, and the Menu key or Shift+F10 opens the actions menu. Focus no longer drops to the page when a row's control disappears. Tabs are announced by name, and Services, Volumes and Networks rows include their state.
+- VS Code: The filter indicator is readable in light themes, VS Code's own reduce-motion setting stops the animations, and small text is at least 11px.
+- VS Code: Empty log panes and lists say why, as in the terminal dashboard. The Config tab no longer lists a port twice, and sort toasts name the field.
+- VS Code: Pressing an action again while it still runs is ignored.
+
+### Added
+
+- `w` wraps long lines: the detail pane in the terminal dashboard, and the logs in VS Code, where wrapping is on by default.
+- TUI: Home and End jump to the top and bottom.
+- TUI: The endpoint shows in the status bar when `--socket` or `DOCKER_HOST` chose it, and in the version overlay. A "Connecting to <endpoint>…" line prints at startup.
+- VS Code: Compose Up, Down and Restart stream their output into a "Sidekick Docker" output channel, can be cancelled from their progress notification, and offer Show Output when they fail.
+- VS Code: The dashboard tab has an icon. Notices link to the `socketPath` setting and to Manage Workspace Trust.
+
+### Changed
+
+- VS Code: `sidekick-docker.socketPath` and `sidekick-docker.exec.defaultShell` are machine-overridable. In a Remote-SSH, WSL or Dev Container window they are read from that remote's settings, not your local user settings. If you set a `tcp://` endpoint only in local user settings and relied on it inside a remote window, set it in the remote's settings.
+- CLI: `sidekick-docker logs` prints local times instead of UTC.
+- CLI: Compose Up and Down are labelled "Up project" and "Down project", since they act on the whole project. Hints read `f:Log filter` and `a:Show running` / `a:Show all`.
+
 ## [0.6.0] - 2026-11-15
 
 A UI/UX audit of both dashboards and the VS Code tree, reviewed adversarially before release.
@@ -673,6 +728,7 @@ A UI/UX audit of both dashboards and the VS Code tree, reviewed adversarially be
 - esbuild for CLI (single ESM binary) and VS Code (dual CJS + IIFE output)
 - `bump-version.sh` script for synchronized version updates across all 3 packages
 
+[0.7.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1

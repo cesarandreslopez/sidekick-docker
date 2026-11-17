@@ -5,6 +5,45 @@ All notable changes to the Sidekick Docker CLI will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-17
+
+### Fixed
+
+- Log timestamps are in local time, like every other time on screen. They were UTC.
+- Error toasts carry Docker's own message without the `(HTTP code 409) … -` prefix. Starting an already started container, or stopping a stopped one, is no longer an error.
+- Prune with nothing to prune says so instead of asking a red "cannot be undone" question, when the listed items prove there is nothing to remove. Every empty prune result reads the same way, and image and volume prunes say how many they removed.
+- The default endpoint is named correctly: the named pipe on Windows, or Docker Desktop's `~/.docker/run/docker.sock` when it exists.
+- A missing `docker` CLI is reported as such instead of "spawn docker ENOENT".
+- Quitting gives you your terminal back. The dashboard runs in the alternate screen and no longer erases scrollback. Signals exit with 128 + the signal number (SIGTERM 143), and a crash prints its error after the dashboard has gone instead of having it wiped.
+- Ctrl and Alt no longer trigger letter keys. Ctrl+R in the actions menu no longer restarts a container without asking, Ctrl+Y no longer confirms a delete, and Ctrl+Z, Ctrl+Q and Alt+x do nothing.
+- Keys no longer act on a hidden dashboard behind the "terminal too small" screen.
+- The confirm, actions and sort overlays hide the log text beneath them.
+- Holding `j` or `k` keeps moving, even when the terminal batches the key repeats.
+- Tabs, carriage returns, bells and escape sequences in log lines no longer break the pane, beep, or retitle the terminal. Lines written to stderr keep their highlighting, with a dim gutter mark, instead of turning entirely red. Copy Logs copies plain text.
+- Compare mode: `m` or `Esc` ends a comparison. The pinned pane says why it is empty, narrow columns drop the timestamps, and the wheel scrolls the column under the pointer. Fast wheel spins are no longer cut short.
+- The actions menu cursor stays on the same action when the item changes underneath it, so Stop cannot turn into Start.
+- A burst of toasts no longer pushes out a running action's progress toast. Identical toasts collapse into one, and warnings wrap to three lines like errors.
+- The Stats tab no longer says "Loading stats…" forever. The Files tab re-reads on Ctrl+R and is fetched only when you open it.
+- Losing or regaining Docker shows within seconds, and "⚠ … unavailable" says why.
+- `a` keeps the selection on the same container.
+- Ctrl+C in an embedded exec session goes to the shell. In the `docker exec -it` fallback every keystroke now reaches the shell (part of what you typed used to go to the dashboard), and a banner says which container you are in.
+- Filter prompts drop pasted line breaks and tabs, and the filter bars no longer wrap across the screen.
+- Moving quickly through the list no longer opens a log stream and an inspect call for every row passed.
+- Restarting a service no longer blocks a restart of a same-named service in another Compose project, and pressing an action again while it still runs is ignored.
+- A mistyped command suggests the right one (`pss` → "Did you mean ps?").
+- Copy Logs works over SSH and in WSL (OSC 52, `clip.exe`, `wl-copy`), and can no longer freeze the dashboard waiting on `xclip`.
+
+### Added
+
+- `w` wraps long lines in the detail pane.
+- Home and End jump to the top and bottom.
+- The endpoint shows in the status bar when `--socket` or `DOCKER_HOST` chose it, and in the version overlay. A "Connecting to <endpoint>…" line prints at startup.
+
+### Changed
+
+- `sidekick-docker logs` prints local times instead of UTC.
+- Compose Up and Down are labelled "Up project" and "Down project", since they act on the whole project. Hints read `f:Log filter` and `a:Show running` / `a:Show all`.
+
 ## [0.6.0] - 2026-11-15
 
 ### Fixed
@@ -345,6 +384,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
 
+[0.7.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1

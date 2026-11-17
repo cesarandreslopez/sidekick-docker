@@ -5,6 +5,37 @@ All notable changes to the Sidekick Docker VS Code extension will be documented 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-11-17
+
+### Fixed
+
+- Log timestamps are in local time, like every other time on screen. They were UTC.
+- Error toasts carry Docker's own message without the `(HTTP code 409) … -` prefix. Starting an already started container, or stopping a stopped one, is no longer an error.
+- Prune with nothing to prune says so instead of asking a red "cannot be undone" question, when the listed items prove there is nothing to remove. Every empty prune result reads the same way, and image and volume prunes say how many they removed.
+- The default endpoint is named correctly: the named pipe on Windows, or Docker Desktop's `~/.docker/run/docker.sock` when it exists.
+- A missing `docker` CLI is reported as such instead of "spawn docker ENOENT".
+- The dashboard reconnects by itself when Docker comes back, for example once Docker Desktop has started, instead of waiting for Retry.
+- While connecting or reconnecting, the last list stays visible but inert. After the endpoint setting or workspace trust changes, the tree says Connecting… instead of listing the old daemon's containers. Changing the refresh interval keeps the dashboard's logs and sparklines.
+- An action that fails while the dashboard is hidden is reported by a VS Code notification.
+- The status bar shows a connecting spinner at startup instead of a "Docker offline" warning. Palette commands say Docker is offline, with Retry, instead of "No stopped containers". Retry Connection shows progress, and a brief event-stream drop no longer empties the tree.
+- Paused and restarting containers are grouped under Running in the dashboard and the tree. Group headers appear only when sorting by state, and running counts match what "running only" shows.
+- A Compose project offers Restart and Down from either of its tree groups.
+- Clicking a container in the tree keeps the dashboard's detail tab, filter and "running only" setting, unless they would hide that container.
+- Keyboard and screen readers: focused tabs and status-bar chips show a focus ring in every theme, and the Menu key or Shift+F10 opens the actions menu. Focus no longer drops to the page when a row's control disappears. Tabs are announced by name, and Services, Volumes and Networks rows include their state.
+- The filter indicator is readable in light themes, VS Code's own reduce-motion setting stops the animations, and small text is at least 11px.
+- Empty log panes and lists say why, as in the terminal dashboard. The Config tab no longer lists a port twice, and sort toasts name the field.
+- Pressing an action again while it still runs is ignored.
+
+### Added
+
+- `w` wraps long log lines in the dashboard (on by default).
+- Compose Up, Down and Restart stream their output into a "Sidekick Docker" output channel, can be cancelled from their progress notification, and offer Show Output when they fail.
+- The dashboard tab has an icon. Notices link to the `socketPath` setting and to Manage Workspace Trust.
+
+### Changed
+
+- `sidekick-docker.socketPath` and `sidekick-docker.exec.defaultShell` are machine-overridable. In a Remote-SSH, WSL or Dev Container window they are read from that remote's settings, not your local user settings. If you set a `tcp://` endpoint only in local user settings and relied on it inside a remote window, set it in the remote's settings.
+
 ## [0.6.0] - 2026-11-15
 
 ### Fixed
@@ -290,6 +321,7 @@ _No changes — CLI-only bugfix release._
 [0.1.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.1
 [0.1.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.1.0
 
+[0.7.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.7.0
 [0.6.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.6.0
 [0.5.0]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.5.0
 [0.4.1]: https://github.com/cesarandreslopez/sidekick-docker/releases/tag/v0.4.1
