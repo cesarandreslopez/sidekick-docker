@@ -12,7 +12,8 @@
     "Visualization"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onWebviewPanel:sidekick-docker.dashboard"
   ],
   "author": "Cesar Andres Lopez <cesarandreslopez@gmail.com>",
   "repository": {
@@ -179,7 +180,7 @@
       {
         "view": "sidekick-docker.containers",
         "when": "sidekickDocker.daemonDown && !sidekickDocker.connecting",
-        "contents": "Docker daemon is not reachable.\n[Retry Connection](command:sidekick-docker.refreshContainers)\nIf Docker listens on a custom socket or tcp:// endpoint, check the sidekick-docker.socketPath setting."
+        "contents": "Docker daemon is not reachable.\n[Retry Connection](command:sidekick-docker.refreshContainers)\nIf Docker listens on a custom socket or tcp:// endpoint, set it in [sidekick-docker.socketPath](command:workbench.action.openSettings?%5B%22sidekick-docker.socketPath%22%5D)."
       },
       {
         "view": "sidekick-docker.containers",
@@ -211,6 +212,7 @@
         "sidekick-docker.socketPath": {
           "type": "string",
           "default": "",
+          "scope": "machine-overridable",
           "description": "Docker endpoint: a socket path (e.g. /var/run/docker.sock), unix://, or tcp://host:port. Leave empty to use the platform default socket (or the DOCKER_HOST environment variable if set). ssh:// is not accepted here; it works only through DOCKER_HOST."
         },
         "sidekick-docker.refreshIntervalSeconds": {
@@ -227,6 +229,7 @@
         "sidekick-docker.exec.defaultShell": {
           "type": "string",
           "default": "/bin/sh",
+          "scope": "machine-overridable",
           "description": "Shell to launch when opening an exec terminal into a container."
         }
       }

@@ -146,6 +146,14 @@ describe('warnIfInvalidEndpoint', () => {
     expect(__mock.warningMessages).toHaveLength(3);
   });
 
+  it('offers to open the setting', async () => {
+    __mock.messageChoice = 'Open Settings';
+    __mock.configValues.set('sidekick-docker.socketPath', 'tcp://');
+    warnIfInvalidEndpoint();
+    expect(__mock.messageItems.at(-1)).toEqual(['Open Settings']);
+    await vi.waitFor(() => expect(__mock.executedCommands).toContainEqual(['workbench.action.openSettings', 'sidekick-docker.socketPath']));
+  });
+
   it('says nothing for an empty or valid value', () => {
     warnIfInvalidEndpoint();
     __mock.configValues.set('sidekick-docker.socketPath', 'tcp://localhost:2375');

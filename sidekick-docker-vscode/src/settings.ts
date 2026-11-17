@@ -92,8 +92,13 @@ export function warnIfInvalidEndpoint(): void {
   }
   if (raw === warnedEndpoint) return;
   warnedEndpoint = raw;
-  void vscode.window.showWarningMessage(message);
+  // Straight to the setting: the warning used to name it and leave finding it to you.
+  void vscode.window.showWarningMessage(message, OPEN_SETTINGS).then((choice) => {
+    if (choice === OPEN_SETTINGS) void vscode.commands.executeCommand('workbench.action.openSettings', 'sidekick-docker.socketPath');
+  });
 }
+
+const OPEN_SETTINGS = 'Open Settings';
 
 /**
  * Subscribe to changes of the `sidekick-docker` configuration section.

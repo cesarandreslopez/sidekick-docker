@@ -6,6 +6,7 @@ import { ContainerWatcherService } from './services/ContainerWatcherService';
 import { statusBarView, runningCount } from './providers/statusBar';
 import type { DockerStatus } from './providers/statusBar';
 import { requireConnected, withViewProgress } from './providers/connectionGuard';
+import { warnComposeUntrusted } from './providers/composeRunner';
 import { getSettings, onSettingsChanged, warnIfInvalidEndpoint } from './settings';
 import type { SidekickSettings } from './settings';
 import type { ContainerInfo } from 'sidekick-docker-shared';
@@ -412,7 +413,7 @@ async function runComposeCommand(action: 'up' | 'down' | 'restart', item?: Compo
   if (!item?.project) return;
   const name = item.project.projectName;
   if (!vscode.workspace.isTrusted) {
-    vscode.window.showWarningMessage(`Compose is disabled in an untrusted workspace — trust the folder to ${action} ${name}.`);
+    warnComposeUntrusted(action, name);
     return;
   }
   const shared = await import('sidekick-docker-shared');

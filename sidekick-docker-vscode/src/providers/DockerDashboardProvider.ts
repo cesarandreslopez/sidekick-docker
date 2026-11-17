@@ -111,6 +111,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
 
   private _adoptPanel(panel: vscode.WebviewPanel): void {
     this.panel = panel;
+    // The editor tab showed a generic page icon, indistinguishable from any
+    // other webview; a revived panel needs it set again too.
+    panel.iconPath = vscode.Uri.joinPath(this.extensionUri, 'images', 'icon-64.png');
     this.viewState = { ...DEFAULT_VIEW_STATE, visible: panel.visible };
 
     panel.webview.onDidReceiveMessage(

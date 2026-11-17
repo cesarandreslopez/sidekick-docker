@@ -27,9 +27,24 @@ describe('buildContainerGroups', () => {
       makeContainer({ id: 'd', state: 'created' }),
     ]);
     expect(groups.map(g => [g.id, g.label, g.count])).toEqual([
-      ['group-running', 'Running', 1],
+      ['group-running', 'Running', 2],
       ['group-stopped', 'Stopped', 1],
-      ['group-other', 'Other', 2],
+      ['group-other', 'Other', 1],
+    ]);
+  });
+
+  it('groups as the dashboard does: paused and restarting under Running, dead under Stopped', () => {
+    const groups = buildContainerGroups([
+      makeContainer({ id: 'p', state: 'paused' }),
+      makeContainer({ id: 'r', state: 'restarting' }),
+      makeContainer({ id: 'x', state: 'dead' }),
+      makeContainer({ id: 'c', state: 'created' }),
+      makeContainer({ id: 'm', state: 'removing' }),
+    ]);
+    expect(groups.map(g => [g.label, g.containers.map(c => c.id)])).toEqual([
+      ['Running', ['p', 'r']],
+      ['Stopped', ['x']],
+      ['Other', ['c', 'm']],
     ]);
   });
 
@@ -83,26 +98,43 @@ describe('buildContainerGroups', () => {
 });
 
 describe('composeGroupContextValue', () => {
+  /** Every compose sub-group of one project, across the state groups. */
+  function projectGroups(containers: ContainerInfo[]) {
+    return buildContainerGroups(containers).flatMap(g => g.composeProjects);
+  }
+
   it('distinguishes a project with running containers from a stopped one', () => {
-    const running = { id: 'g/p', projectName: 'shop', containers: [makeContainer({ id: 'a' }), makeContainer({ id: 'b', state: 'exited' })] };
-    const stopped = { id: 'g/q', projectName: 'old', containers: [makeContainer({ id: 'c', state: 'exited' })] };
+    const [running] = projectGroups([makeContainer({ id: 'a', composeProject: 'shop' })]);
+    const [stopped] = projectGroups([makeContainer({ id: 'c', state: 'exited', composeProject: 'old' })]);
     expect(composeGroupContextValue(running)).toBe('compose-project-group-running');
     expect(composeGroupContextValue(stopped)).toBe('compose-project-group-stopped');
   });
 
+  it('judges a half-up project live in every state group it appears in', () => {
+    const groups = projectGroups([
+      makeContainer({ id: 'web', state: 'running', composeProject: 'shop' }),
+      makeContainer({ id: 'db', state: 'exited', composeProject: 'shop' }),
+    ]);
+    expect(groups.map(g => [g.id, composeGroupContextValue(g)])).toEqual([
+      ['group-running/proj:shop', 'compose-project-group-running'],
+      // Down and Restart apply to the whole project, so the Stopped entry offers them too.
+      ['group-stopped/proj:shop', 'compose-project-group-running'],
+    ]);
+  });
+
   it('counts paused and restarting containers as live, so such a project still offers Down', () => {
-    const paused = { id: 'g/p', projectName: 'shop', containers: [makeContainer({ id: 'a', state: 'paused' })] };
-    const restarting = { id: 'g/r', projectName: 'loop', containers: [makeContainer({ id: 'b', state: 'restarting' })] };
-    const dead = { id: 'g/d', projectName: 'gone', containers: [makeContainer({ id: 'c', state: 'dead' }), makeContainer({ id: 'd', state: 'created' })] };
+    const [paused] = projectGroups([makeContainer({ id: 'a', state: 'paused', composeProject: 'shop' })]);
+    const [restarting] = projectGroups([makeContainer({ id: 'b', state: 'restarting', composeProject: 'loop' })]);
+    const gone = projectGroups([makeContainer({ id: 'c', state: 'dead', composeProject: 'gone' }), makeContainer({ id: 'd', state: 'created', composeProject: 'gone' })]);
     expect(composeGroupContextValue(paused)).toBe('compose-project-group-running');
     expect(composeGroupContextValue(restarting)).toBe('compose-project-group-running');
-    expect(composeGroupContextValue(dead)).toBe('compose-project-group-stopped');
+    expect(gone.map(composeGroupContextValue)).toEqual(['compose-project-group-stopped', 'compose-project-group-stopped']);
   });
 });
 
 describe('composeGroupTooltip', () => {
-  const live = { id: 'g/p', projectName: 'shop', containers: [makeContainer({ id: 'a' })] };
-  const stopped = { id: 'g/q', projectName: 'old', containers: [makeContainer({ id: 'c', state: 'exited' })] };
+  const live = { id: 'g/p', projectName: 'shop', containers: [makeContainer({ id: 'a' })], live: true };
+  const stopped = { id: 'g/q', projectName: 'old', containers: [makeContainer({ id: 'c', state: 'exited' })], live: false };
 
   it('names only the actions the menu offers', () => {
     expect(composeGroupTooltip(live, true)).toBe('Compose project shop — right-click for Up, Down, Restart');

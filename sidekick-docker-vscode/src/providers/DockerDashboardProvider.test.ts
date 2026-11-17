@@ -338,6 +338,11 @@ describe('DockerDashboardProvider connection lifecycle', () => {
     panel.webview.posted.length = 0;
   }
 
+  it('gives the editor tab the extension icon, also for a panel revived after a reload', () => {
+    const panel = adopt();
+    expect(String(panel.iconPath)).toBe('/ext/images/icon-64.png');
+  });
+
   it('tells the webview it is connecting while the service is (re)created', async () => {
     const panel = adopt();
     const run = internals(provider)._handleMessage({ type: 'webviewReady' });

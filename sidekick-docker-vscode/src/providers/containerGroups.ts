@@ -1,5 +1,5 @@
-import type { ContainerInfo } from 'sidekick-docker-shared';
-import { canStop } from 'sidekick-docker-shared';
+import type { ContainerInfo, ContainerStateGroup } from 'sidekick-docker-shared';
+import { canStop, containerStateGroup } from 'sidekick-docker-shared';
 
 /**
  * Pure grouping logic for the container tree view.
@@ -11,13 +11,20 @@ export interface ComposeProjectGroup {
   /** Stable tree id, e.g. "group-running/proj:myapp". */
   id: string;
   projectName: string;
+  /** This project's containers in this state group. */
   containers: ContainerInfo[];
+  /**
+   * Whether any of the project's containers — in any state group — has a
+   * process (running, paused or restarting). The Stopped group's entry for a
+   * half-up project used to offer only Up, though Down and Restart apply.
+   */
+  live: boolean;
 }
 
 export interface ContainerGroup {
   /** Stable tree id: 'group-running' | 'group-stopped' | 'group-other'. */
   id: 'group-running' | 'group-stopped' | 'group-other';
-  label: 'Running' | 'Stopped' | 'Other';
+  label: ContainerStateGroup;
   /** Total containers in this group (compose + loose). */
   count: number;
   composeProjects: ComposeProjectGroup[];
@@ -31,17 +38,25 @@ const GROUP_DEFS = [
   { id: 'group-other', label: 'Other' },
 ] as const;
 
-function stateGroupOf(container: ContainerInfo): 'group-running' | 'group-stopped' | 'group-other' {
-  if (container.state === 'running') return 'group-running';
-  if (container.state === 'exited') return 'group-stopped';
-  return 'group-other';
+/**
+ * The shared grouping, as in the dashboard: "Running" is what the
+ * running-only toggle keeps (paused and restarting too), "Stopped" is exited
+ * or dead.
+ */
+function stateGroupOf(container: ContainerInfo): ContainerStateGroup {
+  return containerStateGroup(container.state);
 }
 
 export function buildContainerGroups(containers: ContainerInfo[]): ContainerGroup[] {
   const groups: ContainerGroup[] = [];
 
+  const liveProjects = new Set<string>();
+  for (const c of containers) {
+    if (c.composeProject && canStop(c.state)) liveProjects.add(c.composeProject);
+  }
+
   for (const def of GROUP_DEFS) {
-    const members = containers.filter(c => stateGroupOf(c) === def.id);
+    const members = containers.filter(c => stateGroupOf(c) === def.label);
     if (members.length === 0) continue;
 
     const byProject = new Map<string, ContainerInfo[]>();
@@ -62,6 +77,7 @@ export function buildContainerGroups(containers: ContainerInfo[]): ContainerGrou
         id: `${def.id}/proj:${projectName}`,
         projectName,
         containers: projectContainers,
+        live: liveProjects.has(projectName),
       }));
 
     groups.push({
@@ -78,12 +94,11 @@ export function buildContainerGroups(containers: ContainerInfo[]): ContainerGrou
 
 /**
  * Tree contextValue for a compose project group, so its menu can offer Down
- * and Restart only where something is live (Up is always offered). "Running"
- * means any container with a process — paused or restarting too: an
- * all-paused project still needs Down.
+ * and Restart only where something is live (Up is always offered). "Live" is
+ * judged across the whole project, not just this state group's slice of it.
  */
 export function composeGroupContextValue(project: ComposeProjectGroup): 'compose-project-group-running' | 'compose-project-group-stopped' {
-  return project.containers.some(c => canStop(c.state)) ? 'compose-project-group-running' : 'compose-project-group-stopped';
+  return project.live ? 'compose-project-group-running' : 'compose-project-group-stopped';
 }
 
 /** What the group's context menu actually offers, given its state and workspace trust. */
