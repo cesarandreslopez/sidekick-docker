@@ -19,6 +19,12 @@ describe('queueToast (T17)', () => {
     expect(q.map(x => x.id)).toEqual([1, 3, 4]);
   });
 
+  it('never evicts the toast being added, even when every older one is a spinner', () => {
+    const spinners = [1, 2, 3, 4, 5].map(id => t(id, `job ${id}`, { progress: true }));
+    const q = queueToast(spinners, t(6, 'Restarted web', { severity: 'success' }), 5);
+    expect(q.map(x => x.id)).toEqual([2, 3, 4, 5, 6]);
+  });
+
   it('falls back to the oldest when every toast is a spinner', () => {
     const q = queueToast([t(1, 'a', { progress: true }), t(2, 'b', { progress: true })], t(3, 'c', { progress: true }), 2);
     expect(q.map(x => x.id)).toEqual([2, 3]);

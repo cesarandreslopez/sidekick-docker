@@ -21,9 +21,12 @@ const LEADING_SPACE = /^((?:\x1b\[[0-9;:]*m)*) /;
 export function wrapLine(line: string, width: number): string[] {
   if (stringWidth(line) <= width) return [line];
   // trim: false keeps indentation (Config, Env); only the break's own space goes.
-  return wrapAnsi(line, width, { hard: true, trim: false })
+  const rows = wrapAnsi(line, width, { hard: true, trim: false })
     .split('\n')
     .map((row, i) => (i === 0 ? row : row.replace(LEADING_SPACE, '$1')));
+  // A trailing space just past the width became a blank row of its own.
+  while (rows.length > 1 && stringWidth(rows[rows.length - 1]) === 0) rows.pop();
+  return rows;
 }
 
 /** Every line wrapped to `width` cells (at least 1). */

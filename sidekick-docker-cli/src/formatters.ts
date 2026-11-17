@@ -208,8 +208,12 @@ function colorizeTokens(message: string): string {
 // a BEL beeped on every repaint. Colour (SGR) is the one kind of escape a
 // line keeps: Ink draws it, and apps colour their own output.
 
-/** Any escape sequence: CSI, OSC (BEL/ST-terminated), DCS/SOS/PM/APC, or a two-character escape. */
-const ESCAPE_SEQUENCE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][\s\S]*?(?:\x07|\x1b\\|$)|[PX^_][\s\S]*?(?:\x1b\\|$)|[ -/]*[0-~])?/g;
+/**
+ * Any escape sequence: CSI (also unterminated at the end of the line, and the
+ * one-byte C1 CSI U+009B), OSC (BEL/ST-terminated), DCS/SOS/PM/APC, or a
+ * two-character escape.
+ */
+const ESCAPE_SEQUENCE = /\x1b(?:\[[0-?]*[ -/]*(?:[@-~]|$)|\][\s\S]*?(?:\x07|\x1b\\|$)|[PX^_][\s\S]*?(?:\x1b\\|$)|[ -/]*[0-~])?|\u009b[0-?]*[ -/]*[@-~]?/g;
 const IS_SGR = /^\x1b\[[0-9;:]*m$/;
 /** Colour/style (SGR) sequences, the only escapes a log line keeps. */
 const SGR_SEQUENCE = /\x1b\[[0-9;:]*m/g;

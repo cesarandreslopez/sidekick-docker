@@ -68,7 +68,9 @@ export function queueToast(toasts: readonly ToastEntry[], toast: ToastEntry, max
     : toasts.filter(t => t.progress || t.message !== toast.message || t.severity !== toast.severity);
   const queue = [...kept, toast];
   while (queue.length > max) {
-    const evict = queue.findIndex(t => !t.progress);
+    // Never the toast being added: with every older slot a spinner, it would
+    // have evicted itself and the result would never show.
+    const evict = queue.slice(0, -1).findIndex(t => !t.progress);
     queue.splice(evict >= 0 ? evict : 0, 1);
   }
   return queue;

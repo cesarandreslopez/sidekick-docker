@@ -3,6 +3,10 @@ import stringWidth from 'string-width';
 import { wrapDetailLines, wrapLine } from './wrapLines';
 
 describe('wrapLine (T11)', () => {
+  it('does not add a blank row for a trailing space just past the width', () => {
+    expect(wrapLine(`${'x'.repeat(10)} `, 10)).toEqual(['x'.repeat(10)]);
+  });
+
   it('returns a line that fits as itself', () => {
     expect(wrapLine('short', 10)).toEqual(['short']);
   });

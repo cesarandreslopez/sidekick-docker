@@ -74,9 +74,17 @@ function osc52Copy(text: string, stdout: NodeJS.WriteStream = process.stdout): b
 }
 
 /**
+ * How a copy went: `true` when a native clipboard tool took it, `'terminal'`
+ * when it was only handed to the terminal (OSC 52, unconfirmable), `false`
+ * when nothing could take it.
+ */
+export type CopyResult = boolean | 'terminal';
+
+/**
  * Copy `text`: a native clipboard tool when one works, else OSC 52 through
  * the terminal (not on Windows, whose console does not support it).
  */
-export function copyToClipboard(text: string): boolean {
-  return nativeCopy(text) || (process.platform !== 'win32' && osc52Copy(text));
+export function copyToClipboard(text: string): CopyResult {
+  if (nativeCopy(text)) return true;
+  return process.platform !== 'win32' && osc52Copy(text) ? 'terminal' : false;
 }

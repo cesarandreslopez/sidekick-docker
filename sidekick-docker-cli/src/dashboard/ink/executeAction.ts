@@ -70,7 +70,7 @@ const inFlight = new Set<string>();
 
 /** Identity of an action run: the action and what it acts on (a prune's target is the whole kind). */
 export function actionRunKey(action: PanelAction, item: PanelItem): string {
-  return `${action.label}\u0000${action.targetName?.(item) ?? item.id}`;
+  return `${action.label}\u0000${action.runKey?.(item) ?? action.targetName?.(item) ?? item.id}`;
 }
 
 /** Whether this action is already running for this target. */

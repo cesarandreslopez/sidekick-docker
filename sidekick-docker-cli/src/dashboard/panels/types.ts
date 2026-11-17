@@ -53,6 +53,12 @@ export interface PanelAction {
   actionType?: ActionType;
   /** The name those toasts use, when it is not the item's own (Up on a service acts on its project). */
   targetName?: (item: PanelItem) => string;
+  /**
+   * What makes two runs "the same" for the in-flight guard, when `targetName`
+   * is not unique — a service name like `web` repeats across compose projects.
+   * Defaults to `targetName`, then the item id.
+   */
+  runKey?: (item: PanelItem) => string;
   confirm?: boolean;
   /** Static message, or a function to interpolate the target's name/count. */
   confirmMessage?: string | ((item: PanelItem) => string);
@@ -121,10 +127,13 @@ export function collectLogText(logs: readonly LogEntry[], query: string, mode: F
  * tells a buffer that is empty because nothing streams it (Services only
  * streams compose logs on its Logs tab) from one that is just quiet.
  */
+/** A copy callback's outcome: native clipboard (`true`), handed to the terminal via OSC 52 (`'terminal'`), or failed. */
+export type CopyResult = boolean | 'terminal';
+
 export function copyLogsAction(
   getMetrics: () => DockerDashboardMetrics | null,
   getLogs: (metrics: DockerDashboardMetrics) => readonly LogEntry[],
-  copy: () => ((text: string) => boolean) | undefined,
+  copy: () => ((text: string) => CopyResult) | undefined,
   getStreamState?: (metrics: DockerDashboardMetrics) => FollowStreamState | null,
 ): PanelAction {
   return {
@@ -143,11 +152,14 @@ export function copyLogsAction(
             ? 'no log lines loaded — open the Logs tab first'
             : 'no log lines to copy yet');
       }
-      if (!onCopy(text)) {
+      const result = onCopy(text);
+      if (!result) {
         // Neither a clipboard tool nor the terminal (OSC 52, TTY only) could take it.
         throw new Error('no clipboard tool found — install wl-copy, xclip or xsel, or run in a terminal that supports OSC 52 clipboard writes');
       }
-      return `Copied ${count} line${count === 1 ? '' : 's'}`;
+      const lines = `${count} line${count === 1 ? '' : 's'}`;
+      // OSC 52: the terminal never confirms, so don't claim the copy happened.
+      return result === 'terminal' ? `Sent ${lines} to the terminal's clipboard` : `Copied ${lines}`;
     },
   };
 }

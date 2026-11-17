@@ -278,6 +278,10 @@ describe('findGlobalBinding (T28)', () => {
     expect(findGlobalBinding('c', bareKey({ ctrl: true }))?.id).toBe('quit-ctrl-c');
   });
 
+  it('treats two quick Escs (delivered with meta set) as Esc', () => {
+    expect(findGlobalBinding('', bareKey({ escape: true, meta: true }))?.id).toBe('escape');
+  });
+
   it('matches bare keys as before', () => {
     expect(findGlobalBinding('q', bareKey())?.id).toBe('quit');
     expect(findGlobalBinding('', bareKey({ tab: true }))?.id).toBe('focus-toggle');

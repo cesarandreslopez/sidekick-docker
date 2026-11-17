@@ -8,6 +8,11 @@ afterEach(() => setColorEnabled(true));
 const entry = (message: string, stream: 'stdout' | 'stderr' = 'stdout'): LogEntry => ({ timestamp: null, stream, message });
 
 describe('sanitizeLogText (T21)', () => {
+  it('drops an unterminated CSI at the end of a line and a one-byte C1 CSI, with their parameters', () => {
+    expect(sanitizeLogText('done \x1b[1;31')).toBe('done ');
+    expect(sanitizeLogText('\u009b31mred')).toBe('red');
+  });
+
   it('expands tabs to 8-column stops', () => {
     expect(sanitizeLogText('a\tb')).toBe('a       b');
     expect(sanitizeLogText('12345678\tx')).toBe('12345678        x');
@@ -17,7 +22,7 @@ describe('sanitizeLogText (T21)', () => {
   it('drops carriage returns, BEL and other C0/C1 controls (Missed-7: no beeps)', () => {
     expect(sanitizeLogText('done\r')).toBe('done');
     expect(sanitizeLogText('ding\x07dong')).toBe('dingdong');
-    expect(sanitizeLogText('a\x00b\x08c\x7fd\u009be')).toBe('abcde');
+    expect(sanitizeLogText('a\x00b\x08c\x7fd\u0085e')).toBe('abcde');
   });
 
   it('removes cursor, erase, title and hyperlink sequences but keeps their text', () => {

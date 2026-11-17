@@ -33,6 +33,12 @@ describe('copyLogsAction', () => {
     expect(copy).toHaveBeenCalledWith('GET /health 200\nGET / 200');
   });
 
+  it('does not claim a copy the terminal cannot confirm (OSC 52)', () => {
+    const metrics = { selectedContainerLogs: LOGS, logFilterString: 'GET', logFilterMode: 'exact' } as unknown as DockerDashboardMetrics;
+    const action = copyLogsAction(() => metrics, m => m.selectedContainerLogs, () => () => 'terminal' as const);
+    expect(action.handler({ id: 'x', label: '', sortKey: 0, data: null })).toBe("Sent 2 lines to the terminal's clipboard");
+  });
+
   it('explains a missing clipboard tool', () => {
     const metrics = { selectedContainerLogs: LOGS, logFilterString: '', logFilterMode: 'exact' } as unknown as DockerDashboardMetrics;
     const action = copyLogsAction(() => metrics, m => m.selectedContainerLogs, () => () => false);

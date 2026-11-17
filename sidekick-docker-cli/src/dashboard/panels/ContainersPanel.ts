@@ -2,6 +2,7 @@ import type { ContainerInfo, ContainerDetails } from 'sidekick-docker-shared';
 import { DockerClient, shortId, publishedPortUrls, summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, pruneConfirmFor, pruneResultText, pruneNothingText, removeContainerConfirmMessage, actionText, emptyLogMessage } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
 import { DockerState } from '../DockerState';
+import type { CopyResult } from './types';
 import { panelData, detailFetchError, copyLogsAction, emptyStatsMessage } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, colorizeEnvLine, colorizeDetailKey, colorizeState, colorizeId, colorizePercent, colorizeHealth, compactUptime, sectionHeader, ansi, formatFileChange, formatLogTemplate, coloredSparkline, severitySparkline, renderLogLines } from '../../formatters';
@@ -56,7 +57,7 @@ export class ContainersPanel implements SidePanel {
   private client: DockerClient;
   private onAction: () => void;
   private onExec?: (containerId: string) => void;
-  private onCopyLogs?: (text: string) => boolean;
+  private onCopyLogs?: (text: string) => CopyResult;
   private onOpenUrl?: (url: string) => Promise<void>;
   /** Where published ports are reachable: the daemon's host (see browserHostForEndpoint). */
   private browserHost = 'localhost';
@@ -71,7 +72,7 @@ export class ContainersPanel implements SidePanel {
     this.onExec = handler;
   }
 
-  setOnCopyLogs(handler: (text: string) => boolean): void {
+  setOnCopyLogs(handler: (text: string) => CopyResult): void {
     this.onCopyLogs = handler;
   }
 

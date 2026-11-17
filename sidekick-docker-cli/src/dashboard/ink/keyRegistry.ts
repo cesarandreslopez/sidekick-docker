@@ -482,7 +482,8 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
  * never fire the binding of its bare letter.
  */
 export function findGlobalBinding(input: string, key: Key): KeyBindingSpec | undefined {
-  const chorded = key.ctrl || key.meta;
+  // Two quick Escs arrive as one event with `meta` set: that is still Esc.
+  const chorded = key.ctrl || (key.meta && !key.escape);
   return GLOBAL_BINDINGS.find(b => (b.chord === true || !chorded) && b.match(input, key));
 }
 

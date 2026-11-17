@@ -2,6 +2,7 @@ import type { ComposeService, ComposeProject, ComposeExecResult, ComposeCommandO
 import type { ActionType } from 'sidekick-docker-shared';
 import { ComposeClient, throwIfComposeFailed, resolveComposeOptions, composeDownConfirmMessage, actionText, emptyLogMessage } from 'sidekick-docker-shared';
 import type { DockerDashboardMetrics } from '../DockerState';
+import type { CopyResult } from './types';
 import { panelData, copyLogsAction } from './types';
 import type { SidePanel, PanelItem, PanelAction, DetailTab } from './types';
 import { stateIcon, stateColor, colorizeDetailKey, colorizeState, colorizeId, renderLogLines } from '../../formatters';
@@ -30,7 +31,7 @@ export class ServicesPanel implements SidePanel {
   private composeClient: ComposeClient;
   private onAction: () => void;
   private cwd: string | undefined;
-  private onCopyLogs?: (text: string) => boolean;
+  private onCopyLogs?: (text: string) => CopyResult;
   private lastMetrics: DockerDashboardMetrics | null = null;
 
   constructor(composeClient: ComposeClient, onAction: () => void, cwd?: string) {
@@ -39,7 +40,7 @@ export class ServicesPanel implements SidePanel {
     this.cwd = cwd;
   }
 
-  setOnCopyLogs(handler: (text: string) => boolean): void {
+  setOnCopyLogs(handler: (text: string) => CopyResult): void {
     this.onCopyLogs = handler;
   }
 
@@ -193,6 +194,8 @@ export class ServicesPanel implements SidePanel {
         condition: (item) => item.data !== null,
         actionType: 'restart',
         targetName: (item) => getTargetName(panelData<ServiceItemData>(item)),
+        // Not the bare name: `web` in shop and `web` in blog are different runs.
+        runKey: (item) => item.id,
       },
       {
         key: 'S',
@@ -206,6 +209,8 @@ export class ServicesPanel implements SidePanel {
         condition: (item) => item.data !== null,
         actionType: 'stop',
         targetName: (item) => getTargetName(panelData<ServiceItemData>(item)),
+        // Not the bare name: `web` in shop and `web` in blog are different runs.
+        runKey: (item) => item.id,
       },
       // Compose logs stream only on the Logs tab; Info is the default.
       copyLogsAction(() => this.lastMetrics, m => m.selectedComposeLogs, () => this.onCopyLogs, m => m.composeLogStreamState),

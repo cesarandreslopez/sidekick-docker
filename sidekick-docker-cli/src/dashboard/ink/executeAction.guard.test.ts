@@ -83,4 +83,10 @@ describe('in-flight guard', () => {
     const stop: PanelAction = { key: 'S', label: 'Stop', handler: () => {} };
     expect(actionRunKey(stop, item('a'))).not.toBe(actionRunKey(stop, item('b')));
   });
+
+  it('keeps same-named services in different projects apart', () => {
+    // Both rows are called "web"; restarting one must not swallow the other.
+    const restart: PanelAction = { key: 'r', label: 'Restart', handler: () => {}, targetName: () => 'web', runKey: (i) => i.id };
+    expect(actionRunKey(restart, item('service:shop:web'))).not.toBe(actionRunKey(restart, item('service:blog:web')));
+  });
 });
