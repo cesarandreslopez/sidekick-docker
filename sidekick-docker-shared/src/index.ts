@@ -4,7 +4,7 @@ export * from './types';
 // Docker client
 export { DockerClient, DockerTimeoutError } from './docker/DockerClient';
 export type { DockerClientOptions, LogStreamOptions, PingResult, ListResourcesOptions, ResourceListing } from './docker/DockerClient';
-export { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv } from './docker/endpoint';
+export { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv, defaultDockerSocket } from './docker/endpoint';
 
 // Compose
 export { ComposeDetector } from './compose/ComposeDetector';
@@ -67,10 +67,14 @@ export {
   canStart,
   canStop,
   matchesRunningOnly,
+  containerStateGroup,
+  containerStateRank,
+  emptyLogMessage,
   pruneCandidateCount,
   pruneConfirmMessage,
   pruneConfirmFor,
   pruneResultText,
+  pruneNothingText,
   imageDisplayName,
   removeImageConfirmMessage,
   composeDownConfirmMessage,
@@ -86,7 +90,7 @@ export {
   formatMount,
   summarizeHealth,
 } from './formatters';
-export type { PruneKind, ContainerSortField, ActionType } from './formatters';
+export type { PruneKind, ContainerSortField, ActionType, ContainerStateGroup } from './formatters';
 
 // Reconnect
 export { ReconnectScheduler, INITIAL_RECONNECT_DELAY, MAX_RECONNECT_DELAY, MAX_RECONNECT_ATTEMPTS } from './events/reconnect';

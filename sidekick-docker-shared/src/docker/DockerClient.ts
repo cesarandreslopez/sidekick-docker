@@ -183,12 +183,14 @@ export class DockerClient {
     return listing;
   }
 
+  // The daemon answers 304 when the container is already in the requested
+  // state — a second press, or an action racing an event. That is success.
   async startContainer(id: string): Promise<void> {
-    await this.docker.getContainer(id).start();
+    await this.docker.getContainer(id).start().catch(ignoreNotModified);
   }
 
   async stopContainer(id: string): Promise<void> {
-    await this.docker.getContainer(id).stop();
+    await this.docker.getContainer(id).stop().catch(ignoreNotModified);
   }
 
   async restartContainer(id: string): Promise<void> {
@@ -509,10 +511,15 @@ export class DockerClient {
     }
   }
 
-  async pruneImages(): Promise<{ spaceReclaimed: number }> {
+  /**
+   * `deleted` is 0 when nothing was pruned and undefined otherwise: the
+   * response lists every removed layer, not just images, so it cannot count them.
+   */
+  async pruneImages(): Promise<{ spaceReclaimed: number; deleted?: number }> {
     const result = await this.docker.pruneImages();
     const validated = PruneImagesResponseSchema.parse(result);
-    return { spaceReclaimed: validated.SpaceReclaimed };
+    const nothing = (validated.ImagesDeleted ?? []).length === 0;
+    return { spaceReclaimed: validated.SpaceReclaimed, ...(nothing ? { deleted: 0 } : {}) };
   }
 
   async listVolumes(): Promise<VolumeInfo[]> {
@@ -548,10 +555,10 @@ export class DockerClient {
     await this.docker.getVolume(name).remove();
   }
 
-  async pruneVolumes(): Promise<{ spaceReclaimed: number }> {
+  async pruneVolumes(): Promise<{ spaceReclaimed: number; deleted: number }> {
     const result = await this.docker.pruneVolumes();
     const validated = PruneVolumesResponseSchema.parse(result);
-    return { spaceReclaimed: validated.SpaceReclaimed };
+    return { spaceReclaimed: validated.SpaceReclaimed, deleted: (validated.VolumesDeleted ?? []).length };
   }
 
   async listNetworks(): Promise<NetworkInfo[]> {
@@ -702,6 +709,12 @@ export function toContainerInfo(c: RawContainer): ContainerInfo {
 /** docker-modem rejects a 404 with `statusCode: 404`. */
 function isNotFound(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { statusCode?: unknown }).statusCode === 404;
+}
+
+/** Swallow 304 Not Modified ("container already started/stopped"); rethrow anything else. */
+function ignoreNotModified(err: unknown): void {
+  if (typeof err === 'object' && err !== null && (err as { statusCode?: unknown }).statusCode === 304) return;
+  throw err;
 }
 
 /** Set by Engine 23+ on volumes created without a name. */

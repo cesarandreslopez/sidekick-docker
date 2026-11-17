@@ -124,11 +124,13 @@ export type ImageItemRaw = z.infer<typeof ImageItemRawSchema>;
 
 /** Validates a prune images response from the Docker API. */
 export const PruneImagesResponseSchema = z.object({
+  ImagesDeleted: z.array(z.unknown()).nullable().default([]),
   SpaceReclaimed: z.number().default(0),
 });
 
 /** Validates a prune volumes response from the Docker API. */
 export const PruneVolumesResponseSchema = z.object({
+  VolumesDeleted: z.array(z.string()).nullable().default([]),
   SpaceReclaimed: z.number().default(0),
 });
 

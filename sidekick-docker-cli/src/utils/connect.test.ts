@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { defaultDockerSocket } from 'sidekick-docker-shared';
 import { connectOrExit } from './connect';
 
 const mocks = vi.hoisted(() => ({
@@ -70,7 +71,7 @@ describe('connectOrExit', () => {
     try {
       await expect(connectOrExit({})).rejects.toThrow('exit');
       expect(errorSpy).toHaveBeenCalledWith(
-        'Error: Connection refused at the default Docker socket (/var/run/docker.sock). Is the Docker daemon running?',
+        `Error: Connection refused at the default Docker socket (${defaultDockerSocket()}). Is the Docker daemon running?`,
       );
     } finally {
       if (savedHost !== undefined) process.env.DOCKER_HOST = savedHost;

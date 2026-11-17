@@ -1,4 +1,5 @@
 import type { PortBinding, ContainerInfo, VolumePruneScope } from './types';
+import type { FollowStreamState } from './events/FollowStream';
 import { realImageTags } from './docker/utils';
 
 export function formatBytes(bytes: number): string {
@@ -53,10 +54,20 @@ export function truncate(str: string, maxLen: number): string {
 // Re-export Docker ID utilities from docker module
 export { CONTAINER_ID_LENGTH, shortId } from './docker/utils';
 
-/** Extract HH:MM:SS.mmm from an ISO timestamp string or Date. */
+const pad = (n: number, width = 2) => String(n).padStart(width, '0');
+
+/**
+ * HH:MM:SS.mmm in local time, from an ISO timestamp string or Date. It used to
+ * slice the ISO string, which is UTC — so log lines read hours away from every
+ * other time on screen (Created, Last check), which are local.
+ */
 export function formatTimestampTime(timestamp: string | Date): string {
-  const iso = typeof timestamp === 'string' ? timestamp : timestamp.toISOString();
-  return iso.substring(11, 23);
+  const d = typeof timestamp === 'string' ? new Date(timestamp) : timestamp;
+  if (Number.isNaN(d.getTime())) {
+    // Unparseable: keep the old slice so a malformed stamp still shows something.
+    return typeof timestamp === 'string' ? timestamp.substring(11, 23) : '';
+  }
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`;
 }
 
 export function stateColor(state: ContainerInfo['state'] | 'not_created'): string {
@@ -96,6 +107,41 @@ export function canStop(state: ContainerState): boolean {
  */
 export function matchesRunningOnly(state: ContainerState): boolean {
   return canStop(state);
+}
+
+export type ContainerStateGroup = 'Running' | 'Stopped' | 'Other';
+
+/**
+ * The group a container is listed under. "Running" is exactly what the
+ * running-only toggle keeps (paused and restarting included) — a paused
+ * container used to sit under "Stopped" while the toggle still showed it.
+ */
+export function containerStateGroup(state: ContainerState): ContainerStateGroup {
+  if (matchesRunningOnly(state)) return 'Running';
+  if (state === 'exited' || state === 'dead') return 'Stopped';
+  return 'Other';
+}
+
+/** Sort rank matching {@link containerStateGroup}: running, then paused/restarting, then the rest. */
+export function containerStateRank(state: ContainerState): number {
+  if (state === 'running') return 0;
+  if (matchesRunningOnly(state)) return 1;
+  return containerStateGroup(state) === 'Stopped' ? 2 : 3;
+}
+
+/**
+ * What an empty log pane says, from the stream's state. It used to read
+ * "Select a container" (TUI) or "Logs will appear…" (VS Code) whether the
+ * stream was still connecting, the target was stopped, or the stream was lost.
+ */
+export function emptyLogMessage(state: FollowStreamState | null, subject: 'container' | 'service'): string {
+  switch (state) {
+    case 'reconnecting': return 'Log stream interrupted — reconnecting…';
+    case 'ended':
+    case 'empty': return `No log output — the ${subject} is stopped.`;
+    case 'error': return 'Log stream lost after several retries. Select another item and come back to retry.';
+    default: return 'Waiting for log output…';
+  }
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
@@ -160,15 +206,38 @@ export function pruneConfirmFor(kind: PruneKind, items: readonly PruneCandidateF
 
 const PRUNE_NOUN: Record<PruneKind, string> = { containers: 'container', images: 'image', volumes: 'volume', networks: 'network' };
 
+const PRUNE_NOTHING: Record<PruneKind, string> = {
+  containers: 'No stopped containers to prune',
+  images: 'No dangling images to prune',
+  volumes: 'No unused volumes to prune',
+  networks: 'No unused networks to prune',
+};
+
+/**
+ * When the listed items show a prune of `kind` would remove nothing, the text
+ * to show instead of asking a red "cannot be undone" confirmation; null when
+ * there is something to prune or the count is unknown (a volume prune on a
+ * daemon whose version could not be read).
+ */
+export function pruneNothingText(kind: PruneKind, items: readonly PruneCandidateFields[]): string | null {
+  if (pruneCandidateCount(kind, items) > 0) return null;
+  if (kind === 'volumes') {
+    switch (volumePruneScopeOf(items)) {
+      case 'unknown': return null;
+      case 'anonymous': return 'No unused anonymous volumes to prune — named volumes are kept';
+      default: break;
+    }
+  }
+  return PRUNE_NOTHING[kind];
+}
+
 /**
  * Toast text after a prune: how many went (when the daemon says) and what was
  * reclaimed. Networks reclaim no space, so they report only the count.
  */
 export function pruneResultText(kind: PruneKind, result: { spaceReclaimed?: number; deleted?: number }): string {
-  if (kind === 'networks') {
-    const n = result.deleted ?? 0;
-    return n > 0 ? `Pruned ${plural(n, 'network')}` : 'No unused networks to prune';
-  }
+  if (result.deleted === 0) return PRUNE_NOTHING[kind];
+  if (kind === 'networks') return `Pruned ${plural(result.deleted ?? 0, 'network')}`;
   const what = result.deleted === undefined ? kind : plural(result.deleted, PRUNE_NOUN[kind]);
   return `Pruned ${what} — ${formatBytes(result.spaceReclaimed ?? 0)} reclaimed`;
 }

@@ -3,7 +3,8 @@ import {
   actionText, actionFailedText, browserHostForEndpoint, canStart, canStop, matchesRunningOnly, publishedPortUrls, pruneCandidateCount,
   pruneConfirmMessage, pruneConfirmFor, pruneResultText, removeContainerConfirmMessage, sortDirectionLabel, summarizeRestartPolicy,
   formatMount, summarizeHealth, imageDisplayName, removeImageConfirmMessage, composeDownConfirmMessage,
-  removeVolumeConfirmMessage, removeNetworkConfirmMessage,
+  removeVolumeConfirmMessage, removeNetworkConfirmMessage, formatTimestampTime, containerStateGroup,
+  containerStateRank, emptyLogMessage, pruneNothingText,
 } from './formatters';
 import type { PortBinding } from './types';
 
@@ -60,10 +61,31 @@ describe('prune wording', () => {
 
   it('words prune results the same on both surfaces', () => {
     expect(pruneResultText('images', { spaceReclaimed: 0 })).toBe('Pruned images — 0 B reclaimed');
-    expect(pruneResultText('volumes', { spaceReclaimed: 2048 })).toBe('Pruned volumes — 2.0 KB reclaimed');
+    expect(pruneResultText('volumes', { spaceReclaimed: 2048, deleted: 2 })).toBe('Pruned 2 volumes — 2.0 KB reclaimed');
     expect(pruneResultText('containers', { spaceReclaimed: 0, deleted: 1 })).toBe('Pruned 1 container — 0 B reclaimed');
     expect(pruneResultText('networks', { deleted: 2 })).toBe('Pruned 2 networks');
+  });
+
+  it('words an empty prune result the same way for every kind', () => {
     expect(pruneResultText('networks', { deleted: 0 })).toBe('No unused networks to prune');
+    expect(pruneResultText('images', { spaceReclaimed: 0, deleted: 0 })).toBe('No dangling images to prune');
+    expect(pruneResultText('containers', { spaceReclaimed: 0, deleted: 0 })).toBe('No stopped containers to prune');
+    expect(pruneResultText('volumes', { spaceReclaimed: 0, deleted: 0 })).toBe('No unused volumes to prune');
+  });
+
+  it('skips the confirmation when the listed items show nothing to prune', () => {
+    expect(pruneNothingText('containers', [{ state: 'running' }])).toBe('No stopped containers to prune');
+    expect(pruneNothingText('containers', [{ state: 'exited' }])).toBeNull();
+    expect(pruneNothingText('images', [{ isDangling: false }])).toBe('No dangling images to prune');
+    expect(pruneNothingText('networks', [{ isDefault: true }])).toBe('No unused networks to prune');
+    expect(pruneNothingText('volumes', [{ isInUse: false, anonymous: false, pruneScope: 'anonymous' }]))
+      .toBe('No unused anonymous volumes to prune — named volumes are kept');
+    expect(pruneNothingText('volumes', [{ isInUse: true, pruneScope: 'all' }])).toBe('No unused volumes to prune');
+  });
+
+  it('still asks when the volume count is unknown', () => {
+    expect(pruneNothingText('volumes', [{ isInUse: false, pruneScope: 'unknown' }])).toBeNull();
+    expect(pruneNothingText('volumes', [])).toBeNull();
   });
 
   it('warns when removing a container will stop it first', () => {
@@ -171,5 +193,41 @@ describe('shared confirm and failure wording', () => {
   it('keeps every container with a live process under "running only"', () => {
     expect(['running', 'paused', 'restarting'].every(s => matchesRunningOnly(s as never))).toBe(true);
     expect(['exited', 'created', 'dead'].some(s => matchesRunningOnly(s as never))).toBe(false);
+  });
+});
+
+describe('formatTimestampTime', () => {
+  it('reads in local time, like every other time on screen', () => {
+    const d = new Date(2026, 10, 17, 9, 5, 7, 42);
+    expect(formatTimestampTime(d)).toBe('09:05:07.042');
+    expect(formatTimestampTime(d.toISOString())).toBe('09:05:07.042');
+  });
+
+  it('keeps the old slice for an unparseable string', () => {
+    expect(formatTimestampTime('not-a-timestamp-at-all')).toBe('tamp-at-all');
+  });
+});
+
+describe('containerStateGroup / containerStateRank', () => {
+  it('groups exactly what running-only keeps under Running', () => {
+    expect(['running', 'paused', 'restarting'].map(s => containerStateGroup(s as never))).toEqual(['Running', 'Running', 'Running']);
+    expect(['exited', 'dead'].map(s => containerStateGroup(s as never))).toEqual(['Stopped', 'Stopped']);
+    expect(['created', 'removing'].map(s => containerStateGroup(s as never))).toEqual(['Other', 'Other']);
+  });
+
+  it('ranks running, then paused/restarting, then stopped, then the rest', () => {
+    const order = ['created', 'exited', 'paused', 'running'].sort((a, b) => containerStateRank(a as never) - containerStateRank(b as never));
+    expect(order).toEqual(['running', 'paused', 'exited', 'created']);
+  });
+});
+
+describe('emptyLogMessage', () => {
+  it('says why a log pane is empty', () => {
+    expect(emptyLogMessage(null, 'container')).toBe('Waiting for log output…');
+    expect(emptyLogMessage('live', 'container')).toBe('Waiting for log output…');
+    expect(emptyLogMessage('reconnecting', 'container')).toContain('reconnecting');
+    expect(emptyLogMessage('empty', 'container')).toBe('No log output — the container is stopped.');
+    expect(emptyLogMessage('ended', 'service')).toBe('No log output — the service is stopped.');
+    expect(emptyLogMessage('error', 'container')).toContain('lost');
   });
 });

@@ -45,6 +45,9 @@ describe('runProcess', () => {
   });
 
   it('rejects when the command cannot be spawned', async () => {
-    await expect(runProcess('sidekick-definitely-not-a-binary', [])).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(runProcess('sidekick-definitely-not-a-binary', [])).rejects.toMatchObject({
+      code: 'ENOENT',
+      message: 'The sidekick-definitely-not-a-binary CLI was not found on PATH. Install it, or add it to PATH.',
+    });
   });
 });

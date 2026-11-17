@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv } from './endpoint';
+import { parseDockerEndpoint, describeDockerEndpoint, dockerCliEnv, defaultDockerSocket } from './endpoint';
 import { DockerClient } from './DockerClient';
 
 describe('parseDockerEndpoint', () => {
@@ -140,8 +140,19 @@ describe('describeDockerEndpoint', () => {
     expect(describeDockerEndpoint()).toBe('tcp://remote:2375 (from DOCKER_HOST)');
   });
 
-  it('falls back to the default socket description', () => {
+  it('falls back to the socket the client actually uses by default', () => {
     delete process.env.DOCKER_HOST;
-    expect(describeDockerEndpoint()).toBe('the default Docker socket (/var/run/docker.sock)');
+    expect(describeDockerEndpoint()).toBe(`the default Docker socket (${defaultDockerSocket()})`);
+  });
+});
+
+describe('defaultDockerSocket', () => {
+  it('is the named pipe on Windows', () => {
+    expect(defaultDockerSocket('win32', 'C:\\Users\\me', () => true)).toBe('//./pipe/docker_engine');
+  });
+
+  it("prefers Docker Desktop's per-user socket when it exists, like docker-modem", () => {
+    expect(defaultDockerSocket('darwin', '/Users/me', p => p === '/Users/me/.docker/run/docker.sock')).toBe('/Users/me/.docker/run/docker.sock');
+    expect(defaultDockerSocket('linux', '/home/me', () => false)).toBe('/var/run/docker.sock');
   });
 });

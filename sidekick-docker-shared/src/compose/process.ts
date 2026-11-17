@@ -29,7 +29,8 @@ export const TIMEOUT_EXIT_CODE = 124;
  * SIGTERM, then SIGKILL after `killGraceMs`; the promise *resolves* with
  * {@link TIMEOUT_EXIT_CODE} and a "timed out" line appended to stderr, so callers
  * that already turn non-zero exits into a readable reason need no extra path.
- * Spawn failures (e.g. `docker` not installed) reject.
+ * Spawn failures reject; a missing binary rejects with a readable message and
+ * `code: 'ENOENT'`.
  */
 export function runProcess(cmd: string, args: string[], opts: RunProcessOptions = {}): Promise<ComposeExecResult> {
   return new Promise((resolve, reject) => {
@@ -73,7 +74,19 @@ export function runProcess(cmd: string, args: string[], opts: RunProcessOptions 
     proc.stdout.on('data', (data: Buffer) => { stdout += outDecoder.write(data); });
     proc.stderr.on('data', (data: Buffer) => { stderr += errDecoder.write(data); });
 
-    proc.on('error', (err) => { cleanup(); reject(err); });
+    proc.on('error', (err: NodeJS.ErrnoException) => {
+      cleanup();
+      // "spawn docker ENOENT" told nobody what to do. Keep `code` so callers
+      // that branch on a missing binary still can.
+      if (err.code === 'ENOENT') {
+        reject(Object.assign(
+          new Error(`The ${cmd} CLI was not found on PATH. Install it, or add it to PATH.`, { cause: err }),
+          { code: err.code },
+        ));
+        return;
+      }
+      reject(err);
+    });
     proc.on('close', (code) => {
       cleanup();
       stdout += outDecoder.end();

@@ -1,6 +1,20 @@
-/** Extract a human-readable message from an unknown error value. */
+// docker-modem words every failed API call as
+// "(HTTP code 409) unexpected - <daemon message> " — the daemon's own message
+// is the part a person can act on.
+const MODEM_PREFIX = /^\(HTTP code \d+\) ([^-]*?) - ([\s\S]*)$/;
+
+/**
+ * Extract a human-readable message from an unknown error value. Docker API
+ * failures lose docker-modem's "(HTTP code N) reason - " wrapper, so a toast
+ * reads "Failed to start web: container already started" rather than the raw
+ * transport text.
+ */
 export function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
+  const raw = err instanceof Error ? err.message : String(err);
+  const m = MODEM_PREFIX.exec(raw);
+  if (!m) return raw;
+  const body = m[2].trim();
+  return body && body !== '[object Object]' ? body : m[1].trim() || raw.trim();
 }
 
 /** Extract a Node.js errno code (e.g. 'ENOENT', 'EACCES') from an unknown error value. */

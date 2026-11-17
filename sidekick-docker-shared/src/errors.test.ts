@@ -15,6 +15,22 @@ describe('errorMessage', () => {
   it('stringifies non-Error values', () => {
     expect(errorMessage('plain')).toBe('plain');
   });
+
+  it("drops docker-modem's (HTTP code N) wrapper, keeping the daemon's message", () => {
+    expect(errorMessage(new Error('(HTTP code 409) unexpected - You cannot remove a running container abc. Stop the container before attempting removal or force remove '))).toBe(
+      'You cannot remove a running container abc. Stop the container before attempting removal or force remove',
+    );
+    expect(errorMessage(new Error('(HTTP code 404) no such container - No such container: web '))).toBe('No such container: web');
+  });
+
+  it('falls back to the reason when the daemon sent no body', () => {
+    expect(errorMessage(new Error('(HTTP code 304) container already started - '))).toBe('container already started');
+    expect(errorMessage(new Error('(HTTP code 500) server error - [object Object] '))).toBe('server error');
+  });
+
+  it('leaves other messages untouched', () => {
+    expect(errorMessage(new Error('connect ECONNREFUSED /var/run/docker.sock'))).toBe('connect ECONNREFUSED /var/run/docker.sock');
+  });
 });
 
 describe('errorCode', () => {

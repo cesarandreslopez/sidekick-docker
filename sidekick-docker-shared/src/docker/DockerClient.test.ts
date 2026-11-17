@@ -249,9 +249,34 @@ describe('DockerClient', () => {
     await expect(client.removeContainer('abc')).resolves.toBeUndefined();
   });
 
-  it('pruneImages returns space reclaimed', async () => {
+  it('treats 304 (already started/stopped) as success, and rethrows other failures', async () => {
+    const d = (client as unknown as { docker: Record<string, unknown> }).docker;
+    const notModified = Object.assign(new Error('(HTTP code 304) container already started - '), { statusCode: 304 });
+    const conflict = Object.assign(new Error('(HTTP code 409) conflict - nope'), { statusCode: 409 });
+    d.getContainer = vi.fn().mockReturnValue({
+      start: vi.fn().mockRejectedValue(notModified),
+      stop: vi.fn().mockRejectedValue(conflict),
+    });
+    await expect(client.startContainer('abc')).resolves.toBeUndefined();
+    await expect(client.stopContainer('abc')).rejects.toBe(conflict);
+  });
+
+  it('pruneImages returns space reclaimed, and deleted 0 only when nothing went', async () => {
     const result = await client.pruneImages();
     expect(result.spaceReclaimed).toBe(100000);
+    const d = (client as unknown as { docker: Record<string, unknown> }).docker;
+    d.pruneImages = vi.fn().mockResolvedValue({ ImagesDeleted: [{ Deleted: 'sha256:a' }, { Deleted: 'sha256:b' }], SpaceReclaimed: 10 });
+    expect(await client.pruneImages()).toEqual({ spaceReclaimed: 10 });
+    d.pruneImages = vi.fn().mockResolvedValue({ ImagesDeleted: null, SpaceReclaimed: 0 });
+    expect(await client.pruneImages()).toEqual({ spaceReclaimed: 0, deleted: 0 });
+  });
+
+  it('pruneVolumes counts the deleted volumes', async () => {
+    const d = (client as unknown as { docker: Record<string, unknown> }).docker;
+    d.pruneVolumes = vi.fn().mockResolvedValue({ VolumesDeleted: ['a', 'b'], SpaceReclaimed: 5 });
+    expect(await client.pruneVolumes()).toEqual({ spaceReclaimed: 5, deleted: 2 });
+    d.pruneVolumes = vi.fn().mockResolvedValue({ VolumesDeleted: null, SpaceReclaimed: 0 });
+    expect(await client.pruneVolumes()).toEqual({ spaceReclaimed: 0, deleted: 0 });
   });
 
   it('pruneNetworks returns deleted networks', async () => {

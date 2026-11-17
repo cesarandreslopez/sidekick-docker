@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
 import type { DockerClientOptions } from './DockerClient';
 
 const DEFAULT_TCP_PORT = 2375;
@@ -82,12 +85,29 @@ export function dockerCliEnv(value: string): Record<string, string> {
 }
 
 /**
+ * The socket docker-modem connects to when neither an endpoint nor DOCKER_HOST
+ * is given: the Windows named pipe, Docker Desktop's per-user socket when it
+ * exists, else the system socket (mirrors docker-modem's `defaultOpts`).
+ */
+export function defaultDockerSocket(
+  platform: NodeJS.Platform = process.platform,
+  home: string = homedir(),
+  exists: (path: string) => boolean = existsSync,
+): string {
+  if (platform === 'win32') return '//./pipe/docker_engine';
+  const userSocket = join(home, '.docker', 'run', 'docker.sock');
+  return exists(userSocket) ? userSocket : DEFAULT_SOCKET;
+}
+
+/**
  * Human-readable description of which endpoint a connection attempt used,
  * for error messages ("Cannot connect to Docker daemon at <endpoint>").
+ * The default used to always read /var/run/docker.sock, even on Windows or
+ * when the client was actually using Docker Desktop's per-user socket.
  */
 export function describeDockerEndpoint(value?: string): string {
   if (value && value.trim() !== '') return value.trim();
   const envHost = process.env.DOCKER_HOST;
   if (envHost && envHost.trim() !== '') return `${envHost.trim()} (from DOCKER_HOST)`;
-  return `the default Docker socket (${DEFAULT_SOCKET})`;
+  return `the default Docker socket (${defaultDockerSocket()})`;
 }
