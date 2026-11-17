@@ -212,6 +212,14 @@ describe('DockerService lifecycle', () => {
     expect(await service.initialize()).toEqual({ ok: false, reason: expect.stringMatching(/Permission denied on unix:\/\/\/nope\.sock/) });
   });
 
+  it('reports prune counts from the daemon, and an empty prune as nothing to prune', async () => {
+    const client = (service as unknown as { client: Record<string, unknown> }).client;
+    client.pruneImages = async () => ({ spaceReclaimed: 0, deleted: 0 });
+    client.pruneVolumes = async () => ({ spaceReclaimed: 2048, deleted: 2 });
+    expect(await service.pruneImages()).toBe('No dangling images to prune');
+    expect(await service.pruneVolumes()).toMatch(/^Pruned 2 volumes — .* reclaimed$/);
+  });
+
   it('changes the refresh interval in place, keeping the open log stream', async () => {
     mocks.logs.mockImplementation(() => (async function* () { yield await new Promise<LogEntry>(() => { /* stays open */ }); })());
     await service.initialize();

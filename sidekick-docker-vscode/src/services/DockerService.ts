@@ -651,9 +651,11 @@ export class DockerService {
   }
 
   async pruneImages(): Promise<string> {
-    const { spaceReclaimed } = await this.client.pruneImages();
+    // deleted is 0 when nothing went (and undefined otherwise): the result
+    // then says "No dangling images to prune", not "Pruned images — 0 B".
+    const result = await this.client.pruneImages();
     await this.refresh();
-    return pruneResultText('images', { spaceReclaimed });
+    return pruneResultText('images', result);
   }
 
   async removeVolume(name: string): Promise<void> {
@@ -662,9 +664,9 @@ export class DockerService {
   }
 
   async pruneVolumes(): Promise<string> {
-    const { spaceReclaimed } = await this.client.pruneVolumes();
+    const { spaceReclaimed, deleted } = await this.client.pruneVolumes();
     await this.refresh();
-    return pruneResultText('volumes', { spaceReclaimed });
+    return pruneResultText('volumes', { spaceReclaimed, deleted });
   }
 
   async removeNetwork(id: string): Promise<void> {

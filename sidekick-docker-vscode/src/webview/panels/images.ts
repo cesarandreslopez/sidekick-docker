@@ -2,7 +2,7 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot, SerializedImageInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { formatBytes, truncate, escapeHtml, escapeAttr, colorizeId, colorizeBool, renderKvGrid, shortId } from '../formatters';
-import { pruneConfirmFor, imageDisplayName, removeImageConfirmMessage } from 'sidekick-docker-shared/formatters';
+import { pruneConfirmFor, pruneNothingText, imageDisplayName, removeImageConfirmMessage } from 'sidekick-docker-shared/formatters';
 
 
 function findImage(id: string, snapshot: DashboardStateSnapshot): SerializedImageInfo | undefined {
@@ -76,6 +76,7 @@ export const imagesPanel: PanelDefinition = {
         sortKey: img.isDangling ? 1 : 0,
         badge: formatBytes(img.size),
         tooltip: tag,
+        stateText: img.isDangling ? 'dangling' : undefined,
       };
     });
   },
@@ -85,7 +86,7 @@ export const imagesPanel: PanelDefinition = {
     const confirmRemove = img ? removeImageConfirmMessage(img) : `Remove image ${shortId(item.id)}?`;
     return [
       { key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: confirmRemove, confirmSeverity: 'high' },
-      { key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: pruneConfirmFor('images', snapshot.images), confirmSeverity: 'batch' },
+      { key: 'P', label: 'Prune', actionType: 'prune', nothingToDo: pruneNothingText('images', snapshot.images) ?? undefined, confirm: true, confirmMessage: pruneConfirmFor('images', snapshot.images), confirmSeverity: 'batch' },
     ];
   },
 

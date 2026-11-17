@@ -59,7 +59,7 @@ describe('dashboard DOM', () => {
     input.value = 'no-match';
     input.dispatchEvent(new dom.window.Event('input'));
     expect(lastSelection()).toMatchObject({ itemId: null });
-    expect(element('#side-list').textContent).toContain('No matching items');
+    expect(element('#side-list').textContent).toContain('Nothing matches "no-match"');
     expect(element('#detail-content').textContent).toContain('No item selected');
     expect(dom.window.document.activeElement).toBe(input);
     key('Escape');
@@ -377,6 +377,104 @@ describe('dashboard DOM', () => {
     expect(element('#tab-bar .phrase').textContent).not.toBe('one');
     receive({ type: 'updateState', snapshot: snapshot() });
     expect(element('[data-panel="0"]')).toBe(tab);
+  });
+
+  function mixedSnapshot(): DashboardStateSnapshot {
+    const c = (id: string, state: DashboardStateSnapshot['containers'][number]['state']) =>
+      ({ id, name: id, state, status: state === 'running' ? 'Up 5 minutes' : state, image: 'test', ports: [], created: '2026-01-01', labels: {} });
+    return { ...snapshot(), containers: [c('web', 'running'), c('db', 'exited'), c('cache', 'paused'), c('api', 'running')] };
+  }
+  const groupHeaders = () => [...dom.window.document.querySelectorAll('.side-group-header')].map(h => h.textContent);
+  const rowIds = () => [...dom.window.document.querySelectorAll<HTMLElement>('.side-item')].map(r => r.dataset.id);
+
+  it('groups what running-only keeps under Running, and shows group headers only under the State sort', () => {
+    receive({ type: 'updateState', snapshot: mixedSnapshot() });
+    expect(groupHeaders()).toEqual(['Running', 'Stopped']);
+    // Running first, then paused, then stopped.
+    expect(rowIds()).toEqual(['api', 'web', 'cache', 'db']);
+    key('o');
+    element('.sort-item[data-idx="1"]').click(); // Name
+    expect(groupHeaders()).toEqual([]);
+    expect(rowIds()).toEqual(['api', 'cache', 'db', 'web']);
+  });
+
+  it('names each row\'s own state for assistive tech, and counts paused as running', () => {
+    receive({ type: 'updateState', snapshot: mixedSnapshot() });
+    expect(element('[data-id="cache"]').getAttribute('aria-label')).toBe('cache, paused');
+    expect(element('[data-id="web"]').getAttribute('aria-label')).toBe('web, running, 5 minutes');
+    expect(element('#connection-status').textContent).toContain('3/4 running');
+  });
+
+  it('says why the list is empty: running-only, a filter, or a filter that matches only stopped containers', () => {
+    const stoppedOnly = { ...snapshot(), containers: mixedSnapshot().containers.filter(c => c.state === 'exited') };
+    receive({ type: 'updateState', snapshot: stoppedOnly });
+    key('a');
+    expect(element('#side-list').textContent).toContain('No running containers');
+    expect(element('#side-list').textContent).toContain('Press a to show all 1 container');
+    key('/');
+    const input = element('#filter-input') as HTMLInputElement;
+    input.value = 'db';
+    input.dispatchEvent(new dom.window.Event('input'));
+    expect(element('#side-list').textContent).toContain('1 stopped container matches');
+    input.value = 'zzz';
+    input.dispatchEvent(new dom.window.Event('input'));
+    expect(element('#side-list').textContent).toContain('Nothing matches "zzz"');
+  });
+
+  it('says why a log pane is empty, without a status line repeating it', () => {
+    expect(element('#detail-content').textContent).toContain('Waiting for log output');
+    receive({ type: 'streamState', update: { kind: 'logs', itemId: 'alpha', state: 'ended' } });
+    expect(element('#detail-content').textContent).toContain('No log output — the container is stopped.');
+    expect(dom.window.document.querySelector('.stream-status')).toBeNull();
+    receive({ type: 'streamState', update: { kind: 'logs', itemId: 'alpha', state: 'error', message: 'gone' } });
+    expect(element('.stream-status [data-retry-streams]')).toBeTruthy();
+  });
+
+  it('shows a nothing-to-prune toast instead of the red confirmation', () => {
+    key('P');
+    expect(element('#confirm-overlay').classList.contains('visible')).toBe(false);
+    expect(element('#toast-container').textContent).toContain('No stopped containers to prune');
+    expect(sent.some(m => m.type === 'action')).toBe(false);
+    receive({ type: 'updateState', snapshot: mixedSnapshot() });
+    key('P');
+    expect(element('#confirm-overlay').classList.contains('visible')).toBe(true);
+  });
+
+  it('lists a port mapping once even when Docker reports it for IPv4 and IPv6', () => {
+    const port = (hostIp: string) => ({ hostIp, hostPort: 8080, containerPort: 80, protocol: 'tcp' as const });
+    receive({ type: 'updateState', snapshot: { ...snapshot(), containers: snapshot().containers.map(c => ({ ...c, ports: [port('0.0.0.0'), port('::')] })) } });
+    element('[data-tab="3"]').click();
+    expect(element('#detail-content').textContent).toContain('8080:80/tcp');
+    expect(element('#detail-content').textContent).not.toContain('8080:80/tcp, 8080:80/tcp');
+  });
+
+  it('keeps focus in the list when the focused row disappears', () => {
+    element('[data-menu-id="beta"]').focus();
+    receive({ type: 'updateState', snapshot: snapshot(['alpha']) });
+    expect(dom.window.document.activeElement).toBe(element('#side-list'));
+  });
+
+  it('opens the actions menu from the keyboard context-menu key on the list', () => {
+    element('#side-list').dispatchEvent(new dom.window.MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+    expect(element('#context-menu').classList.contains('visible')).toBe(true);
+    expect(element('#context-menu').textContent).toContain('Stop');
+  });
+
+  it('makes the panel strip the tablist, with the digit as a shortcut rather than part of the name', () => {
+    const tablist = element('#tab-bar [role="tablist"]');
+    expect(tablist.classList.contains('panel-tabs')).toBe(true);
+    expect(element('#tab-bar').getAttribute('role')).toBeNull();
+    expect([...tablist.children].every(c => c.getAttribute('role') === 'tab')).toBe(true);
+    const first = element('[data-panel="0"]');
+    expect(first.getAttribute('aria-keyshortcuts')).toBe('1');
+    expect(first.querySelector('.shortcut')?.getAttribute('aria-hidden')).toBe('true');
+  });
+
+  it('words the sort toast with the menu label', () => {
+    key('o');
+    element('.sort-item[data-idx="2"]').click(); // CPU %
+    key('R');
+    expect(element('#toast-container').textContent).toContain('Sort: CPU %,');
   });
 
   it('leaves F5 to the host keybinding and keeps the status-bar buttons out of the ellipsized hints', () => {

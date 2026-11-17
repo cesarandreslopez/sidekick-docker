@@ -1,18 +1,13 @@
 import type { SerializedLogEntry } from '../types/messages';
 import type { LogTokenType, FilterMatch } from 'sidekick-docker-shared/log';
 import { tokenizeLogLine } from 'sidekick-docker-shared/log';
-import { formatBytes, formatCpu, formatMemory, truncate, shortId, formatTimestampTime } from 'sidekick-docker-shared/formatters';
+import { formatBytes, formatCpu, formatMemory, formatPorts, truncate, shortId, formatTimestampTime } from 'sidekick-docker-shared/formatters';
 
-export { formatBytes, formatCpu, formatMemory, truncate, shortId, formatTimestampTime };
+// formatPorts is the shared one: Docker reports each mapping once per bind
+// address (IPv4 and IPv6), and the local copy listed both.
+export { formatBytes, formatCpu, formatMemory, formatPorts, truncate, shortId, formatTimestampTime };
 
 // VSCode-specific formatters (type signatures or return values differ from shared)
-
-export function formatPorts(ports: { hostPort: number; containerPort: number; protocol: string }[]): string {
-  return ports
-    .filter(p => p.hostPort > 0)
-    .map(p => `${p.hostPort}:${p.containerPort}/${p.protocol}`)
-    .join(', ') || '-';
-}
 
 export function stateIcon(state: string): string {
   switch (state) {
@@ -237,13 +232,16 @@ export function renderSeverityBadges(counts: { error: number; warn: number; info
 
 /**
  * Screen-reader name for a side-list row. State used to be carried only by
- * the icon's colour and glyph, so "web" read the same running or stopped.
+ * the icon's colour and glyph, so "web" read the same running or stopped —
+ * and the group alone said "running" for a paused container.
  */
-export function optionAccessibleName(item: { label: string; labelTail?: string; group?: string; badge?: string; health?: string }, pinned = false): string {
+export function optionAccessibleName(item: { label: string; labelTail?: string; group?: string; badge?: string; health?: string; stateText?: string }, pinned = false): string {
+  const state = item.stateText ?? item.group?.toLowerCase();
   return [
     item.label + (item.labelTail ?? ''),
-    item.group?.toLowerCase(),
-    item.badge,
+    state,
+    // A stopped container's badge is its state: do not read it twice.
+    item.badge !== state ? item.badge : '',
     item.health ? `health ${item.health}` : '',
     pinned ? 'pinned for comparison' : '',
   ].filter(Boolean).join(', ');

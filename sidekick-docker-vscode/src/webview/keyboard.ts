@@ -1,6 +1,6 @@
 import type { WebviewMessage } from '../types/messages';
 import type { PanelDefinition, PanelItem, ActionDefinition } from './panels/types';
-import type { WebviewState, ToastSeverity } from './state';
+import type { WebviewState, ToastSeverity, SortField } from './state';
 import { SORT_OPTIONS } from './state';
 import { sortDirectionLabel } from 'sidekick-docker-shared/formatters';
 
@@ -37,6 +37,12 @@ export interface KeyboardContext {
   addToast(message: string, severity: ToastSeverity): void;
   post(msg: WebviewMessage): void;
   rotatePhrase(): void;
+}
+
+/** "Sort: CPU %, highest first" — the menu's label, not the internal field name ("cpu"). */
+export function sortToast(field: SortField, reversed: boolean): string {
+  const label = SORT_OPTIONS.find(o => o.field === field)?.label ?? field;
+  return `Sort: ${label}, ${sortDirectionLabel(field, reversed)}`;
 }
 
 /**
@@ -207,7 +213,7 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
       e.preventDefault();
       state.sortReversed = !state.sortReversed;
       ctx.post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
-      ctx.addToast(`Sort: ${state.sortField}, ${sortDirectionLabel(state.sortField, state.sortReversed)}`, 'info');
+      ctx.addToast(sortToast(state.sortField, state.sortReversed), 'info');
       ctx.renderSortOverlay();
       ctx.renderAll();
       return;
@@ -364,7 +370,7 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     e.preventDefault();
     state.sortReversed = !state.sortReversed;
     ctx.post({ type: 'sortChanged', field: state.sortField, reversed: state.sortReversed });
-    ctx.addToast(`Sort: ${state.sortField}, ${sortDirectionLabel(state.sortField, state.sortReversed)}`, 'info');
+    ctx.addToast(sortToast(state.sortField, state.sortReversed), 'info');
     ctx.renderAll();
     return;
   }

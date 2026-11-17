@@ -2,7 +2,7 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot, SerializedVolumeInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { escapeHtml, colorizeBool, renderKvGrid } from '../formatters';
-import { pruneConfirmFor, removeVolumeConfirmMessage } from 'sidekick-docker-shared/formatters';
+import { pruneConfirmFor, pruneNothingText, removeVolumeConfirmMessage } from 'sidekick-docker-shared/formatters';
 
 function findVolume(name: string, snapshot: DashboardStateSnapshot): SerializedVolumeInfo | undefined {
   return snapshot.volumes.find(v => v.name === name);
@@ -48,6 +48,7 @@ export const volumesPanel: PanelDefinition = {
       sortKey: vol.isInUse ? 0 : 1,
       badge: vol.driver,
       tooltip: vol.name,
+      stateText: vol.isInUse ? 'in use' : 'unused',
     }));
   },
 
@@ -57,7 +58,7 @@ export const volumesPanel: PanelDefinition = {
     if (vol && !vol.isInUse) {
       actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: removeVolumeConfirmMessage(vol.name), confirmSeverity: 'high' });
     }
-    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: pruneConfirmFor('volumes', snapshot.volumes), confirmSeverity: 'batch' });
+    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', nothingToDo: pruneNothingText('volumes', snapshot.volumes) ?? undefined, confirm: true, confirmMessage: pruneConfirmFor('volumes', snapshot.volumes), confirmSeverity: 'batch' });
     return actions;
   },
 

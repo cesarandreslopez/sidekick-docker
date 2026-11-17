@@ -2,9 +2,9 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { parseComposeItemId, composeProjectNameOf } from '../../types/composeItemId';
-import { composeDownConfirmMessage } from 'sidekick-docker-shared/formatters';
+import { composeDownConfirmMessage, emptyLogMessage } from 'sidekick-docker-shared/formatters';
 import { stateIcon, stateColor, escapeHtml, escapeAttr, colorizeState, colorizeId, renderKvGrid } from '../formatters';
-import { renderLogFilterBar, renderLogLines, NO_MATCHING_LOGS } from './logPane';
+import { renderLogFilterBar, renderLogLines, renderEmptyLogPane, NO_MATCHING_LOGS } from './logPane';
 
 function getComposeLogKey(itemId: string): string {
   const ref = parseComposeItemId(itemId);
@@ -19,7 +19,7 @@ function renderComposeLogPane(itemId: string, state: WebviewState, logRoot: stri
 
   const entries = state.composeLogs.get(key);
   if (!entries || entries.length === 0) {
-    return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the service produces output</div></div>';
+    return renderEmptyLogPane(emptyLogMessage(state.streamStates.get(`composeLogs:${key}`)?.state ?? null, 'service'));
   }
   const lines = renderLogLines(entries, state);
   // The primary pane gets the same filter bar as Containers (the TUI filters
@@ -118,6 +118,7 @@ export const servicesPanel: PanelDefinition = {
         iconColor: project.status === 'running' ? stateColor('running') : project.status === 'partial' ? stateColor('paused') : stateColor('exited'),
         sortKey: sortKey++,
         tooltip: project.name,
+        stateText: project.status,
       });
 
       for (const service of project.services) {
@@ -129,6 +130,7 @@ export const servicesPanel: PanelDefinition = {
           iconColor: stateColor(service.state),
           sortKey: sortKey++,
           tooltip: `${project.name}/${service.name}`,
+          stateText: service.state.replace('_', ' '),
           badge: `${service.runningReplicas ?? (service.state === 'running' ? 1 : 0)}/${service.totalReplicas ?? (service.containerId ? 1 : 0)}`,
         });
       }

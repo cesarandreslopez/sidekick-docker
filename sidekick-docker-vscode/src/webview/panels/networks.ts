@@ -2,7 +2,7 @@ import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition 
 import type { DashboardStateSnapshot, SerializedNetworkInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { escapeHtml, colorizeId, colorizeBool, colorizeNetworkContainer, renderKvGrid } from '../formatters';
-import { pruneConfirmFor, removeNetworkConfirmMessage } from 'sidekick-docker-shared/formatters';
+import { pruneConfirmFor, pruneNothingText, removeNetworkConfirmMessage } from 'sidekick-docker-shared/formatters';
 
 function findNetwork(id: string, snapshot: DashboardStateSnapshot): SerializedNetworkInfo | undefined {
   return snapshot.networks.find(n => n.id === id);
@@ -67,6 +67,7 @@ export const networksPanel: PanelDefinition = {
       sortKey: net.isDefault ? 0 : 1,
       badge: net.containers.length > 0 ? `${net.containers.length} container${net.containers.length > 1 ? 's' : ''}` : undefined,
       tooltip: net.name,
+      stateText: net.isDefault ? 'default network' : undefined,
     }));
   },
 
@@ -76,7 +77,7 @@ export const networksPanel: PanelDefinition = {
     if (net && !net.isDefault && net.containers.length === 0) {
       actions.push({ key: 'd', label: 'Remove', actionType: 'remove', confirm: true, confirmMessage: removeNetworkConfirmMessage(net.name), confirmSeverity: 'high' });
     }
-    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', confirm: true, confirmMessage: pruneConfirmFor('networks', snapshot.networks), confirmSeverity: 'batch' });
+    actions.push({ key: 'P', label: 'Prune', actionType: 'prune', nothingToDo: pruneNothingText('networks', snapshot.networks) ?? undefined, confirm: true, confirmMessage: pruneConfirmFor('networks', snapshot.networks), confirmSeverity: 'batch' });
     return actions;
   },
 

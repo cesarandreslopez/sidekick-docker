@@ -37,6 +37,20 @@ describe('optionAccessibleName', () => {
     expect(optionAccessibleName({ label: 'nginx:latest' })).toBe('nginx:latest');
     expect(optionAccessibleName({ label: 'registry.example.com/team/api', labelTail: ':1.2.3' })).toBe('registry.example.com/team/api:1.2.3');
   });
+
+  it('reads the row\'s own state over its group, without repeating a badge that says the same', () => {
+    // A paused container is grouped under Running; its name must still say paused.
+    expect(optionAccessibleName({ label: 'cache', group: 'Running', badge: 'paused', stateText: 'paused' })).toBe('cache, paused');
+    expect(optionAccessibleName({ label: 'data', badge: 'local', stateText: 'in use' })).toBe('data, in use, local');
+  });
+});
+
+describe('sortToast', () => {
+  it('names the sort by its menu label and direction', async () => {
+    const { sortToast } = await import('./keyboard');
+    expect(sortToast('cpu', false)).toMatch(/^Sort: CPU %, /);
+    expect(sortToast('name', true)).toMatch(/^Sort: Name, /);
+  });
 });
 
 describe('rovingTabIndex', () => {

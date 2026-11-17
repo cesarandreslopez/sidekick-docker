@@ -1,7 +1,16 @@
 import type { SerializedLogEntry } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { filterLine } from 'sidekick-docker-shared/log';
-import { colorizeLogEntry, escapeAttr } from '../formatters';
+import { colorizeLogEntry, escapeAttr, escapeHtml } from '../formatters';
+
+/**
+ * An empty log pane says why, from its stream's state (shared emptyLogMessage
+ * wording, as in the TUI): still waiting, the target is stopped, or the stream
+ * was lost. It used to promise "Logs will appear…" in every case.
+ */
+export function renderEmptyLogPane(message: string): string {
+  return `<div class="empty-state" data-log-empty><div class="empty-icon" aria-hidden="true">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">${escapeHtml(message)}</div></div>`;
+}
 
 /**
  * The filter bar of a primary log pane (Containers and Services: the TUI

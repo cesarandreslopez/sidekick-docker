@@ -1,10 +1,10 @@
-import { summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, publishedPortUrls, pruneConfirmFor, removeContainerConfirmMessage } from 'sidekick-docker-shared/formatters';
+import { summarizeHealth, summarizeRestartPolicy, formatMount, canStart, canStop, publishedPortUrls, pruneConfirmFor, pruneNothingText, removeContainerConfirmMessage, containerStateGroup, containerStateRank, emptyLogMessage } from 'sidekick-docker-shared/formatters';
 import type { PanelDefinition, PanelItem, ActionDefinition, DetailTabDefinition } from './types';
 import type { DashboardStateSnapshot, SerializedContainerInfo } from '../../types/messages';
 import type { WebviewState } from '../state';
 import { stateIcon, stateColor, formatPorts, formatBytes, formatMemory, escapeHtml, escapeAttr, colorizeState, colorizeHealth, colorizeId, renderKvGrid, renderEnvGrid, renderSparkline, renderSeveritySparkline, renderSeverityBadges } from '../formatters';
 import { LogTemplateEngine } from 'sidekick-docker-shared/log';
-import { renderLogFilterBar, renderLogLines, NO_MATCHING_LOGS } from './logPane';
+import { renderLogFilterBar, renderLogLines, renderEmptyLogPane, NO_MATCHING_LOGS } from './logPane';
 
 
 function findContainer(id: string, snapshot: DashboardStateSnapshot): SerializedContainerInfo | undefined {
@@ -13,7 +13,9 @@ function findContainer(id: string, snapshot: DashboardStateSnapshot): Serialized
 
 function renderSingleLogPane(containerId: string, state: WebviewState, logRoot: string): string {
   const entries = state.logs.get(containerId);
-  if (!entries || entries.length === 0) return '<div class="empty-state"><div class="empty-icon" aria-hidden="true">\u{1F4DC}</div><div class="empty-title">No logs yet</div><div class="empty-subtitle">Logs will appear as the container produces output</div></div>';
+  if (!entries || entries.length === 0) {
+    return renderEmptyLogPane(emptyLogMessage(state.streamStates.get(`logs:${containerId}`)?.state ?? null, 'container'));
+  }
 
   const counts = state.logSeverityCounts.get(containerId);
   const lines = renderLogLines(entries, state);
@@ -251,9 +253,14 @@ export const containersPanel: PanelDefinition = {
       ...splitReplicaSuffix(c.name),
       icon: stateIcon(c.state),
       iconColor: stateColor(c.state),
-      sortKey: c.state === 'running' ? 0 : 1,
+      // Shared grouping: "Running" is what the running-only toggle keeps
+      // (paused and restarting too), so a paused container is no longer
+      // listed under "Stopped" while the toggle shows it. Within it, running
+      // sorts before paused/restarting.
+      sortKey: containerStateRank(c.state),
       badge: c.state === 'running' ? c.status.replace(/^Up /, '') : c.state,
-      group: c.state === 'running' ? 'Running' : 'Stopped',
+      group: containerStateGroup(c.state),
+      stateText: c.state,
       tooltip: c.healthStatus ? `${c.name} (${c.healthStatus})` : c.name,
       health: c.healthStatus,
     }));
@@ -287,6 +294,7 @@ export const containersPanel: PanelDefinition = {
       key: 'P',
       label: 'Prune',
       actionType: 'prune',
+      nothingToDo: pruneNothingText('containers', snapshot.containers) ?? undefined,
       confirm: true,
       confirmMessage: pruneConfirmFor('containers', snapshot.containers),
       confirmSeverity: 'batch',

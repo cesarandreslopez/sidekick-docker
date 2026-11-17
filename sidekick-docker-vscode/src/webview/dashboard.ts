@@ -120,16 +120,17 @@ const $statusBarMain = document.getElementById('status-bar-main')!;
 const $connectionStatus = document.getElementById('connection-status')!;
 const $toastContainer = document.getElementById('toast-container')!;
 // The tab bar holds the tab strip (re-rendered) and the phrase (text only).
+// The strip is the tablist: on the bar, the phrase sat inside the tablist as
+// a child that is not a tab.
 const $panelTabs = document.createElement('div');
 $panelTabs.className = 'panel-tabs';
-$panelTabs.setAttribute('role', 'none');
+$panelTabs.setAttribute('role', 'tablist');
+$panelTabs.setAttribute('aria-label', 'Resource panels');
 const $phrase = document.createElement('div');
 $phrase.className = 'phrase';
 $tabBar.replaceChildren($panelTabs, $phrase);
 
 // Static ARIA wiring (per-render attributes are set in the renderers)
-$tabBar.setAttribute('role', 'tablist');
-$tabBar.setAttribute('aria-label', 'Resource panels');
 $detailTabBar.setAttribute('role', 'tablist');
 $detailTabBar.setAttribute('aria-label', 'Detail tabs');
 $sideList.setAttribute('role', 'listbox');
@@ -264,6 +265,14 @@ function replaceContent(root: HTMLElement, html: string): boolean {
     const replacement = [...root.querySelectorAll<HTMLElement>(`[${attr}]`)].find(el => el.getAttribute(attr) === value);
     replacement?.focus({ preventScroll: true });
   }
+  // The focused control is gone (its row was removed, its button no longer
+  // offered): focus fell to <body>, where no key reaches the dashboard. Keep
+  // it in the region instead — the root when it takes focus, else the pane.
+  if (active && !root.contains(document.activeElement) && (document.activeElement === document.body || !document.activeElement)) {
+    const fallback = root.hasAttribute('tabindex') ? root
+      : document.getElementById(state.focusTarget === 'detail' ? 'detail-content' : 'side-list');
+    fallback?.focus({ preventScroll: true });
+  }
   return true;
 }
 
@@ -355,7 +364,36 @@ function renderEmptyStateSide(panelId: string): string {
     networks: { emoji: '\u{1F310}', title: 'No networks', subtitle: 'Networks will appear when created' },
   };
   const s = emptyStates[panelId] ?? { emoji: '\u{1F4AD}', title: 'Nothing here', subtitle: '' };
-  return `<div class="empty-state-side"><div class="empty-icon" aria-hidden="true">${s.emoji}</div><div class="empty-title">${escapeHtml(s.title)}</div><div class="empty-subtitle">${escapeHtml(s.subtitle)}</div></div>`;
+  return renderEmptyStateSideWith(s.emoji, s.title, s.subtitle);
+}
+
+function renderEmptyStateSideWith(emoji: string, title: string, subtitle: string): string {
+  return `<div class="empty-state-side"><div class="empty-icon" aria-hidden="true">${emoji}</div><div class="empty-title">${escapeHtml(title)}</div><div class="empty-subtitle">${escapeHtml(subtitle)}</div></div>`;
+}
+
+const plural = (n: number, word: string): string => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/**
+ * Why the list is empty, from what hides its items. "Clear the filter or show
+ * all containers" used to cover both causes, and the running-only toggle
+ * alone (no filter) read as "No matching items".
+ */
+function renderEmptyList(): string {
+  const panel = getPanel();
+  const snapshot = state.snapshot;
+  const runningOnly = panel.id === 'containers' && !state.showAllContainers;
+  if (state.filterString && snapshot) {
+    const f = state.filterString.toLowerCase();
+    const matches = panel.getItems(snapshot).filter(it => panel.getSearchableText(it, snapshot).toLowerCase().includes(f));
+    // Matches that only the running-only toggle hides: say so, not "nothing matches".
+    return runningOnly && matches.length > 0
+      ? renderEmptyStateSideWith('⌕', `No running containers match "${state.filterString}"`, `${plural(matches.length, 'stopped container')} ${matches.length === 1 ? 'matches' : 'match'} — press a to show all`)
+      : renderEmptyStateSideWith('⌕', `Nothing matches "${state.filterString}"`, 'Press Esc to clear the filter');
+  }
+  if (runningOnly && snapshot && snapshot.containers.length > 0) {
+    return renderEmptyStateSideWith('⏸', 'No running containers', `Press a to show all ${plural(snapshot.containers.length, 'container')}`);
+  }
+  return renderEmptyStateSide(panel.id);
 }
 
 // ─── Rendering ───────────────────────────────────────────────────────
@@ -448,7 +486,9 @@ function renderTabBar(): void {
   for (let i = 0; i < panels.length; i++) {
     const p = panels[i];
     const active = i === state.activePanelIndex;
-    html += `<div class="tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" tabindex="${active ? 0 : -1}" data-panel="${i}"><span class="shortcut">${p.shortcutKey}</span>${p.title}</div>`;
+    // The digit is a key hint, not part of the name ("1 Containers"): hidden
+    // from assistive tech and announced as the tab's shortcut instead.
+    html += `<div class="tab${active ? ' active' : ''}" role="tab" aria-selected="${active}" aria-keyshortcuts="${p.shortcutKey}" tabindex="${active ? 0 : -1}" data-panel="${i}"><span class="shortcut" aria-hidden="true">${p.shortcutKey}</span>${p.title}</div>`;
   }
   if ($phrase.textContent !== state.phrase) $phrase.textContent = state.phrase;
   if (!replaceContent($panelTabs, html)) return;
@@ -481,18 +521,20 @@ function renderSideList(items: PanelItem[]): void {
 
   if (items.length === 0) {
     $sideList.removeAttribute('aria-activedescendant');
-    replaceContent($sideList, state.filterString || (getPanel().id === 'containers' && !state.showAllContainers)
-      ? renderEmptyState('⌕', 'No matching items', 'Clear the filter or show all containers to see more')
-      : renderEmptyStateSide(getPanel().id));
+    replaceContent($sideList, renderEmptyList());
     return;
   }
 
   let html = '';
   let lastGroup: string | undefined;
   let selectedRowId: string | null = null;
+  // Groups follow the state order, so they mean something only under the
+  // State sort; sorted by name or CPU they repeated "Running", "Stopped",
+  // "Running" down the list.
+  const showGroups = getPanel().id !== 'containers' || state.sortField === 'state';
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    if (item.group !== undefined && item.group !== lastGroup) {
+    if (showGroups && item.group !== undefined && item.group !== lastGroup) {
       html += `<div class="side-group-header" role="presentation">${escapeHtml(item.group)}</div>`;
       lastGroup = item.group;
     }
@@ -702,8 +744,14 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
     ? panel.id === 'services' ? 'composeLogs' : 'logs' : undefined;
   const streamId = panel.id === 'services' ? getSelectedComposeLogKey(item) : item.id;
   const stream = streamKind ? state.streamStates.get(`${streamKind}:${streamId}`) : undefined;
+  // An empty Logs pane says itself why it is empty (waiting, stopped); the
+  // status line would only repeat it. It stays for a lost or reconnecting
+  // stream, where its Retry helps.
+  const primaryEntries = panel.id === 'services' ? state.composeLogs.get(streamId ?? '') : state.logs.get(item.id);
+  const paneSaysIt = tab.label === 'Logs' && !primaryEntries?.length
+    && (stream?.state === 'loading' || stream?.state === 'empty' || stream?.state === 'ended');
   let streamHtml = '';
-  if (stream && stream.state !== 'live') {
+  if (stream && stream.state !== 'live' && !paneSaysIt) {
     // A stream that has delivered nothing yet used to say "Connecting…"
     // forever with no way out; it offers Retry in every state now.
     const labels = { loading: streamKind === 'stats' ? 'Waiting for stats…' : 'Waiting for output…', empty: 'No output received.', ended: 'Stream ended.', reconnecting: 'Reconnecting…', error: 'Stream unavailable.' };
@@ -714,8 +762,11 @@ function renderDetailContent(items: PanelItem[], options: RenderDetailOptions = 
   // Logs: while the pane around the lines is unchanged, apply updates in place
   // (keeps the text selection, horizontal scroll and the reading position).
   const compareId = state.compareItemIds[panel.id] ?? null;
+  // Stream states are part of it: an empty pane's text says why it is empty.
+  const compareStreamId = compareId && panel.id === 'services' ? getSelectedComposeLogKey({ id: compareId } as PanelItem) : compareId;
+  const compareStream = compareStreamId && streamKind ? state.streamStates.get(`${streamKind}:${compareStreamId}`)?.state ?? '' : '';
   const logShellKey = tab.label === 'Logs'
-    ? [panel.id, item.id, compareId ?? '', streamHtml, state.logFilterString, state.logFilterMode].join('\u0000')
+    ? [panel.id, item.id, compareId ?? '', streamHtml, stream?.state ?? '', compareStream, state.logFilterString, state.logFilterMode].join('\u0000')
     : '';
   if (logShellKey && preserveScroll && logShellKey === lastLogShellKey && patchLogPanes(item, compareId)) {
     renderScrollIndicators();
@@ -790,7 +841,8 @@ function setDetailTab(idx: number): void {
 
 function renderStatusBar(items: PanelItem[]): void {
   const snapshot = state.snapshot;
-  const runningCount = snapshot?.containers.filter(c => c.state === 'running').length ?? 0;
+  // Counted as the running-only toggle (and VS Code's status bar) count it.
+  const runningCount = snapshot?.containers.filter(c => matchesRunningOnly(c.state)).length ?? 0;
   const totalCount = snapshot?.containers.length ?? 0;
 
   // Build contextual hints from panel actions + global features
@@ -985,6 +1037,12 @@ function executeAction(action: ActionDefinition, itemId: string): void {
     copyCurrentLogs();
     return;
   }
+  // The list already shows there is nothing to do (a prune with no
+  // candidates): say so, rather than ask a red "cannot be undone" question.
+  if (action.nothingToDo) {
+    addToast(action.nothingToDo, 'info');
+    return;
+  }
   if (action.confirm) {
     showConfirm(action.confirmMessage || 'Are you sure?', () => {
       post({ type: 'action', actionType: action.actionType, itemId, panelId: getPanel().id });
@@ -1122,15 +1180,21 @@ function activateTabOnKey(e: KeyboardEvent, datasetKey: 'panel' | 'tab', activat
 $tabBar.addEventListener('keydown', (e: KeyboardEvent) => activateTabOnKey(e, 'panel', switchPanel));
 $detailTabBar.addEventListener('keydown', (e: KeyboardEvent) => activateTabOnKey(e, 'tab', setDetailTab));
 
-// Right-click a side-list row: select it and open the menu at the pointer
+// Right-click a side-list row: select it and open the menu at the pointer.
+// The context-menu key and Shift+F10 fire on the focused list itself (rows
+// are aria-activedescendant options), so they open the selected row's menu.
 $sideList.addEventListener('contextmenu', (e: MouseEvent) => {
   const row = (e.target as HTMLElement).closest('.side-item') as HTMLElement | null;
-  if (!row) return;
   e.preventDefault();
+  if (!row) {
+    showContextMenu(getFilteredItems());
+    return;
+  }
   const id = row.dataset.id;
   if (id === undefined) return;
   selectItem(id, getFilteredItems());
-  showContextMenu(getFilteredItems(), { x: e.clientX, y: e.clientY });
+  // A keyboard-invoked event on a row's button carries no pointer position.
+  showContextMenu(getFilteredItems(), e.clientX || e.clientY ? { x: e.clientX, y: e.clientY } : undefined);
 });
 
 // Clickable status-bar hint chips (mouse path for keyboard-only overlays)

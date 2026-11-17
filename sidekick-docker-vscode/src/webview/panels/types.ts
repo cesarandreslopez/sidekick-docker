@@ -20,12 +20,22 @@ export interface PanelItem {
   tooltip?: string;
   /** Container health, rendered as an inline badge in the side list. */
   health?: 'healthy' | 'unhealthy' | 'starting';
+  /**
+   * The row's state in words, for its accessible name ("paused", "in use").
+   * Otherwise carried only by the icon's glyph and colour.
+   */
+  stateText?: string;
 }
 
 export interface ActionDefinition {
   key: string;
   label: string;
   actionType: string;
+  /**
+   * The listed items show the action has nothing to do (a prune with no
+   * candidates): show this as an info toast instead of confirming or running it.
+   */
+  nothingToDo?: string;
   confirm?: boolean;
   confirmMessage?: string;
   /** Visual weight of the confirm dialog: low (yellow), high/batch (red). Defaults to high. */
