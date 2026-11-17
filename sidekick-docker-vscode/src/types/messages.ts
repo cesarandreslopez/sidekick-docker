@@ -183,7 +183,8 @@ export type ExtensionMessage =
   /** `fetchedAt` (ISO): when the daemon was asked, so a cached list is not shown as fresh. */
   | { type: 'updateChanges'; containerId: string; changes: SerializedFilesystemChange[]; fetchedAt: string }
   | { type: 'updateLayers'; imageId: string; layers: SerializedImageLayer[] }
-  | { type: 'connectionState'; state: 'connected' | 'disconnected'; reason?: string };
+  /** `connecting` while the host (re)creates its Docker connection: the list on screen is stale until it settles. */
+  | { type: 'connectionState'; state: 'connecting' | 'connected' | 'disconnected'; reason?: string };
 
 // ─── Webview → Extension ────────────────────────────────────────────
 

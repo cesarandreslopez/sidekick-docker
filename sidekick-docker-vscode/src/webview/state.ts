@@ -68,6 +68,11 @@ export interface WebviewState {
   connState: ConnState;
   /** Why the last connection attempt failed, when the extension knows. */
   connReason: string | null;
+  /**
+   * A reconnect after a failure is running: the "Cannot connect" banner stays
+   * up (Retry disabled) instead of uncovering the stale list underneath.
+   */
+  connRetrying: boolean;
   logs: Map<string, SerializedLogEntry[]>;
   stats: Map<string, ContainerStatsEntry>;
   /** Inspect details per container (env, restart policy, mounts, health, exit). */
@@ -125,6 +130,7 @@ export function createInitialState(restored?: Partial<PersistedViewState>): Webv
     snapshot: null,
     connState: 'connecting',
     connReason: null,
+    connRetrying: false,
     logs: new Map(),
     detailLoads: new Map(),
     streamStates: new Map(),

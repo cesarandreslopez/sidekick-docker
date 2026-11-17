@@ -211,6 +211,22 @@ describe('DockerService lifecycle', () => {
     });
     expect(await service.initialize()).toEqual({ ok: false, reason: expect.stringMatching(/Permission denied on unix:\/\/\/nope\.sock/) });
   });
+
+  it('changes the refresh interval in place, keeping the open log stream', async () => {
+    mocks.logs.mockImplementation(() => (async function* () { yield await new Promise<LogEntry>(() => { /* stays open */ }); })());
+    await service.initialize();
+    service.setViewState({ selectedItemId: 'A' });
+    await tick();
+    expect(mocks.logs).toHaveBeenCalledTimes(1);
+    mocks.containers.mockClear();
+
+    service.setRefreshInterval(5_000);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(mocks.containers).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(mocks.containers).toHaveBeenCalledTimes(2);
+    expect(mocks.logs).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('DockerService filesystem changes', () => {

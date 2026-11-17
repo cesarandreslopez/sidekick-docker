@@ -267,9 +267,10 @@ export function handleGlobalKeydown(e: KeyboardEvent, ctx: KeyboardContext): voi
     return;
   }
 
-  // While the daemon is unreachable the banner covers a stale list: actions,
-  // navigation and filters would act on rows that may no longer exist.
-  if (state.connState === 'disconnected') return;
+  // While the daemon is unreachable (or the connection is being re-created)
+  // the list is stale: actions, navigation and filters would act on rows that
+  // may no longer exist.
+  if (state.connState !== 'connected') return;
 
   // Panel switching: 1-5
   const num = parseInt(e.key, 10);

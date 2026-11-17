@@ -381,31 +381,51 @@ function renderAll(): void {
 }
 
 const DEFAULT_DISCONNECTED_HINT = 'Is Docker running? Check the sidekick-docker.socketPath setting.';
-let lastConnState = state.connState;
+let lastBannerVisible = false;
+let lastInert = false;
+/** Focus was inside the list or details when they went inert: give it back when they return. */
+let refocusAfterInert = false;
 
 function renderConnectionBanner(): void {
   const $banner = document.getElementById('disconnected-banner')!;
   const disconnected = state.connState === 'disconnected';
-  $banner.classList.toggle('visible', disconnected);
-  // The banner only covers the stale list and details; make them inert too, so
-  // Tab cannot reach controls behind it. Retry gets focus when it appears.
+  // A Retry in progress keeps the banner (its button disabled): showing the
+  // stale list again before the reconnect settled invited acting on it.
+  const bannerVisible = disconnected || state.connRetrying;
+  // The list is stale whenever the host is not connected — behind the banner,
+  // or while a settings change re-creates the connection — so make it inert
+  // too: Tab cannot reach controls behind it.
+  const inert = state.connState !== 'connected';
+  $banner.classList.toggle('visible', bannerVisible);
   const $main = document.getElementById('main-area')!;
-  $main.toggleAttribute('inert', disconnected);
-  const $retry = document.getElementById('retry-connect');
   const active = document.activeElement;
-  if (disconnected && lastConnState !== 'disconnected') {
+  if (inert && !lastInert && active && $main.contains(active)) refocusAfterInert = true;
+  $main.toggleAttribute('inert', inert);
+  const $retry = document.getElementById('retry-connect') as HTMLButtonElement | null;
+  if ($retry) {
+    $retry.disabled = state.connRetrying;
+    const label = state.connRetrying ? 'Connecting…' : 'Retry';
+    if ($retry.textContent !== label) $retry.textContent = label;
+  }
+  if (bannerVisible && !lastBannerVisible) {
+    // Retry gets focus when the banner appears.
     if (!active || active === document.body || $main.contains(active)) $retry?.focus({ preventScroll: true });
-  } else if (!disconnected && lastConnState === 'disconnected') {
+  } else if (!inert && lastInert) {
     // Hand focus back from the (now hidden) Retry button to the pane the user was in.
-    if (!active || active === document.body || active === $retry) {
+    const now = document.activeElement;
+    if (refocusAfterInert || (lastBannerVisible && (!now || now === document.body || now === $retry))) {
       document.getElementById(state.focusTarget === 'detail' ? 'detail-content' : 'side-list')?.focus({ preventScroll: true });
     }
+    refocusAfterInert = false;
   }
-  lastConnState = state.connState;
+  lastBannerVisible = bannerVisible;
+  lastInert = inert;
   // The extension says why it could not connect (permission, missing socket,
-  // refused, bad host); textContent, so the reason is never parsed as HTML.
+  // refused, bad host); a daemon lost mid-session only has the listing's
+  // error. textContent, so the reason is never parsed as HTML.
   const $subtitle = $banner.querySelector('.banner-subtitle');
-  if ($subtitle) $subtitle.textContent = state.connReason ?? DEFAULT_DISCONNECTED_HINT;
+  const reason = state.connReason ?? state.snapshot?.resourceErrors?.containers ?? DEFAULT_DISCONNECTED_HINT;
+  if ($subtitle && $subtitle.textContent !== reason) $subtitle.textContent = reason;
   let warning = document.getElementById('resource-warning');
   if (!warning) {
     warning = document.createElement('div');
@@ -417,7 +437,7 @@ function renderConnectionBanner(): void {
     });
   }
   const errors = Object.entries(state.snapshot?.resourceErrors ?? {});
-  const hidden = !errors.length || disconnected;
+  const hidden = !errors.length || bannerVisible;
   if (warning.hidden !== hidden) warning.hidden = hidden;
   // A live region: write only when the text changes, or it re-announces on every render.
   replaceContent(warning, errors.length ? `${errors.map(([kind, message]) => escapeHtml(`${kind}: ${message}`)).join(' · ')} <button>Retry refresh</button>` : '');
@@ -1117,8 +1137,8 @@ $sideList.addEventListener('contextmenu', (e: MouseEvent) => {
 $statusBar.addEventListener('click', (e: Event) => {
   const chip = (e.target as HTMLElement).closest('.hint-chip') as HTMLElement | null;
   if (!chip) return;
-  // While disconnected the list is stale and behind the banner.
-  if (state.connState === 'disconnected' && (chip.dataset.hintAction === 'filter' || chip.dataset.hintAction === 'actions')) return;
+  // While not connected the list is stale (and behind the banner, or inert).
+  if (state.connState !== 'connected' && (chip.dataset.hintAction === 'filter' || chip.dataset.hintAction === 'actions')) return;
   switch (chip.dataset.hintAction) {
     case 'filter':
       showFilter();
@@ -1139,7 +1159,9 @@ $statusBar.addEventListener('click', (e: Event) => {
 
 // Retry button on the disconnected banner
 document.getElementById('retry-connect')!.addEventListener('click', () => {
+  if (state.connRetrying) return;
   state.connState = 'connecting';
+  state.connRetrying = true;
   renderAll();
   post({ type: 'retryConnect' });
 });
@@ -1203,6 +1225,7 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     case 'updateState': {
       state.snapshot = msg.snapshot;
       state.connState = msg.snapshot.daemonConnected ? 'connected' : 'disconnected';
+      if (msg.snapshot.daemonConnected) state.connRetrying = false;
       // The first snapshot after "Open in Dashboard" settles it: the target is
       // there (kept) or it is gone (reconciled like any other selection).
       pendingFocusId = null;
@@ -1211,8 +1234,15 @@ window.addEventListener('message', (event: MessageEvent<ExtensionMessage>) => {
     }
 
     case 'connectionState': {
+      if (msg.state === 'connecting') {
+        // A reconnect after a failure keeps the banner; one from a working
+        // connection (a settings change) only makes the list inert.
+        if (state.connState === 'disconnected') state.connRetrying = true;
+      } else {
+        state.connRetrying = false;
+        state.connReason = msg.reason ?? null;
+      }
       state.connState = msg.state;
-      state.connReason = msg.reason ?? null;
       renderAll();
       break;
     }

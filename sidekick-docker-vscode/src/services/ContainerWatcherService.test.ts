@@ -7,7 +7,9 @@ const { pingMock, listContainersMock } = vi.hoisted(() => ({
   listContainersMock: vi.fn(),
 }));
 
-const { watcherRef } = vi.hoisted(() => ({ watcherRef: { onEvent: null as null | ((e: unknown) => void) } }));
+const { watcherRef } = vi.hoisted(() => ({
+  watcherRef: { onEvent: null as null | ((e: unknown) => void), onError: null as null | ((e: Error) => void), created: 0 },
+}));
 
 vi.mock('sidekick-docker-shared', async importOriginal => ({
   // The real DockerStateStore runs against the mocked client below.
@@ -32,7 +34,11 @@ vi.mock('sidekick-docker-shared', async importOriginal => ({
     dispose(): void { /* noop */ }
   },
   EventWatcher: class {
-    constructor(_client: unknown, callbacks: { onEvent: (e: unknown) => void }) { watcherRef.onEvent = callbacks.onEvent; }
+    constructor(_client: unknown, callbacks: { onEvent: (e: unknown) => void; onError?: (e: Error) => void }) {
+      watcherRef.onEvent = callbacks.onEvent;
+      watcherRef.onError = callbacks.onError ?? null;
+      watcherRef.created++;
+    }
     start(): void { /* noop */ }
     stop(): void { /* noop */ }
   },
@@ -205,5 +211,57 @@ describe('ContainerWatcherService', () => {
     expect(callbacks.onConnectionChanged).toHaveBeenLastCalledWith(false, 'Connection refused at tcp://10.0.0.9:2375. Is the Docker daemon running?');
     expect(callbacks.onConnectionChanged).not.toHaveBeenCalledWith(false, 'connect ECONNREFUSED 10.0.0.9:2375');
     expect(service.isConnected()).toBe(false);
+  });
+
+  it('reconnects at once when the event stream drops, without reporting Docker offline while it answers', async () => {
+    pingMock.mockResolvedValue(true);
+    listContainersMock.mockResolvedValue([makeContainer()]);
+    const callbacks = createCallbacks();
+    service = new ContainerWatcherService(callbacks);
+    await service.start();
+    const watchers = watcherRef.created;
+    callbacks.onConnectionChanged.mockClear();
+
+    watcherRef.onError?.(new Error('socket hang up'));
+    await vi.waitFor(() => expect(watcherRef.created).toBe(watchers + 1));
+    expect(callbacks.onConnectionChanged).not.toHaveBeenCalled();
+    expect(service.isConnected()).toBe(true);
+  });
+
+  it('reports offline after a dropped event stream only when the ping fails, with its reason', async () => {
+    pingMock.mockResolvedValue(true);
+    listContainersMock.mockResolvedValue([makeContainer()]);
+    const callbacks = createCallbacks();
+    service = new ContainerWatcherService(callbacks, { endpoint: 'tcp://10.0.0.9:2375' });
+    await service.start();
+
+    pingMock.mockResolvedValue(false);
+    watcherRef.onError?.(new Error('socket hang up'));
+    await vi.waitFor(() => expect(service!.isConnected()).toBe(false));
+    expect(callbacks.onConnectionChanged).toHaveBeenLastCalledWith(false, 'Connection refused at tcp://10.0.0.9:2375. Is the Docker daemon running?');
+  });
+
+  it('changes the fallback refresh interval in place', async () => {
+    vi.useFakeTimers();
+    try {
+      pingMock.mockResolvedValue(true);
+      listContainersMock.mockResolvedValue([]);
+      const callbacks = createCallbacks();
+      service = new ContainerWatcherService(callbacks, { refreshIntervalMs: 30_000 });
+      await service.start();
+      const watchers = watcherRef.created;
+      listContainersMock.mockClear();
+
+      service.setRefreshInterval(5_000);
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(listContainersMock).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(25_000);
+      expect(listContainersMock).toHaveBeenCalledTimes(6);
+      // No reconnect: same event watcher, no connection notices.
+      expect(watcherRef.created).toBe(watchers);
+      expect(callbacks.onConnectionChanged).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

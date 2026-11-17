@@ -3,6 +3,9 @@ import { DockerDashboardProvider } from './providers/DockerDashboardProvider';
 import { ContainerTreeProvider, ContainerTreeItem, containerIdFromArg, openOptionsFromArg } from './providers/ContainerTreeProvider';
 import { ACTION_META, runDockerAction } from './providers/actionRegistry';
 import { ContainerWatcherService } from './services/ContainerWatcherService';
+import { statusBarView, runningCount } from './providers/statusBar';
+import type { DockerStatus } from './providers/statusBar';
+import { requireConnected, withViewProgress } from './providers/connectionGuard';
 import { getSettings, onSettingsChanged, warnIfInvalidEndpoint } from './settings';
 import type { SidekickSettings } from './settings';
 import type { ContainerInfo } from 'sidekick-docker-shared';
@@ -30,6 +33,36 @@ function connectingDone(): void {
   void vscode.commands.executeCommand('setContext', 'sidekickDocker.connecting', false);
 }
 
+/**
+ * (Re)create the always-on watcher. A rebuild (endpoint setting, workspace
+ * trust) first puts every surface back to "Connecting…": the tree used to
+ * keep the old daemon's containers, and the status bar its old count, until
+ * the new connection answered.
+ */
+function rebuildWatcher(settings: SidekickSettings): void {
+  watcherService?.dispose();
+  offlineReason = undefined;
+  connecting = true;
+  void vscode.commands.executeCommand('setContext', 'sidekickDocker.connecting', true);
+  if (treeView) treeView.message = undefined;
+  // Not "daemon down": the Connecting… welcome shows while the context is set.
+  treeProvider?.update([], true);
+  updateBadge([]);
+  updateStatusBar({ kind: 'connecting' });
+  watcherService = createWatcherService(settings);
+  void watcherService.start();
+}
+
+/** Reconnect the watcher, with progress in the Containers view. */
+function retryConnection(): Thenable<void> {
+  return withViewProgress(async () => { await watcherService?.forceRefresh(); });
+}
+
+/** Palette commands act on the watcher's list: refuse (with the reason and Retry) while disconnected. */
+function ensureConnected(): Promise<boolean> {
+  return requireConnected(() => watcherService, retryConnection, connecting);
+}
+
 async function withDockerClient(
   action: (client: InstanceType<typeof import('sidekick-docker-shared').DockerClient>) => Promise<void>,
   failureText: (message: string) => string,
@@ -39,13 +72,14 @@ async function withDockerClient(
     const { DockerClient } = await import('sidekick-docker-shared');
     client = new DockerClient(getSettings().clientOptions);
     await action(client);
-    await watcherService?.forceRefresh();
   } catch (err: unknown) {
     const { errorMessage } = await import('sidekick-docker-shared');
     vscode.window.showErrorMessage(failureText(errorMessage(err)));
   } finally {
     client?.dispose();
   }
+  // Outside the try: a refresh problem is not the action's failure.
+  await watcherService?.forceRefresh().catch((e: unknown) => console.debug('refresh after action failed:', e));
 }
 
 /**
@@ -71,7 +105,7 @@ function createWatcherService(settings: SidekickSettings): ContainerWatcherServi
       treeProvider!.update(containers, connected);
       connectingDone();
       updateBadge(containers);
-      updateStatusBar(containers, connected, connected ? undefined : offlineReason);
+      updateStatusBar(connected ? { kind: 'connected', containers } : { kind: 'offline', reason: offlineReason });
     },
     onConnectionChanged: (connected, reason) => {
       offlineReason = connected ? undefined : reason;
@@ -82,7 +116,10 @@ function createWatcherService(settings: SidekickSettings): ContainerWatcherServi
       if (!connected) {
         treeProvider!.update([], false);
         updateBadge([]);
-        updateStatusBar([], false, reason);
+        updateStatusBar({ kind: 'offline', reason });
+      } else {
+        // Docker is back: a dashboard whose own connect failed follows.
+        dashboardProvider?.retryIfDisconnected();
       }
     },
   }, {
@@ -101,6 +138,7 @@ async function pickContainer(
   filter: (c: ContainerInfo) => boolean,
   placeHolder: string,
 ): Promise<ContainerInfo | undefined> {
+  if (!await ensureConnected()) return undefined;
   const candidates = (watcherService?.getContainers() ?? []).filter(filter);
   if (candidates.length === 0) {
     vscode.window.showInformationMessage('No matching containers.');
@@ -134,27 +172,27 @@ export function activate(context: vscode.ExtensionContext): void {
   statusBarItem = vscode.window.createStatusBarItem('sidekick-docker.status', vscode.StatusBarAlignment.Right, 100);
   statusBarItem.name = 'Sidekick Docker';
   statusBarItem.command = 'sidekick-docker.openDashboard';
-  updateStatusBar([], false);
+  updateStatusBar({ kind: 'connecting' });
   if (settings.statusBarVisible) statusBarItem.show();
   context.subscriptions.push(statusBarItem);
 
   // ── Container watcher ───────────────────────────────────────────
   // Until the first connect settles, show "Connecting…" rather than "No containers found".
-  connecting = true;
-  void vscode.commands.executeCommand('setContext', 'sidekickDocker.connecting', true);
-  watcherService = createWatcherService(settings);
-  watcherService.start();
+  rebuildWatcher(settings);
   context.subscriptions.push({ dispose: () => watcherService?.dispose() });
 
   // ── Settings changes ────────────────────────────────────────────
   context.subscriptions.push(
     onSettingsChanged((next, affected) => {
-      if (affected.has('clientOptions')) warnIfInvalidEndpoint();
-      if (affected.has('clientOptions') || affected.has('refreshIntervalMs')) {
-        watcherService?.dispose();
-        watcherService = createWatcherService(next);
-        watcherService.start();
+      if (affected.has('clientOptions')) {
+        warnIfInvalidEndpoint();
+        // A new endpoint is a new connection (it also picks up the interval).
+        rebuildWatcher(next);
         dashboardProvider?.reinitializeService();
+      } else if (affected.has('refreshIntervalMs')) {
+        // In place: rebuilding dropped the dashboard's logs and sparklines.
+        watcherService?.setRefreshInterval(next.refreshIntervalMs);
+        dashboardProvider?.setRefreshInterval(next.refreshIntervalMs);
       }
       if (affected.has('statusBarVisible')) {
         if (next.statusBarVisible) statusBarItem?.show();
@@ -172,9 +210,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidGrantWorkspaceTrust(() => {
       warnIfInvalidEndpoint();
-      watcherService?.dispose();
-      watcherService = createWatcherService(getSettings());
-      watcherService.start();
+      rebuildWatcher(getSettings());
       dashboardProvider?.reinitializeService();
     }),
   );
@@ -209,9 +245,8 @@ export function activate(context: vscode.ExtensionContext): void {
     // Keeps F5 from also starting the debugger there.
     vscode.commands.registerCommand('sidekick-docker.refreshDashboard', () => dashboardProvider?.refreshFromKeybinding()),
 
-    vscode.commands.registerCommand('sidekick-docker.refreshContainers', () => {
-      watcherService?.forceRefresh();
-    }),
+    // Also the welcome view's "Retry Connection" link.
+    vscode.commands.registerCommand('sidekick-docker.refreshContainers', () => retryConnection()),
 
     vscode.commands.registerCommand('sidekick-docker.startContainer', async (item?: ContainerTreeItem) => {
       if (!(item instanceof ContainerTreeItem)) return;
@@ -288,6 +323,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
     // ── Quick pick commands ─────────────────────────────────────
     vscode.commands.registerCommand('sidekick-docker.quickStart', async () => {
+      if (!await ensureConnected()) return;
       const containers = watcherService?.getContainers() ?? [];
       // Not paused ones: Docker rejects start for those.
       const stopped = containers.filter(c => canStart(c.state));
@@ -317,6 +353,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('sidekick-docker.quickStop', async () => {
+      if (!await ensureConnected()) return;
       const containers = watcherService?.getContainers() ?? [];
       // Paused and restarting containers can be stopped too (shared gating).
       const stoppable = containers.filter(c => canStop(c.state));
@@ -333,6 +370,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('sidekick-docker.quickRestart', async () => {
+      if (!await ensureConnected()) return;
       const containers = watcherService?.getContainers() ?? [];
       const running = containers.filter(c => c.state === 'running');
       if (running.length === 0) {
@@ -351,28 +389,17 @@ export function activate(context: vscode.ExtensionContext): void {
 
 function updateBadge(containers: ContainerInfo[]): void {
   if (!treeView) return;
-  const running = containers.filter(c => c.state === 'running').length;
+  const running = runningCount(containers);
   treeView.badge = running > 0 ? { value: running, tooltip: `${running} running container${running !== 1 ? 's' : ''}` } : undefined;
 }
 
-function updateStatusBar(containers: ContainerInfo[], connected: boolean, reason?: string): void {
+function updateStatusBar(status: DockerStatus): void {
   if (!statusBarItem) return;
-  const endpoint = describeDockerEndpoint(getSettings().socketPath);
-  if (!connected) {
-    statusBarItem.text = '$(warning) Docker offline';
-    statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-    statusBarItem.tooltip = new vscode.MarkdownString(`**Docker offline** — ${endpoint}\n\n${reason ?? 'The daemon is not reachable.'}\n\nClick to open the dashboard.`);
-    statusBarItem.accessibilityInformation = { label: `Sidekick Docker: Docker offline. ${reason ?? ''}`.trim(), role: 'button' };
-    return;
-  }
-  const running = containers.filter(c => c.state === 'running').length;
-  const unhealthy = containers.filter(c => c.healthStatus === 'unhealthy').length;
-  const total = containers.length;
-  statusBarItem.text = `$(package) ${running}/${total}${unhealthy ? ` $(warning) ${unhealthy}` : ''}`;
-  statusBarItem.backgroundColor = undefined;
-  const summary = `${running} of ${total} containers running${unhealthy ? `, ${unhealthy} unhealthy` : ''}`;
-  statusBarItem.tooltip = new vscode.MarkdownString(`**Sidekick Docker** — ${summary}\n\nEndpoint: ${endpoint}\n\nClick to open the dashboard.`);
-  statusBarItem.accessibilityInformation = { label: `Sidekick Docker: ${summary}`, role: 'button' };
+  const view = statusBarView(status, describeDockerEndpoint(getSettings().socketPath));
+  statusBarItem.text = view.text;
+  statusBarItem.backgroundColor = view.warning ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
+  statusBarItem.tooltip = new vscode.MarkdownString(view.tooltip);
+  statusBarItem.accessibilityInformation = { label: view.label, role: 'button' };
 }
 
 /**

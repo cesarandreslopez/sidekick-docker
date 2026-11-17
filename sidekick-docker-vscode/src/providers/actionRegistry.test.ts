@@ -54,7 +54,7 @@ describe('runDockerAction', () => {
     });
     expect(ran).toBe(true);
     expect(__mock.progressCalls).toEqual([
-      { location: ProgressLocation.Notification, title: 'Stopping web-1…' },
+      { location: ProgressLocation.Notification, title: 'Stopping web-1…', cancellable: false },
     ]);
   });
 

@@ -274,6 +274,47 @@ describe('dashboard DOM', () => {
     expect(dom.window.document.activeElement).toBe(element('#side-list'));
   });
 
+  it('keeps the banner up, Retry disabled and the list inert until a reconnect settles', () => {
+    receive({ type: 'connectionState', state: 'disconnected', reason: 'Docker socket not found' });
+    const banner = element('#disconnected-banner');
+    const retry = element('#retry-connect') as HTMLButtonElement;
+    retry.click();
+    expect(sent.at(-1)).toEqual({ type: 'retryConnect' });
+    expect(banner.classList.contains('visible')).toBe(true);
+    expect(retry.disabled).toBe(true);
+    expect(element('#main-area').hasAttribute('inert')).toBe(true);
+    receive({ type: 'connectionState', state: 'connecting' });
+    expect(banner.classList.contains('visible')).toBe(true);
+    receive({ type: 'connectionState', state: 'disconnected', reason: 'Still not found' });
+    expect(retry.disabled).toBe(false);
+    expect(element('.banner-subtitle').textContent).toBe('Still not found');
+    // The host retries on its own when Docker comes back: same banner.
+    receive({ type: 'connectionState', state: 'connecting' });
+    expect(retry.disabled).toBe(true);
+    receive({ type: 'connectionState', state: 'connected' });
+    expect(banner.classList.contains('visible')).toBe(false);
+    expect(element('#main-area').hasAttribute('inert')).toBe(false);
+  });
+
+  it('makes the list inert, without the banner, while a working connection is re-created', () => {
+    receive({ type: 'connectionState', state: 'connecting' });
+    expect(element('#disconnected-banner').classList.contains('visible')).toBe(false);
+    expect(element('#main-area').hasAttribute('inert')).toBe(true);
+    const count = sent.length;
+    key('j');
+    key('d');
+    expect(sent).toHaveLength(count);
+    receive({ type: 'connectionState', state: 'connected' });
+    expect(element('#main-area').hasAttribute('inert')).toBe(false);
+    expect(dom.window.document.activeElement).toBe(element('#side-list'));
+  });
+
+  it('explains a daemon lost mid-session with the listing error', () => {
+    receive({ type: 'updateState', snapshot: { ...snapshot(), daemonConnected: false, resourceErrors: { containers: 'connect ECONNREFUSED /var/run/docker.sock' } } });
+    expect(element('#disconnected-banner').classList.contains('visible')).toBe(true);
+    expect(element('.banner-subtitle').textContent).toBe('connect ECONNREFUSED /var/run/docker.sock');
+  });
+
   it('shows a repeated error once and copies it as plain text', () => {
     receive({ type: 'toast', message: 'boom', severity: 'error' });
     receive({ type: 'toast', message: 'boom', severity: 'error' });

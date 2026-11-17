@@ -83,17 +83,17 @@ export class ContainerWatcherService {
       this.watcher = new EventWatcher(this.client, {
         onEvent: (event) => { this.store.processEvent(event); },
         onError: (err) => {
-          this.setConnected(false, `Lost the Docker event stream: ${errorMessage(err)}`);
+          // A dropped event stream is not a dead daemon (an idle proxy or a
+          // daemon restart drops it too). Reconnect at once; only a failed
+          // ping reports Docker offline, with the ping's explained reason.
+          console.debug('watcher event stream lost:', errorMessage(err));
           this.stopWatcher();
-          this.startReconnectPolling();
+          void this.tryConnect().then((ok) => { if (!ok) this.startReconnectPolling(); });
         },
       });
       this.watcher.start();
 
-      // Fallback refresh
-      this.refreshInterval = setInterval(() => {
-        this.refresh().catch(e => console.debug('watcher refresh failed:', e));
-      }, this.refreshIntervalMs);
+      this.startRefreshTimer();
 
       this.stopReconnectPolling();
       return true;
@@ -111,6 +111,23 @@ export class ContainerWatcherService {
 
   private refresh(): Promise<void> {
     return this.store.refresh();
+  }
+
+  /** Fallback full refresh (events update the tree in between). */
+  private startRefreshTimer(): void {
+    this.refreshInterval = setInterval(() => {
+      this.refresh().catch(e => console.debug('watcher refresh failed:', e));
+    }, this.refreshIntervalMs);
+  }
+
+  /** Change the fallback refresh interval without reconnecting (no "Connecting…" flash). */
+  setRefreshInterval(ms: number): void {
+    if (ms === this.refreshIntervalMs) return;
+    this.refreshIntervalMs = ms;
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.startRefreshTimer();
+    }
   }
 
   private onStoreChange(change: StoreChange): void {

@@ -38,6 +38,8 @@ export class DockerDashboardProvider implements vscode.Disposable {
   private webviewReady = false;
   /** Monotonic guard making _initializeService single-flight (newest run wins). */
   private initGeneration = 0;
+  /** A connect is in flight (the newest _initializeService has not settled). */
+  private initializing = false;
   private viewState = { ...DEFAULT_VIEW_STATE };
   private workspaceFoldersSubscription: vscode.Disposable;
 
@@ -136,6 +138,9 @@ export class DockerDashboardProvider implements vscode.Disposable {
     panel.onDidChangeViewState(() => {
       this.viewState.visible = this.panel?.visible ?? false;
       void this.service?.setVisible(this.viewState.visible);
+      // Coming back to a dashboard whose connect failed: try again rather
+      // than show a stale "Cannot connect" banner until Retry is pressed.
+      if (this.viewState.visible) this.retryIfDisconnected();
     }, null, this.disposables);
   }
 
@@ -277,6 +282,22 @@ export class DockerDashboardProvider implements vscode.Disposable {
     void this._initializeService();
   }
 
+  /**
+   * Connect again if the dashboard is open, its webview is up, and the last
+   * connect failed (no service). Called when the always-on watcher sees
+   * Docker come back and when the panel becomes visible — there is no
+   * dashboard timer of its own. A connect already in flight is left to settle.
+   */
+  retryIfDisconnected(): void {
+    if (!this.panel || !this.webviewReady || this.service || this.initializing) return;
+    void this._initializeService();
+  }
+
+  /** Apply a new fallback refresh interval in place (keeps streams, logs and sparklines). */
+  setRefreshInterval(ms: number): void {
+    this.service?.setRefreshInterval(ms);
+  }
+
   private async _initializeService(): Promise<void> {
     // Single-flight: each call claims a new generation; after every await an
     // older (stale) run must dispose whatever it created locally and bail,
@@ -287,7 +308,18 @@ export class DockerDashboardProvider implements vscode.Disposable {
     this.service?.dispose();
     this.service = undefined;
     this.webviewReady = true;
+    this.initializing = true;
+    // The list on screen belongs to the service just disposed: the webview
+    // keeps it inert (and any "Cannot connect" banner up) until this settles.
+    this._postMessage({ type: 'connectionState', state: 'connecting' });
+    try {
+      await this._connect(generation);
+    } finally {
+      if (generation === this.initGeneration) this.initializing = false;
+    }
+  }
 
+  private async _connect(generation: number): Promise<void> {
     const settings = getSettings();
     const cwd = await resolveComposeCwd(new ComposeFileReader(settings.cliEnv));
     if (generation !== this.initGeneration) return;
@@ -387,7 +419,12 @@ export class DockerDashboardProvider implements vscode.Disposable {
   }
 
   private async _handleAction(actionType: string, itemId: string, panelId: string): Promise<void> {
-    if (!this.service) return;
+    if (!this.service) {
+      // The last connect failed (or is still running): say so instead of
+      // silently dropping the key press.
+      this._postMessage({ type: 'toast', message: 'Not connected to Docker', severity: 'warning' });
+      return;
+    }
     const service = this.service;
     if (actionType === 'openPort') {
       await this._openPublishedPort(itemId);
@@ -472,7 +509,16 @@ export class DockerDashboardProvider implements vscode.Disposable {
       // ACTION_META has an entry for exactly the shared ActionTypes.
       const message = meta ? actionFailedText(actionType as ActionType, itemName, errorMessage(err)) : `${actionType} ${itemName} failed: ${errorMessage(err)}`;
       this._postMessage({ type: 'toast', message, severity: 'error' });
+      // A slow action outlives the panel being on screen; its failure must not
+      // land only in a hidden webview.
+      if (!this.panel?.visible) this._notifyHiddenFailure(message);
     }
+  }
+
+  private _notifyHiddenFailure(message: string): void {
+    void vscode.window.showErrorMessage(message, 'Open Dashboard').then((choice) => {
+      if (choice === 'Open Dashboard') this.open();
+    });
   }
 
   /**
@@ -517,6 +563,7 @@ export class DockerDashboardProvider implements vscode.Disposable {
     // Invalidate any in-flight _initializeService run so it disposes its
     // service instead of committing it after the panel is gone.
     this.initGeneration++;
+    this.initializing = false;
     this.service?.dispose();
     this.service = undefined;
     this.webviewReady = false;

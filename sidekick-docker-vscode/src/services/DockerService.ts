@@ -289,10 +289,27 @@ export class DockerService {
       this.watcher.start();
     }
 
-    if (!this.refreshInterval) {
-      this.refreshInterval = setInterval(() => {
-        this.refresh().then(() => this.scheduleStateUpdate()).catch(e => console.debug('periodic refresh failed:', e));
-      }, this.refreshIntervalMs);
+    if (!this.refreshInterval) this.startRefreshTimer();
+  }
+
+  private startRefreshTimer(): void {
+    this.refreshInterval = setInterval(() => {
+      this.refresh().then(() => this.scheduleStateUpdate()).catch(e => console.debug('periodic refresh failed:', e));
+    }, this.refreshIntervalMs);
+  }
+
+  /**
+   * Change the fallback refresh interval in place. Rebuilding the service for
+   * this dropped every log line, sparkline and open stream.
+   */
+  setRefreshInterval(ms: number): void {
+    if (ms === this.refreshIntervalMs) return;
+    this.refreshIntervalMs = ms;
+    // Only a running timer is restarted; a hidden dashboard picks the new
+    // value up when it starts polling again.
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.startRefreshTimer();
     }
   }
 

@@ -42,9 +42,35 @@ vi.mock('../services/DockerService', () => {
     async setVisible(): Promise<void> { /* noop */ }
     async selectContainer(): Promise<void> { /* noop */ }
     async selectImage(): Promise<void> { /* noop */ }
+    setRefreshInterval = vi.fn();
   }
   return { DockerService: MockDockerService };
 });
+
+/** A webview panel just real enough for _adoptPanel: records listeners so tests can fire them. */
+function fakePanel(visible = true) {
+  const listeners = { message: [] as ((m: unknown) => void)[], viewState: [] as (() => void)[], dispose: [] as (() => void)[] };
+  const panel = {
+    visible,
+    iconPath: undefined as unknown,
+    webview: {
+      html: '',
+      options: {},
+      posted: [] as unknown[],
+      onDidReceiveMessage(cb: (m: unknown) => void) { listeners.message.push(cb); return { dispose() { /* noop */ } }; },
+      postMessage(m: unknown) { panel.webview.posted.push(m); return Promise.resolve(true); },
+      asWebviewUri: (u: unknown) => u,
+      cspSource: 'test',
+    },
+    onDidDispose(cb: () => void) { listeners.dispose.push(cb); return { dispose() { /* noop */ } }; },
+    onDidChangeViewState(cb: () => void) { listeners.viewState.push(cb); return { dispose() { /* noop */ } }; },
+    reveal() { /* noop */ },
+    dispose() { for (const cb of listeners.dispose) cb(); },
+    /** Show or hide the panel, as VS Code does when switching editor tabs. */
+    setVisible(next: boolean) { panel.visible = next; for (const cb of listeners.viewState) cb(); },
+  };
+  return panel;
+}
 
 /** Access the provider's private members under test. */
 interface ProviderInternals {
@@ -281,6 +307,112 @@ describe('DockerDashboardProvider feedback', () => {
     expect(serviceInstances[0].forceRefresh).toHaveBeenCalledTimes(1);
     expect(posted).toEqual([{ type: 'toast', message: 'Refreshing\u2026', severity: 'info' }]);
     (provider as unknown as { panel: unknown }).panel = undefined;
+  });
+});
+
+describe('DockerDashboardProvider connection lifecycle', () => {
+  let provider: DockerDashboardProvider;
+
+  beforeEach(async () => {
+    const { __mock } = await import('../test/vscode');
+    __mock.reset();
+    serviceInstances.length = 0;
+    provider = new DockerDashboardProvider({ path: '/ext' } as unknown as vscode.Uri);
+  });
+
+  afterEach(() => {
+    provider.dispose();
+  });
+
+  function adopt(visible = true) {
+    const panel = fakePanel(visible);
+    provider.restore(panel as unknown as vscode.WebviewPanel);
+    return panel;
+  }
+
+  async function connect(ok: boolean, panel: ReturnType<typeof fakePanel>): Promise<void> {
+    const run = internals(provider)._handleMessage({ type: 'webviewReady' });
+    await tick();
+    serviceInstances[serviceInstances.length - 1].resolveInitialize(ok);
+    await run;
+    panel.webview.posted.length = 0;
+  }
+
+  it('tells the webview it is connecting while the service is (re)created', async () => {
+    const panel = adopt();
+    const run = internals(provider)._handleMessage({ type: 'webviewReady' });
+    await tick();
+    expect(panel.webview.posted).toEqual([{ type: 'connectionState', state: 'connecting' }]);
+    serviceInstances[0].resolveInitialize(true);
+    await run;
+    expect(panel.webview.posted).toContainEqual({ type: 'connectionState', state: 'connected' });
+  });
+
+  it('retries a failed connect when Docker comes back, and only then', async () => {
+    provider.retryIfDisconnected(); // no panel: nothing to do
+    expect(serviceInstances).toHaveLength(0);
+
+    const panel = adopt();
+    provider.retryIfDisconnected(); // webview not ready yet
+    expect(serviceInstances).toHaveLength(0);
+
+    await connect(false, panel);
+    provider.retryIfDisconnected();
+    provider.retryIfDisconnected(); // a connect in flight is left to settle
+    await tick();
+    expect(serviceInstances).toHaveLength(2);
+    serviceInstances[1].resolveInitialize(true);
+    await tick();
+    expect(internals(provider).service).toBe(serviceInstances[1]);
+
+    provider.retryIfDisconnected(); // connected: nothing to do
+    await tick();
+    expect(serviceInstances).toHaveLength(2);
+  });
+
+  it('retries a failed connect when the panel becomes visible', async () => {
+    const panel = adopt();
+    await connect(false, panel);
+    panel.setVisible(false);
+    await tick();
+    expect(serviceInstances).toHaveLength(1);
+    panel.setVisible(true);
+    await tick();
+    expect(serviceInstances).toHaveLength(2);
+  });
+
+  it('says "Not connected" for an action with no live service', async () => {
+    const panel = adopt();
+    await connect(false, panel);
+    await internals(provider)._handleMessage({ type: 'action', actionType: 'stop', itemId: 'abc', panelId: 'containers' } as { type: string });
+    expect(panel.webview.posted).toEqual([{ type: 'toast', message: 'Not connected to Docker', severity: 'warning' }]);
+  });
+
+  it('also raises a native error, with Open Dashboard, when an action fails while the panel is hidden', async () => {
+    const { __mock } = await import('../test/vscode');
+    const panel = adopt();
+    await connect(true, panel);
+    const svc = serviceInstances[0] as unknown as Record<string, unknown>;
+    svc.getItemDisplayName = () => 'web';
+    svc.stopContainer = vi.fn(async () => { throw new Error('is not running'); });
+    const act = () => internals(provider)._handleMessage({ type: 'action', actionType: 'stop', itemId: 'abc', panelId: 'containers' } as { type: string });
+
+    await act();
+    expect(__mock.errorMessages).toEqual([]); // visible: the webview toast is enough
+
+    panel.visible = false;
+    await act();
+    expect(__mock.errorMessages).toEqual(['Failed to stop web: is not running']);
+    expect(__mock.messageItems.at(-1)).toEqual(['Open Dashboard']);
+  });
+
+  it('applies a new refresh interval to the live service in place', async () => {
+    const panel = adopt();
+    await connect(true, panel);
+    provider.setRefreshInterval(5000);
+    expect((serviceInstances[0] as unknown as { setRefreshInterval: ReturnType<typeof vi.fn> }).setRefreshInterval).toHaveBeenCalledWith(5000);
+    expect(serviceInstances).toHaveLength(1);
+    expect(panel.webview.posted).toEqual([]);
   });
 });
 
