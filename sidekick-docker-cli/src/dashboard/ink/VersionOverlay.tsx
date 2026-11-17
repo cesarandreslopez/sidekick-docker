@@ -5,15 +5,18 @@ import { ACCENT } from '../../theme';
 
 interface VersionOverlayProps {
   version: string;
+  /** Which Docker endpoint the dashboard is connected to, in words. */
+  endpoint?: string;
 }
 
-export function VersionOverlay({ version }: VersionOverlayProps): React.ReactElement {
+export function VersionOverlay({ version, endpoint }: VersionOverlayProps): React.ReactElement {
   const phrase = React.useMemo(() => getRandomPhrase(), []);
 
   return (
     <Box flexDirection="column" flexGrow={1} padding={1}>
       <Text bold color="magenta">{BRAND_INLINE}</Text>
       <Text color={ACCENT} bold>{`${BRAND_TAGLINE} v${version}`}</Text>
+      {endpoint ? <Text color="gray" wrap="truncate">{`Docker endpoint: ${endpoint}`}</Text> : null}
       <Text>{' '}</Text>
       <Text color="gray" dimColor>{'\u2500'.repeat(40)}</Text>
       <Text>{' '}</Text>

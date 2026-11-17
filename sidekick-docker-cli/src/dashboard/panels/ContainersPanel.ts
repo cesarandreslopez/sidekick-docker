@@ -324,6 +324,8 @@ export class ContainersPanel implements SidePanel {
         handler: (item) => {
           const c = panelData<ContainerInfo>(item);
           this.onExec?.(c.id);
+          // The shell opening is the feedback; a "✓ Exec" toast said nothing.
+          return null;
         },
         condition: (item) => panelData<ContainerInfo>(item).state === 'running',
       },

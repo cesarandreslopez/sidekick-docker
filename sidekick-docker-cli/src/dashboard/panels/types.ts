@@ -35,14 +35,15 @@ export interface PanelAction {
   label: string;
   /**
    * Return a Promise to get async feedback (in-progress → success/error toasts).
-   * A resolved/returned string becomes the success toast text (e.g. "Pruned — 1.2 GB reclaimed").
+   * A resolved/returned string becomes the success toast text (e.g. "Pruned — 1.2 GB reclaimed");
+   * `null` means no success toast (the action shows its own result, like Exec's shell).
    *
    * `void` here is deliberate and cannot be `undefined`: most handlers are written as
    * `() => { client.stopContainer(id); }`, whose inferred return type is `void` — which is
    * not assignable to `string | undefined`.
    */
   // eslint-disable-next-line @typescript-eslint/no-invalid-void-type
-  handler: (item: PanelItem) => void | string | Promise<void | string>;
+  handler: (item: PanelItem) => void | string | null | Promise<void | string | null>;
   condition?: (item: PanelItem) => boolean;
   /**
    * What the action does, for the shared progress and failure wording
@@ -143,7 +144,8 @@ export function copyLogsAction(
             : 'no log lines to copy yet');
       }
       if (!onCopy(text)) {
-        throw new Error('no clipboard tool found (install xclip, xsel, or wl-copy)');
+        // Neither a clipboard tool nor the terminal (OSC 52, TTY only) could take it.
+        throw new Error('no clipboard tool found — install wl-copy, xclip or xsel, or run in a terminal that supports OSC 52 clipboard writes');
       }
       return `Copied ${count} line${count === 1 ? '' : 's'}`;
     },

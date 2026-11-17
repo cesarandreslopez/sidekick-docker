@@ -110,7 +110,7 @@ export function executeAction(
       result
         .then((msg) => {
           removeToast(progressId);
-          addToast(typeof msg === 'string' ? msg : text.success, 'success');
+          if (msg !== null) addToast(typeof msg === 'string' ? msg : text.success, 'success');
         })
         .catch((err: unknown) => {
           removeToast(progressId);
@@ -119,6 +119,8 @@ export function executeAction(
         .finally(() => { inFlight.delete(runKey); });
     } else if (typeof result === 'string') {
       addToast(result, 'success');
+    } else if (result === null) {
+      // The action shows its own result (Exec opens a shell).
     } else {
       addToast(text.success, 'success');
     }

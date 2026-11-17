@@ -203,7 +203,7 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     label: 'Log filter (Logs tab)',
     category: 'Filters & Sort',
     isAvailable: isAutoScrollTab,
-    hint: () => 'f:Filter',
+    hint: () => 'f:Log filter',
     run: (ctx) => ctx.dispatch({ type: 'SET_OVERLAY', overlay: 'log-filter' }),
   },
   {
@@ -213,7 +213,8 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     label: 'Toggle all/running (Containers)',
     category: 'Filters & Sort',
     isAvailable: (ctx) => ctx.panel.id === 'containers',
-    hint: (ctx) => (ctx.state.showAllContainers ? 'a:All' : 'a:Running'),
+    // What a does, not the current mode: "a:All" read as "showing all".
+    hint: (ctx) => (ctx.state.showAllContainers ? 'a:Show running' : 'a:Show all'),
     run: (ctx) => {
       ctx.dispatch({ type: 'TOGGLE_SHOW_ALL' });
       ctx.addToast(ctx.state.showAllContainers ? 'Running only' : 'Show all', 'info');
@@ -226,7 +227,7 @@ export const GLOBAL_BINDINGS: KeyBindingSpec[] = [
     label: 'Sort menu (Containers)',
     category: 'Filters & Sort',
     isAvailable: (ctx) => ctx.panel.id === 'containers',
-    hint: (ctx) => `o:↕${ctx.state.sortField}`,
+    hint: (ctx) => `o:↕${sortFieldLabel(ctx.state.sortField)}`,
     run: (ctx) => ctx.dispatch({ type: 'SET_OVERLAY', overlay: 'sort' }),
   },
   {

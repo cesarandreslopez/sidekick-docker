@@ -183,8 +183,10 @@ export function reducer(state: DashboardUIState, action: Action): DashboardUISta
       return { ...state, logFilterString: action.value };
     case 'TOGGLE_LOG_FILTER_MODE':
       return { ...state, logFilterMode: state.logFilterMode === 'exact' ? 'fuzzy' : 'exact' };
+    // Keeps the selection: resolveSelection follows the item, or picks its
+    // neighbour if running-only hides it. Resetting to the top lost your place.
     case 'TOGGLE_SHOW_ALL':
-      return { ...state, showAllContainers: !state.showAllContainers, selectedItemIndex: 0, selectedItemId: null };
+      return { ...state, showAllContainers: !state.showAllContainers };
     case 'SET_SORT_FIELD':
       return { ...state, sortField: action.field, overlay: null };
     case 'TOGGLE_SORT_REVERSE':
@@ -278,6 +280,10 @@ interface DashboardProps {
   onRefresh?: () => Promise<Record<string, string>>;
   /** Shown once as a warning toast on mount (resources the first refresh could not list). */
   startupWarning?: string | null;
+  /** The endpoint, for the status bar — only when --socket or DOCKER_HOST chose it. */
+  endpointLabel?: string;
+  /** Which endpoint is in use, in words, for the version overlay. */
+  endpointDescription?: string;
   /** Initial mouse capture (false for --no-mouse); M toggles it at runtime. */
   mouse?: boolean;
 }
@@ -290,7 +296,7 @@ export interface DashboardViewState {
   compareItemId: string | null;
 }
 
-export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh, startupWarning, execShell = DEFAULT_EXEC_SHELL, mouse = true }: DashboardProps): React.ReactElement {
+export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, onExecFallback, dockerEnv, onRefresh, startupWarning, endpointLabel, endpointDescription, execShell = DEFAULT_EXEC_SHELL, mouse = true }: DashboardProps): React.ReactElement {
   const [state, dispatch] = useReducer(reducer, mouse, (enabled): DashboardUIState => ({ ...initialState, mouseEnabled: enabled }));
   const { columns, rows } = useTerminalSize();
   const { exit, suspendTerminal } = useApp();
@@ -767,7 +773,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
         )}
 
         {state.overlay === 'version' && (
-          <VersionOverlay version={__CLI_VERSION__} />
+          <VersionOverlay version={__CLI_VERSION__} endpoint={endpointDescription} />
         )}
 
         {state.overlay === 'exec' && (
@@ -792,6 +798,7 @@ export function Dashboard({ panels, metrics, onViewStateChange, execTriggerRef, 
             lastRefresh={metrics.lastRefresh}
             contextHint={contextHint}
             mouseEnabled={state.mouseEnabled}
+            endpoint={endpointLabel}
             width={columns}
           />
         )}

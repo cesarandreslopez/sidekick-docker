@@ -66,3 +66,17 @@ describe('buildStatusSegments under pressure (T23, A1)', () => {
     expect(narrow).toContain('?:Help');
   });
 });
+
+describe('endpoint segment (T5)', () => {
+  it('names a non-default endpoint and is dropped early when narrow', () => {
+    const wide = text(buildStatusSegments({ ...base, endpoint: 'tcp://build:2375' }, 200));
+    expect(wide).toContain('@ tcp://build:2375');
+    const narrow = text(buildStatusSegments({ ...base, endpoint: 'tcp://build:2375', contextHint: 'f:Log filter' }, 75));
+    expect(narrow).not.toContain('tcp://build');
+    expect(narrow).toContain('?:Help');
+  });
+
+  it('is absent for the default endpoint', () => {
+    expect(text(buildStatusSegments(base, 200))).not.toContain(' @ ');
+  });
+});

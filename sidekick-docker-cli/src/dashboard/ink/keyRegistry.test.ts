@@ -239,10 +239,14 @@ describe('buildHelpBindings', () => {
 describe('buildContextHint', () => {
   it('includes containers hints on the containers logs tab', () => {
     const hint = buildContextHint(makeCtx());
-    expect(hint).toContain('f:Filter');
-    expect(hint).toContain('a:All');
-    expect(hint).toContain('o:↕state');
+    expect(hint).toContain('f:Log filter');
+    // What a does next, and the sort field by its menu label (T31).
+    expect(hint).toContain('a:Show running');
+    expect(hint).toContain('o:↕State');
     expect(hint).toContain('m:Compare');
+    const runningOnly = buildContextHint(makeCtx({ state: makeState({ showAllContainers: false, sortField: 'mem' }) }));
+    expect(runningOnly).toContain('a:Show all');
+    expect(runningOnly).toContain('o:↕Memory %');
   });
 
   it('omits unavailable hints on other panels', () => {

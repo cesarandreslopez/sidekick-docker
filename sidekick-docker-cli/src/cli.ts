@@ -6,6 +6,7 @@ import { logsAction } from './commands/logs';
 import { imagesAction, volumesAction, networksAction, statsAction, dfAction, inspectAction } from './commands/resources';
 import { setColorEnabled } from './formatters';
 import { parseTail } from './utils/parseTail';
+import { unknownCommandMessage } from './utils/suggestCommand';
 
 declare const __CLI_VERSION__: string;
 
@@ -25,7 +26,12 @@ program
   .option('--verbose', 'Show full error details')
   .option('--shell <path>', 'Shell for Exec in the dashboard (default: $SIDEKICK_DOCKER_SHELL or /bin/sh)')
   .option('--no-mouse', 'Start the dashboard with mouse capture off, so the terminal can select text (M toggles it)')
-  .action(async (_opts, cmd) => {
+  .action(async (_opts, cmd: Command) => {
+    // A mistyped subcommand ("pss") arrives here as an operand of the root
+    // command; answer the way Commander does for an unknown command.
+    if (cmd.args.length > 0) {
+      cmd.error(unknownCommandMessage(cmd.args[0], cmd.commands.map(c => c.name())), { code: 'commander.unknownCommand' });
+    }
     await dashboardAction(_opts, cmd);
   });
 
@@ -117,6 +123,11 @@ Environment:
   SIDEKICK_DOCKER_SHELL  shell for dashboard Exec when --shell is not given (default /bin/sh)
   NO_COLOR       disable colored output    FORCE_COLOR   force colored output
 `);
+
+// Lets the root action see a stray operand (above) instead of Commander
+// failing with "too many arguments". Set last on purpose: subcommands copy
+// this setting when they are created, and `ps extra` must still be an error.
+program.allowExcessArguments(true);
 
 program.parseAsync().catch((err) => {
   console.error(`Error: ${errorMessage(err)}`);

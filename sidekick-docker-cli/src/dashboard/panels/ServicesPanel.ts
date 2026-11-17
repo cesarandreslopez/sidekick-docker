@@ -157,19 +157,19 @@ export class ServicesPanel implements SidePanel {
     return [
       {
         key: 'u',
-        label: 'Up',
+        // Up and Down act on the whole project, even from a service row.
+        label: 'Up project',
         handler: (item) => {
           const d = panelData<ServiceItemData>(item);
           return this.runCompose('Up', this.composeClient.up(getProjectName(d), this.cwdFor(d)), 'up', getProjectName(d));
         },
         condition: (item) => item.data !== null,
-        // Up and Down act on the whole project, even from a service row.
         actionType: 'up',
         targetName: (item) => getProjectName(panelData<ServiceItemData>(item)),
       },
       {
         key: 'D',
-        label: 'Down',
+        label: 'Down project',
         confirm: true,
         confirmMessage: (item) => composeDownConfirmMessage(getProjectName(panelData<ServiceItemData>(item))),
         confirmSeverity: 'high',

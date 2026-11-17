@@ -24,6 +24,8 @@ interface StatusBarProps {
   contextHint?: string;
   /** False while mouse capture is off (M / --no-mouse). */
   mouseEnabled?: boolean;
+  /** The endpoint, shown only when --socket or DOCKER_HOST chose it (dropped early when narrow). */
+  endpoint?: string;
   /** Terminal width budget; segments are dropped lowest-priority-first to fit. */
   width: number;
 }
@@ -57,10 +59,10 @@ const COMPACT_ERRORS = '#compact-errors';
  * to push ?:Help off narrow terminals during a disconnect.
  */
 // 'mouse' goes last: with capture off, clicks do nothing, and this says why.
-const DROP_ORDER = ['tagline', 'version', 'brand', 'nav', COMPACT_ERRORS, 'context', 'ago', 'hints', 'mouse'];
+const DROP_ORDER = ['tagline', 'version', 'brand', 'endpoint', 'nav', COMPACT_ERRORS, 'context', 'ago', 'hints', 'mouse'];
 
 export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width: number): StatusSegment[] {
-  const { daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh, contextHint, mouseEnabled = true } = props;
+  const { daemonConnected, focusTarget, panelActionHints, filterString, containerCount, runningCount, version, matchCount, totalCount, lastRefresh, contextHint, mouseEnabled = true, endpoint } = props;
   const ago = lastRefresh ? formatAgo(lastRefresh) : null;
 
   const segments: StatusSegment[] = [];
@@ -74,6 +76,8 @@ export function buildStatusSegments(props: Omit<StatusBarProps, 'width'>, width:
       ? { group: 'daemon', text: `● ${runningCount ?? 0}/${containerCount ?? 0}`, color: 'green' }
       : { group: 'daemon', text: '○ disconnected', color: 'red' },
   );
+  // Which daemon this is, when it is not the default one (a remote tcp:// or ssh:// host).
+  if (endpoint) segments.push({ group: 'endpoint', text: ` @ ${endpoint}`, color: 'gray', dimColor: true });
   const failed = Object.keys(props.resourceErrors ?? {});
   if (failed.length) segments.push({ group: 'errors', text: ` ⚠ ${failed.join(', ')} unavailable`, color: 'yellow' });
   if (ago) {

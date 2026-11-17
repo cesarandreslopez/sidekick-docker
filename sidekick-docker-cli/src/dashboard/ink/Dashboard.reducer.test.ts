@@ -74,11 +74,16 @@ describe('selection by id (T3)', () => {
     expect(next).toMatchObject({ selectedItemIndex: 3, selectedItemId: 'c1', detailScrollOffset: 40, detailScrollPerTab: { 2: 7 }, logFollow: false });
   });
 
-  it('switching panel, toggling running-only and wheel-scrolling the list drop the id', () => {
+  it('switching panel and wheel-scrolling the list drop the id', () => {
     const selected = { ...initialState, selectedItemId: 'c1', selectedItemIndex: 1 };
     expect(reducer(selected, { type: 'SWITCH_PANEL', index: 2 }).selectedItemId).toBeNull();
-    expect(reducer(selected, { type: 'TOGGLE_SHOW_ALL' }).selectedItemId).toBeNull();
     expect(reducer(selected, { type: 'SCROLL_SIDE', delta: 1, itemCount: 5 })).toMatchObject({ selectedItemIndex: 2, selectedItemId: null });
+  });
+
+  it('toggling running-only keeps the selection for resolveSelection to follow (T26)', () => {
+    const selected = { ...initialState, selectedItemId: 'c1', selectedItemIndex: 4, detailScrollOffset: 7 };
+    const next = reducer(selected, { type: 'TOGGLE_SHOW_ALL' });
+    expect(next).toMatchObject({ showAllContainers: false, selectedItemId: 'c1', selectedItemIndex: 4, detailScrollOffset: 7 });
   });
 });
 

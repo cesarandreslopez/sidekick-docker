@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { defaultDockerSocket } from 'sidekick-docker-shared';
-import { connectOrExit } from './connect';
+import { connectOrExit, DOCKER_CONTEXT_HINT } from './connect';
 
 const mocks = vi.hoisted(() => ({
   pingDetailed: vi.fn(),
@@ -76,5 +76,40 @@ describe('connectOrExit', () => {
     } finally {
       if (savedHost !== undefined) process.env.DOCKER_HOST = savedHost;
     }
+  });
+
+  it('adds the docker-context hint only when no endpoint was given (T20)', async () => {
+    const refused = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    mocks.pingDetailed.mockResolvedValue({ ok: false, error: refused });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    const savedHost = process.env.DOCKER_HOST;
+    delete process.env.DOCKER_HOST;
+    try {
+      await expect(connectOrExit({})).rejects.toThrow('exit');
+      expect(errorSpy).toHaveBeenCalledWith(DOCKER_CONTEXT_HINT);
+      errorSpy.mockClear();
+      await expect(connectOrExit({ socket: '/run/user/1000/docker.sock' })).rejects.toThrow('exit');
+      expect(errorSpy).not.toHaveBeenCalledWith(DOCKER_CONTEXT_HINT);
+      errorSpy.mockClear();
+      process.env.DOCKER_HOST = 'tcp://build:2375';
+      await expect(connectOrExit({})).rejects.toThrow('exit');
+      expect(errorSpy).not.toHaveBeenCalledWith(DOCKER_CONTEXT_HINT);
+    } finally {
+      if (savedHost !== undefined) process.env.DOCKER_HOST = savedHost;
+      else delete process.env.DOCKER_HOST;
+    }
+  });
+
+  it('prints the raw error with --verbose (T20)', async () => {
+    const refused = Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+    mocks.pingDetailed.mockResolvedValue({ ok: false, error: refused });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(process, 'exit').mockImplementation((() => { throw new Error('exit'); }) as never);
+    await expect(connectOrExit({ socket: '/x', verbose: true })).rejects.toThrow('exit');
+    expect(errorSpy).toHaveBeenCalledWith(refused);
+    errorSpy.mockClear();
+    await expect(connectOrExit({ socket: '/x' })).rejects.toThrow('exit');
+    expect(errorSpy).not.toHaveBeenCalledWith(refused);
   });
 });

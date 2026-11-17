@@ -42,7 +42,11 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
   // it was connecting.
   const socket = globalOpts.socket as string | undefined;
   if (process.stderr.isTTY) process.stderr.write(`${ansi.dim(connectingLine(describeDockerEndpoint(socket)))}\n`);
-  const client = await connectOrExit({ socket });
+  const client = await connectOrExit({ socket, verbose: globalOpts.verbose === true });
+  // The status bar names the endpoint only when it is not the default; the
+  // version overlay (V) always describes it.
+  const endpointLabel = (socket ?? process.env.DOCKER_HOST ?? '').trim() || undefined;
+  const endpointDescription = describeDockerEndpoint(socket);
 
   // Subprocesses cannot see the endpoint dockerode was configured with, so
   // every spawned `docker` (compose, exec) needs these overrides or --socket
@@ -101,6 +105,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
           dockerEnv: cliEnv,
           onRefresh,
           startupWarning,
+          endpointLabel,
+          endpointDescription,
           execShell,
           mouse,
         }),
@@ -399,6 +405,8 @@ export async function dashboardAction(_opts: Record<string, unknown>, cmd: Comma
       dockerEnv: cliEnv,
       onRefresh,
       startupWarning,
+      endpointLabel,
+      endpointDescription,
       execShell,
       mouse,
     }),
