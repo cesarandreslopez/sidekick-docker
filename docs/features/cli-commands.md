@@ -30,6 +30,14 @@ sidekick-docker ps -q
 | `--format <table\|json>` | Output format (default: `table`) |
 | `-q`, `--quiet` | Only print container IDs |
 
+The JSON output pipes straight into `jq`, for example to list stopped containers with their exit status:
+
+```bash
+sidekick-docker ps -a --format json | jq -r '.[] | select(.state == "exited") | [.name, .status] | @tsv'
+```
+
+![sidekick-docker ps --format json piped into jq: the exited containers with their exit codes](../images/demo/v1/cli-ps-json.png)
+
 ## `sidekick-docker logs`
 
 Stream logs from a container.
@@ -52,6 +60,8 @@ sidekick-docker logs <container> --tail 50
 | `--no-follow` | Print logs and exit |
 | `-n`, `--tail <lines>` | Number of lines to show from the end (default: 100) |
 
+Each line starts with its timestamp in local time (`HH:MM:SS.mmm`). Lines the container wrote to stderr are printed in red, unless colour is off; all lines go to stdout.
+
 ## `sidekick-docker images`
 
 Lists local images.
@@ -65,7 +75,7 @@ sidekick-docker images --format json
 
 ## `sidekick-docker volumes`
 
-Lists named volumes, including which containers currently mount each one.
+Lists all volumes, named and anonymous, including which containers currently mount each one.
 
 ```bash
 sidekick-docker volumes
@@ -105,6 +115,8 @@ sidekick-docker df
 sidekick-docker df --format json
 ```
 
+![sidekick-docker df output: disk usage for images, containers, volumes and build cache](../images/demo/v1/cli-df.png)
+
 ## `sidekick-docker inspect`
 
 Prints the raw inspect payload for a container as JSON — everything the
@@ -117,13 +129,13 @@ sidekick-docker inspect web
 sidekick-docker inspect web | jq .State.Health
 ```
 
-Exits non-zero when no container matches.
+Exits 1 when no container matches. An ID prefix that matches more than one container is refused, as `docker` does: the command lists the matching IDs and exits 1 instead of picking one.
 
 ## Global Options
 
 | Flag | Description |
 |------|-------------|
-| `--socket <endpoint>` | Docker endpoint: socket path, `unix://` or `tcp://host[:port]` URL (see [Docker Socket](../configuration/docker-socket.md)) |
+| `--socket <endpoint>` | Docker endpoint: socket path, `unix://` or `tcp://host[:port]` URL (see [Docker Socket](../configuration/docker-socket.md)). `ssh://` is not accepted here; set `DOCKER_HOST` instead |
 | `--no-color` | Disable colored output (the `NO_COLOR` env var also disables it; `FORCE_COLOR` forces it on) |
 | `--verbose` | Show full error details |
 | `--shell <path>` | Shell for Exec in the dashboard (default: `$SIDEKICK_DOCKER_SHELL`, else `/bin/sh`) |
@@ -133,10 +145,13 @@ Exits non-zero when no container matches.
 
 `NO_COLOR` and `--no-color` turn the interactive dashboard monochrome as well as the command output.
 
+A mistyped subcommand fails with `error: unknown command` instead of starting the dashboard, and suggests the closest command when there is one: `sidekick-docker pss` prints `(Did you mean ps?)`.
+
 ## Environment Variables
 
 | Variable | Description |
 |----------|-------------|
-| `DOCKER_HOST` | Docker endpoint used when `--socket` is not given (`unix://`, `tcp://`, `ssh://`) |
+| `DOCKER_HOST` | Docker endpoint used when `--socket` is not given (`unix://`, `tcp://`, `ssh://`). The only way to connect over `ssh://` |
 | `SIDEKICK_DOCKER_SHELL` | Shell for dashboard Exec when `--shell` is not given (default `/bin/sh`) |
 | `NO_COLOR` / `FORCE_COLOR` | Disable / force colored output |
+| `DEBUG` | Any value prints the full error, with its stack trace, when a command or the dashboard fails unexpectedly (as `--verbose` does) |

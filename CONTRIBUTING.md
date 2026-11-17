@@ -53,11 +53,16 @@ npm run test:packages             # builds and checks SSH in the npm tarball and
 cd sidekick-docker-shared && npx vitest run   # shared only
 cd sidekick-docker-cli && npx vitest run      # cli only
 cd sidekick-docker-vscode && npx vitest run   # vscode only (vscode API mocked via src/test/vscode.ts)
+cd <package> && npm run test:watch            # watch mode (any of the three packages)
 
 # Linting (ESLint 10, flat config)
 npm run lint                     # lint all packages
 npm run lint:fix                 # lint + auto-fix
 bash scripts/lint-all.sh         # alternative: also accepts extra args (e.g. --fix)
+
+# Dev loop
+cd sidekick-docker-vscode && npm run watch   # esbuild watch mode for the extension
+npm run clean                    # remove dist/ and out/ in every package
 
 # Version management
 bash scripts/bump-version.sh 0.4.1   # updates all 4 manifests and lockfiles, including local shared references
@@ -75,7 +80,7 @@ Tests use Vitest and are co-located with source files (e.g., `FooService.ts` / `
 
 ```bash
 npm test             # Run all tests (shared + cli + vscode)
-cd sidekick-docker-shared && npx vitest   # Watch mode
+cd sidekick-docker-shared && npm run test:watch   # Watch mode (same script in cli and vscode)
 ```
 
 Before handing off code changes, run the complete gate from the repository root:
@@ -100,7 +105,7 @@ Use `scripts/bump-version.sh` to synchronize manifests and lockfiles, then updat
 
 ```
 sidekick-docker/
-├── sidekick-docker-shared/   # Docker API layer, types, compose detection (tsc -> dist/)
+├── sidekick-docker-shared/   # Docker API layer, types, compose detection, state store, stream policy, log analytics, UI-policy formatters (tsc -> dist/)
 ├── sidekick-docker-cli/      # TUI dashboard + CLI commands (esbuild -> dist/)
 ├── sidekick-docker-vscode/   # VS Code extension (esbuild -> out/)
 ├── scripts/                  # Build and version scripts
@@ -110,8 +115,8 @@ sidekick-docker/
 
 ### Key Architecture Concepts
 
-- **Panel system**: Each resource type (containers, compose, images, volumes, networks) implements the `SidePanel` interface with `getItems()`, `detailTabs[]`, and `getActions()`; global TUI keybindings live in the `ink/keyRegistry.ts` registry, not on panels
-- **State flow**: Docker events -> `EventWatcher` -> `DockerState.processEvent()` -> `scheduleRender()`. Fallback: 30s periodic full refresh
+- **Panel system**: Each resource type (containers, compose, images, volumes, networks) implements the `SidePanel` interface with `getItems()`, `detailTabs[]`, and `getActions()`; global TUI keybindings live in the `ink/keyRegistry.ts` registry, not on panels. The VS Code webview has a parallel (not shared) `PanelDefinition` in `webview/panels/types.ts`
+- **State flow**: Docker events -> `EventWatcher` -> `DockerState.processEvent()` -> shared `DockerStateStore` (patches state, or requests a refresh debounced 500ms) -> store `onChange` -> stream managers' `targetStateChanged()` + `scheduleRender()`. Fallback: 30s periodic full refresh
 - **Stats streaming**: Selection-driven (expensive). `StatsStreamManager.select(id)` starts stream -> pushes to `StatsCollector` ring buffer (60 samples) -> sparklines
 - **Log streaming**: Selection-driven. `LogStreamManager.select(id)` starts stream -> ring buffer (1000 lines)
 - **Compose detection**: Primary from container labels (`com.docker.compose.*`), secondary from `docker compose config`. Merged to show running + planned services
@@ -160,8 +165,8 @@ Look for issues labeled `good first issue` -- these are suitable for newcomers.
 ### Current Priorities
 
 - Test coverage improvements
-- New container actions (attach, inspect)
-- Remote Docker host support
+- New container actions (e.g. attach)
+- `docker context` support (remote hosts already work: `tcp://`/`https://` via `--socket` or `DOCKER_HOST`, `ssh://` via `DOCKER_HOST`)
 - Documentation and developer experience
 - Bug fixes
 
@@ -171,7 +176,7 @@ Look for issues labeled `good first issue` -- these are suitable for newcomers.
 |-----------|------|-------------|
 | CLI / TUI | `sidekick-docker-cli/` | Terminal dashboard (Ink + React) |
 | VS Code Extension | `sidekick-docker-vscode/` | Webview-based dashboard |
-| Shared Library | `sidekick-docker-shared/` | Docker API facade, types, compose detection |
+| Shared Library | `sidekick-docker-shared/` | Docker API facade, types, compose detection, state store, stream policy, log analytics, UI-policy formatters |
 
 ## Questions?
 

@@ -2,9 +2,7 @@
 
 The Sidekick Docker dashboard is a five-panel TUI built with Ink and React. Each panel manages a different Docker resource type.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/sidekick_docker_cli.gif" alt="Sidekick Docker Dashboard Demo" width="800">
-</p>
+![The Sidekick Docker dashboard: running, unhealthy, paused and exited containers with live highlighted logs, the Config tab of an unhealthy container showing the failing health probe output, the Services panel with Compose replicas, and a prune confirmation followed by its "reclaimed" toast](../images/demo/v1/cli-dashboard.gif)
 
 ## Panel Layout
 
@@ -21,7 +19,7 @@ List names that do not fit are shortened in the middle, so a replica's `-2` suff
 
 | # | Panel | Each row shows |
 |---|-------|----------------|
-| 1 | **Containers** | State icon, name, first published port, health badge, uptime |
+| 1 | **Containers** | State icon, name, a port (running containers only: the first port's published host port, or its container port when it is not published), health badge, uptime |
 | 2 | **Services** | Compose projects (running/total services) with their services (running/total replicas) |
 | 3 | **Images** | First tag (dangling images dimmed), size |
 | 4 | **Volumes** | Name (in-use volumes highlighted), driver |
@@ -45,6 +43,8 @@ On startup the terminal prints `Connecting to <endpoint>…` before the dashboar
 ## Actions
 
 Press **`x`** on any selected item to open the context menu (titled with the item's name), or press an action's key (shown in the menu) directly. A key whose action does not apply to the item says so in a toast. Only actions that apply to the item's current state are offered — for example, Start is not offered for a paused container (Docker rejects it; use Unpause). Available actions vary by panel — see each panel's page for details.
+
+![A container prune: the red confirmation names how many stopped containers it removes](../images/demo/v1/cli-prune.png)
 
 Destructive actions (remove, prune) are color-coded red in the context menu and require a confirmation modal that names the exact target (e.g. `Remove container "web"?`, `Prune 3 dangling images?`); removing a running container warns that it will be stopped first. Long messages wrap to up to three lines rather than cutting off the target. `y` confirms; `Enter`, `Esc`, or `n` cancel — Enter is deliberately the safe default.
 

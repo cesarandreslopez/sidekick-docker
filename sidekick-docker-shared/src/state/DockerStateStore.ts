@@ -44,7 +44,10 @@ export interface DockerStateStoreOptions {
   eventDebounceMs?: number;
   /** A pass that takes longer is abandoned, keeping the previous data. Default 20s. */
   refreshTimeoutMs?: number;
-  /** Fires only when something actually changed. */
+  /**
+   * Fires after an event only when it changed the snapshot, but after every
+   * refresh pass — committed or abandoned at the deadline — changed or not.
+   */
   onChange?: (change: StoreChange) => void;
   log?: (message: string, error?: unknown) => void;
 }

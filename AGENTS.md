@@ -22,6 +22,12 @@ workspace. Each package owns its dependencies and lockfile:
 Build `sidekick-docker-shared` before either consumer; the CLI and extension
 reference it through local `file:` dependencies.
 
+`demo/` is not a package: it is a private folder that records the README and
+docs GIFs and stills from a script, against an isolated Docker-in-Docker daemon
+and an invented compose stack (see `demo/README.md`). Re-record there, after
+the version bump, when a release changes what the dashboard or the extension
+look like. Never delete or rename published files under `assets/`.
+
 ## Commands
 
 Run commands from the repository root unless a subshell is shown.

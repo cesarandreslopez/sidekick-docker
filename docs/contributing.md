@@ -1,6 +1,6 @@
 # Contributing
 
-Thank you for your interest in contributing to Sidekick Docker! This page mirrors the [CONTRIBUTING.md](https://github.com/cesarandreslopez/sidekick-docker/blob/main/CONTRIBUTING.md) in the repository.
+Thank you for your interest in contributing to Sidekick Docker! This page is a summary of the [CONTRIBUTING.md](https://github.com/cesarandreslopez/sidekick-docker/blob/main/CONTRIBUTING.md) in the repository.
 
 ## Getting Started
 
@@ -73,8 +73,8 @@ CI runs the same lint, import-DAG and type checks alongside the tests, and the R
 ## Areas for Contribution
 
 - Test coverage improvements
-- New container actions (attach, inspect)
-- Remote Docker host support
+- New container actions (e.g. attach)
+- `docker context` support (remote hosts already work through `--socket` or `DOCKER_HOST`)
 - Documentation and developer experience
 - Bug fixes
 

@@ -12,7 +12,7 @@ Complete keyboard reference for the Sidekick Docker TUI dashboard.
 | `G` / `End` | Jump to bottom. While log follow is paused, `G` resumes it first, wherever focus is |
 | `PgUp` / `PgDn` | Page up / down |
 | `Ctrl+U` / `Ctrl+D` | Half page up / down |
-| `Tab` | Toggle focus between side list and detail pane |
+| `Tab` | Toggle focus between side list and detail pane (not in the Expanded layout, where the list is hidden: it shows "Not available here") |
 | `Enter` / `l` / `Right` | Focus detail pane |
 | `Esc` | Close an overlay; otherwise clear the filter, then end a log comparison, then go back to the side list |
 | `h` / `Left` | Back to side list (when in detail pane) |
@@ -50,7 +50,8 @@ Letter keys ignore `Ctrl` and `Alt`: `Ctrl+Z`, `Ctrl+Q` or `Alt+x` do nothing ra
 
 The keys below work directly on the selected item — the `x` menu lists the same
 actions with their keys. Only actions that apply to the item's current state are
-offered; others are ignored.
+offered; pressing the key of one that does not apply shows a toast such as
+`Stop isn't available for web` instead of running it.
 
 ### Containers
 
@@ -97,6 +98,8 @@ scrolls when it does not fit: `j`/`k` or arrows, `PgUp`/`PgDn` or `Ctrl+D`/`Ctrl
 `g`/`G`. `?`, `q` or `Esc` closes it. The `?:Help` hint stays in the status bar at
 any width.
 
+![The help overlay on the Containers panel: navigation, view, filter and system keys, and the panel's actions](../images/demo/v1/cli-help.png)
+
 ## Mouse
 
 | Gesture | Action |
@@ -116,6 +119,6 @@ Interactive overlays display inline keyboard hints:
 | **Context Menu** | `j`/`k` select, `Enter` run, `Esc` close |
 | **Sort Menu** | `j`/`k` select, `Enter` apply, `R` reverse, `Esc` close |
 | **Confirmation Modal** | `y` confirms; `n` / `Esc` / `Enter` / `q` cancel (Enter is deliberately the safe default) |
-| **Filter Overlay** | `Enter` to apply, `Esc` to cancel |
+| **Filter Overlay** | `Enter` closes the prompt and keeps the filter (the list already narrows as you type), `Esc` clears the filter |
 | **Log Filter Overlay** | `Tab` to toggle mode, `Esc` to clear (pasted line breaks and tabs are dropped from both filter prompts) |
 | **Detail Tab Bar** | `[`/`]` cycle tabs |

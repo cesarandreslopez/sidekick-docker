@@ -13,7 +13,7 @@ Error messages and the startup line ("Connecting to the default Docker socket (�
 
 ## Custom Endpoint
 
-Use the `--socket` flag to specify a different endpoint. It accepts a plain socket path, a `unix://` URL, or a `tcp://` (also `http://`/`https://`) URL:
+Use the `--socket` flag to specify a different endpoint. It accepts a plain socket path (on Windows, a named pipe path such as `\\.\pipe\docker_engine`), a `unix://` URL, or a `tcp://` (also `http://`/`https://`) URL. Any other scheme, including `ssh://` and `npipe://`, is rejected; for SSH, use [`DOCKER_HOST`](#ssh-connection).
 
 ```bash
 sidekick-docker --socket /path/to/docker.sock
@@ -21,7 +21,7 @@ sidekick-docker --socket unix:///run/user/1000/docker.sock
 sidekick-docker --socket tcp://192.168.1.100:2375
 ```
 
-For TCP endpoints the port defaults to 2375 (2376 for `https://`). TLS is enabled for `https://` URLs and for the scheme-ambiguous `tcp://` form on port 2376; an explicit `http://` endpoint stays plain HTTP regardless of port.
+For TCP endpoints the port defaults to 2375 (2376 for `https://`). TLS is enabled for `https://` URLs and for the scheme-ambiguous `tcp://` form on port 2376; an explicit `http://` endpoint stays plain HTTP regardless of port. `--socket` itself loads no client certificates; for a daemon that requires them (`--tlsverify`), use `DOCKER_HOST` with `DOCKER_TLS_VERIFY` and `DOCKER_CERT_PATH` instead (see [Environment Variables](#environment-variables)).
 
 The endpoint applies to everything the dashboard does, including Compose actions — `docker compose up`/`down`/`restart` run against the same daemon (via `DOCKER_HOST`).
 
@@ -36,9 +36,19 @@ sidekick-docker --socket tcp://192.168.1.100:2375
 !!! warning
     Unencrypted TCP connections expose the Docker API without authentication. Use TLS for production remote connections.
 
+## SSH Connection
+
+SSH works only through `DOCKER_HOST`; `--socket` and the VS Code `socketPath` setting reject `ssh://`:
+
+```bash
+DOCKER_HOST=ssh://user@host sidekick-docker
+```
+
+The connection authenticates through your SSH agent (`SSH_AUTH_SOCK`), so add the key with `ssh-add` first. `~/.ssh/config` is not read, so give the real host name, user and port (`ssh://user@host:2222`). On the remote host, Sidekick Docker runs `docker system dial-stdio`, so the `docker` CLI must be installed there and the SSH user must be able to use the daemon. Compose actions and Exec run the `docker` CLI, which inherits `DOCKER_HOST` and connects with your system `ssh` (that one does read `~/.ssh/config`).
+
 ## VS Code Extension
 
-The VS Code extension reads the same endpoint formats from the `sidekick-docker.socketPath` setting (Settings → Extensions → Sidekick Docker):
+The VS Code extension reads the same endpoint formats from the `sidekick-docker.socketPath` setting (Settings → Extensions → Sidekick Docker); like `--socket`, it rejects `ssh://` and `npipe://`:
 
 ```json
 {
@@ -46,7 +56,7 @@ The VS Code extension reads the same endpoint formats from the `sidekick-docker.
 }
 ```
 
-Leave it empty to use the platform default socket (or `DOCKER_HOST` if set). An invalid value is ignored with a warning and the default socket is used. Changes apply immediately — the extension reconnects without a window reload.
+Leave it empty to use the platform default socket (or `DOCKER_HOST` if set, which is how to connect over SSH). An invalid value is ignored with a warning and the default socket is used. Changes apply immediately — the extension reconnects without a window reload.
 
 In a remote window (Remote-SSH, WSL, Dev Containers) the extension runs on the remote host, so `socketPath` is *machine-overridable*: it is read from that remote's settings, not your local user settings.
 
@@ -54,13 +64,15 @@ In a remote window (Remote-SSH, WSL, Dev Containers) the extension runs on the r
 
 ## Environment Variables
 
-The underlying Docker client (dockerode) also respects standard Docker environment variables:
+The underlying Docker client (dockerode, through docker-modem) also respects standard Docker environment variables:
 
 | Variable | Description |
 |----------|-------------|
 | `DOCKER_HOST` | Docker daemon endpoint (e.g., `unix:///var/run/docker.sock`, `tcp://host:port`, or `ssh://user@host`) |
-| `DOCKER_TLS_VERIFY` | Enable TLS verification (`1` to enable) |
-| `DOCKER_CERT_PATH` | Path to TLS certificates |
+| `DOCKER_TLS_VERIFY` | `1` switches a `tcp://` `DOCKER_HOST` to TLS (port 2376 does too) |
+| `DOCKER_CERT_PATH` | Directory holding `ca.pem`, `cert.pem` and `key.pem` for the client certificate |
+
+`DOCKER_TLS_VERIFY` and `DOCKER_CERT_PATH` are read only when `DOCKER_HOST` is a `tcp://` (or `ssh://`) URL. With a `unix://` `DOCKER_HOST`, or none, they are ignored, and `--socket https://…` on its own therefore sends no client certificate.
 
 The `--socket` flag takes precedence over environment variables — an explicit `--socket` socket path wins even when `DOCKER_HOST` is set.
 

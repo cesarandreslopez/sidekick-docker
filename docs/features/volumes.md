@@ -1,6 +1,6 @@
 # Volumes Panel
 
-The Volumes panel (press `4`) shows named Docker volumes.
+The Volumes panel (press `4`) shows all Docker volumes, named and anonymous.
 
 ## List Columns
 
@@ -25,7 +25,7 @@ Press `x` to open the context menu, or press `d` (Remove) / `P` (Prune) directly
 
 | Action | Description |
 |--------|-------------|
-| Remove | Remove the selected volume (confirmation required) |
-| Prune | Remove unused anonymous volumes. Since Docker Engine 23 a prune keeps named volumes, and the confirmation counts and says so; on older engines it removes every unused volume |
+| Remove | Remove the selected volume. Offered only for volumes no container uses; the confirmation warns `Its data is deleted.` |
+| Prune | Remove unused anonymous volumes. Since Docker Engine 23 a prune keeps named volumes, and the confirmation counts and says so; on older engines it removes every unused volume. When the list proves there is nothing to remove it says so instead of asking. If the engine's version cannot be read, the prompt is `Prune unused volumes?` with no count, and it always asks |
 
 Prune reports the total space reclaimed.

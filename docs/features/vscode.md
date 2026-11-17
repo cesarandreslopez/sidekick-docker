@@ -2,13 +2,16 @@
 
 The Sidekick Docker extension embeds the Docker dashboard as a webview panel inside your editor. Works with VS Code, VSCodium, and compatible editors.
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/cesarandreslopez/sidekick-docker/main/assets/sidekick_docker_vscode_extension.gif" alt="Sidekick Docker VS Code Extension Demo" width="800">
-</p>
+![VS Code with the Sidekick Docker Containers tree beside the dashboard webview: the Stats tab, a Compose Restart from the tree writing to the Sidekick Docker output channel, and e opening an exec terminal](../images/demo/v1/vscode-tour.gif)
 
 ## Installation
 
-Install from [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode) (recommended for VSCodium and compatible editors) or the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=CesarAndresLopez.sidekick-docker-vscode). You can also search for **Sidekick Docker** in the Extensions view.
+The extension is published to [Open VSX](https://open-vsx.org/extension/CesarAndresLopez/sidekick-docker-vscode).
+
+- **VSCodium and other Open VSX editors** — search for **Sidekick Docker** in the Extensions view, or run `codium --install-extension CesarAndresLopez.sidekick-docker-vscode`.
+- **VS Code** — download `sidekick-docker-vscode-<version>.vsix` from the [latest GitHub Release](https://github.com/cesarandreslopez/sidekick-docker/releases/latest), then run `code --install-extension sidekick-docker-vscode-<version>.vsix` or use Extensions view → `…` → **Install from VSIX…**.
+
+The VS Code Marketplace listing is stuck at 0.4.1: `code --install-extension CesarAndresLopez.sidekick-docker-vscode` installs that old version. See [Installation](../getting-started/installation.md#vs-code-and-compatible-editors).
 
 ## Opening the Dashboard
 
@@ -18,13 +21,13 @@ Open the command palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and run:
 Sidekick Docker: Open Dashboard
 ```
 
-or press `Ctrl+Alt+D` — `Ctrl`, not `Cmd`, on macOS too (macOS reserves `Cmd+Opt+D` for the Dock). The dashboard opens as a webview panel with the same layout as the terminal TUI. The dashboard panel survives window reloads.
+or press `Ctrl+Alt+D` — `Ctrl`, not `Cmd`, on macOS too (macOS reserves `Cmd+Opt+D` for the Dock). The shortcut does not fire while the integrated terminal has focus, so the terminal keeps the keystroke. The dashboard opens as a webview panel with the same layout as the terminal TUI. The dashboard panel survives window reloads.
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `Sidekick Docker: Open Dashboard` | Open the dashboard (`Ctrl+Alt+D`, all platforms) |
+| `Sidekick Docker: Open Dashboard` | Open the dashboard (`Ctrl+Alt+D`, all platforms, except while the terminal has focus) |
 | `Sidekick Docker: Open Dashboard to the Side` | Open in a split editor column |
 | `Sidekick Docker: Refresh Containers` | Refresh the tree view (`Ctrl+Alt+R` / `Cmd+Alt+R` when the Containers view is focused) |
 | `Sidekick Docker: Start/Stop/Restart Container...` | Quick-pick a container to act on |
@@ -47,7 +50,7 @@ The status-bar item shows a spinner while connecting, then running/total counts 
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `sidekick-docker.socketPath` | `""` | Docker endpoint: socket path, `unix://`, or `tcp://host[:port]`. Empty uses the platform default (or `DOCKER_HOST`). Machine-overridable — see below. |
+| `sidekick-docker.socketPath` | `""` | Docker endpoint: socket path, `unix://`, or `tcp://host[:port]`. Empty uses the platform default (or `DOCKER_HOST`, the only way to use `ssh://`). Machine-overridable — see below. |
 | `sidekick-docker.refreshIntervalSeconds` | `30` | Fallback full-refresh interval in seconds (minimum 5). |
 | `sidekick-docker.statusBar.visible` | `true` | Show the status-bar container counts. |
 | `sidekick-docker.exec.defaultShell` | `/bin/sh` | Shell used when opening an exec terminal into a container. |
@@ -83,6 +86,7 @@ In an untrusted workspace (Restricted Mode), `sidekick-docker.socketPath` and `s
 
 - **VS Code** >= 1.109
 - **Docker** running and accessible
+- **The `docker` CLI** on the `PATH` of the extension host, for Compose actions and the Exec and Show Logs terminals
 
 ## Architecture
 
@@ -109,6 +113,7 @@ dashboard for the same list. Where the two differ:
   use the status bar's refresh button instead. Elsewhere `F5` keeps its usual meaning. `Ctrl+R` is left
   to VS Code.
 - **Exec opens a VS Code terminal** instead of an embedded session, and there is no mouse-capture toggle (`M`), because the webview never blocks text selection.
+- **`m` toggles the pin on the selected row.** Pressing it on the pinned row unpins; pressing it on another row pins that row instead. `Esc` does not end a comparison here. In the TUI, `m` on any row or `Esc` ends it.
 - **Tab moves between controls**, as in any webview. The TUI uses Tab to toggle focus between list and details.
 
 | Key | Action |
@@ -124,7 +129,7 @@ dashboard for the same list. Where the two differ:
 | `/` | Filter the list |
 | `f` | Focus the log filter (Logs tab, Containers and Services) |
 | `x` | Actions menu |
-| `m` | Pin / unpin for log comparison (switches to the Logs tab) |
+| `m` | Pin the selected row for log comparison (switches to the Logs tab); on the pinned row, unpin |
 | `J`/`K` | Scroll the pinned comparison pane |
 | `a` | Show all containers / only those with a live process |
 | `w` | Wrap long log lines, or keep them on one line (wrapping is on by default and remembered) |
@@ -136,7 +141,9 @@ dashboard for the same list. Where the two differ:
 | `V` | Version |
 | `?` | Help |
 
-Compose **Up**, **Down** and **Restart** stream their full output into the **Sidekick Docker** output channel and can be cancelled from their progress notification; a cancelled run is reported as cancelled, not as a failure, and failures offer **Show Output**. Pressing an action again while the same one is still running is ignored. When an action fails while the dashboard is hidden, a VS Code notification reports it (with **Open Dashboard**). When the listed items prove a prune would remove nothing, it says so instead of asking (with any untagged image, or any non-default network, it still asks, since the daemon may remove those).
+Compose **Up**, **Down**, **Restart** and **Stop** stream their full output into the **Sidekick Docker** output channel. All but Stop can be cancelled from their progress notification; a cancelled run is reported as cancelled, not as a failure, and failures offer **Show Output**. Pressing an action again while the same one is still running is ignored. When an action fails while the dashboard is hidden, a VS Code notification reports it (with **Open Dashboard**). When the listed items prove a prune would remove nothing, it says so instead of asking (with any untagged image, or any non-default network, it still asks, since the daemon may remove those).
+
+![The Sidekick Docker output channel in VS Code showing the full output of a docker compose run](../images/demo/v1/vscode-compose-output.png)
 
 Item actions keep their TUI letters (`s` Start, `S` Stop, `r` Restart, `p` Pause, `u` Unpause
 (containers) or Up (Compose), `e` Exec, `d` Remove, `P` Prune, `D` Down, `c` Copy Logs, `b` Open in

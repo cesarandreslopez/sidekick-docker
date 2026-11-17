@@ -33,7 +33,7 @@ const timer = setInterval(() => void store.refresh(), 30_000);
 | `include` | everything | Which lists to fetch: `{ images?, volumes?, networks?, compose? }`; containers are always fetched. The VS Code tree uses a containers-only store |
 | `eventDebounceMs` | `500` | Coalescing window for event-triggered refreshes |
 | `refreshTimeoutMs` | `20000` | A pass that takes longer is abandoned, keeping the previous data |
-| `onChange` | — | Called only when something actually changed, with a `StoreChange` (`cause: 'refresh' \| 'event'`, plus the removed container/image IDs) |
+| `onChange` | — | Called after an event only when it changed the snapshot, but after **every** refresh pass, including one abandoned at the deadline. Receives a `StoreChange`: `{ cause: 'refresh', removedContainerIds, removedImageIds }` or `{ cause: 'event', event, removedContainerIds }` |
 | `log` | — | Debug sink for swallowed errors |
 
 ## Methods
@@ -45,7 +45,7 @@ const timer = setInterval(() => void store.refresh(), 30_000);
 | `requestRefresh()` | Debounced refresh |
 | `processEvent(event)` | Classify the event, patch state immediately, and request a refresh when the effect needs one |
 | `isContainerRunning(id)` | `true`/`false`, or `undefined` when the container is unknown — what `FollowStream`'s `isTargetRunning` expects |
-| `isComposeTargetRunning(project, service)` | The same for a Compose project or service |
+| `isComposeTargetRunning(project, service)` | The same for a Compose project or one service; `service` is `string \| null` (`null` = the whole project) |
 | `getRunningContainerIds()` | IDs of running containers |
 | `dispose()` | Cancel pending work |
 
@@ -62,7 +62,7 @@ const timer = setInterval(() => void store.refresh(), 30_000);
 
 | Events | Effect |
 |--------|--------|
-| healthcheck `exec_*`, attach, resize, kill, oom, volume mount/unmount, daemon events | Ignored |
+| container `exec_*`, attach, detach, resize, top, export, copy, archive-path, extract-to-dir, commit, kill, oom; `health_status` with an unknown detail; image push/save; volume mount/unmount; daemon-scoped events | Ignored |
 | `health_status` | Patched in place |
 | start, unpause, restart | Patched, then re-synced with a refresh |
 | stop, die, pause | Patched |
