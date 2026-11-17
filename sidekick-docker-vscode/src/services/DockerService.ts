@@ -124,6 +124,9 @@ export interface DockerServiceOptions {
 
 export type InitializeResult = { ok: true } | { ok: false; reason: string };
 
+/** A compose action's cancel signal and output sink. */
+export type ComposeRunHooks = Pick<ComposeCommandOptions, 'signal' | 'onOutput'>;
+
 export interface DashboardViewState {
   activePanelId: DashboardPanelId;
   detailTabIndex: number;
@@ -715,8 +718,10 @@ export class DockerService {
    * `docker compose up` still surfaced as a success notification.
    */
   private async runCompose(action: string, exec: Promise<ComposeExecResult>): Promise<void> {
-    throwIfComposeFailed(await exec, action);
+    const result = await exec;
+    // Refresh either way: a failed or cancelled `up` can leave services started.
     await this.refresh();
+    throwIfComposeFailed(result, action);
   }
 
   /**
@@ -731,24 +736,29 @@ export class DockerService {
     );
   }
 
-  async composeUp(projectName: string): Promise<void> {
+  /**
+   * `run` carries the caller's cancel signal and an output sink (the
+   * "Sidekick Docker" output channel); a cancelled run rejects with a
+   * ComposeError whose `cancelled` is true.
+   */
+  async composeUp(projectName: string, run?: ComposeRunHooks): Promise<void> {
     this.assertComposeAllowed('Up');
-    await this.runCompose('Up', this.composeClient.up(projectName, await this.composeCwd(projectName)));
+    await this.runCompose('Up', this.composeClient.up(projectName, { ...await this.composeCwd(projectName), ...run }));
   }
 
-  async composeDown(projectName: string): Promise<void> {
+  async composeDown(projectName: string, run?: ComposeRunHooks): Promise<void> {
     this.assertComposeAllowed('Down');
-    await this.runCompose('Down', this.composeClient.down(projectName, await this.composeCwd(projectName)));
+    await this.runCompose('Down', this.composeClient.down(projectName, { ...await this.composeCwd(projectName), ...run }));
   }
 
-  async composeRestart(projectName: string, serviceName?: string): Promise<void> {
+  async composeRestart(projectName: string, serviceName?: string, run?: ComposeRunHooks): Promise<void> {
     this.assertComposeAllowed('Restart');
-    await this.runCompose('Restart', this.composeClient.restart(projectName, serviceName, await this.composeCwd(projectName)));
+    await this.runCompose('Restart', this.composeClient.restart(projectName, serviceName, { ...await this.composeCwd(projectName), ...run }));
   }
 
-  async composeStop(projectName: string, serviceName?: string): Promise<void> {
+  async composeStop(projectName: string, serviceName?: string, run?: ComposeRunHooks): Promise<void> {
     this.assertComposeAllowed('Stop');
-    await this.runCompose('Stop', this.composeClient.stop(projectName, serviceName, await this.composeCwd(projectName)));
+    await this.runCompose('Stop', this.composeClient.stop(projectName, serviceName, { ...await this.composeCwd(projectName), ...run }));
   }
 
   getContainerName(containerId: string): string | undefined {

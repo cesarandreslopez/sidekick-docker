@@ -212,6 +212,18 @@ describe('DockerService lifecycle', () => {
     expect(await service.initialize()).toEqual({ ok: false, reason: expect.stringMatching(/Permission denied on unix:\/\/\/nope\.sock/) });
   });
 
+  it('passes the cancel signal and output sink to compose, and refreshes even when the run fails', async () => {
+    const up = vi.fn(async () => ({ exitCode: 143, stdout: '', stderr: 'cancelled', cancelled: true }));
+    (service as unknown as { composeClient: Record<string, unknown> }).composeClient.up = up;
+    const signal = new AbortController().signal;
+    const onOutput = vi.fn();
+    mocks.containers.mockClear();
+    const err = await service.composeUp('shop', { signal, onOutput }).catch((e: unknown) => e);
+    expect(up).toHaveBeenCalledWith('shop', expect.objectContaining({ signal, onOutput }));
+    expect((err as { cancelled?: boolean }).cancelled).toBe(true);
+    expect(mocks.containers).toHaveBeenCalled();
+  });
+
   it('reports prune counts from the daemon, and an empty prune as nothing to prune', async () => {
     const client = (service as unknown as { client: Record<string, unknown> }).client;
     client.pruneImages = async () => ({ spaceReclaimed: 0, deleted: 0 });

@@ -8,6 +8,8 @@ import { getSettings } from '../settings';
 import { resolveComposeCwd } from '../utils/workspace';
 import { getDashboardHtml } from './dashboardHtml';
 import { ACTION_META, runDockerAction } from './actionRegistry';
+import { runComposeAction, isComposeCancelled, composeCancelledText, showComposeError } from './composeRunner';
+import type { ComposeAction, ComposeOutput, ComposeRunHooks } from './composeRunner';
 import type { ExtensionMessage, WebviewMessage } from '../types/messages';
 import { WebviewMessageSchema } from '../types/messageSchemas';
 import { parseComposeItemId, composeProjectNameOf } from '../types/composeItemId';
@@ -16,6 +18,7 @@ import { CONTAINER_FILES_TAB_INDEX } from '../types/detailTabs';
 type PanelId = 'containers' | 'services' | 'images' | 'volumes' | 'networks';
 
 const PANEL_IDS: PanelId[] = ['containers', 'services', 'images', 'volumes', 'networks'];
+const COMPOSE_ACTIONS: readonly ComposeAction[] = ['up', 'down', 'restart', 'stop'];
 const DEFAULT_VIEW_STATE = {
   activePanelId: 'containers' as PanelId,
   detailTabIndex: 0,
@@ -42,9 +45,12 @@ export class DockerDashboardProvider implements vscode.Disposable {
   private initializing = false;
   private viewState = { ...DEFAULT_VIEW_STATE };
   private workspaceFoldersSubscription: vscode.Disposable;
+  /** The "Sidekick Docker" output channel compose actions stream into. */
+  private readonly output: ComposeOutput | undefined;
 
-  constructor(extensionUri: vscode.Uri) {
+  constructor(extensionUri: vscode.Uri, output?: ComposeOutput) {
     this.extensionUri = extensionUri;
+    this.output = output;
     // Compose cwd depends on workspace folders; re-resolve when they change.
     this.workspaceFoldersSubscription = vscode.workspace.onDidChangeWorkspaceFolders(() => {
       this.reinitializeService();
@@ -441,9 +447,14 @@ export class DockerDashboardProvider implements vscode.Disposable {
       : panelId === 'services' && (actionType === 'up' || actionType === 'down') ? composeProjectNameOf(itemId) ?? itemId
       : service.getItemDisplayName(panelId, itemId);
 
+    // Compose on the Services panel streams its output into the output
+    // channel, and up/down/restart can be cancelled from their progress
+    // notification.
+    const composeAction = panelId === 'services' && COMPOSE_ACTIONS.includes(actionType as ComposeAction) ? actionType as ComposeAction : null;
+
     // Resolves to an outcome string when the action has something more
     // specific to report than its generic success message (e.g. prune).
-    const run = async (): Promise<string | undefined> => {
+    const run = async (hooks?: ComposeRunHooks): Promise<string | undefined> => {
       switch (panelId) {
         case 'containers':
           switch (actionType) {
@@ -464,10 +475,10 @@ export class DockerDashboardProvider implements vscode.Disposable {
           // single service when the row is one.
           const serviceName = ref.kind === 'service' ? ref.serviceName : undefined;
           switch (actionType) {
-            case 'up': await service.composeUp(ref.projectName); break;
-            case 'down': await service.composeDown(ref.projectName); break;
-            case 'restart': await service.composeRestart(ref.projectName, serviceName); break;
-            case 'stop': await service.composeStop(ref.projectName, serviceName); break;
+            case 'up': await service.composeUp(ref.projectName, hooks); break;
+            case 'down': await service.composeDown(ref.projectName, hooks); break;
+            case 'restart': await service.composeRestart(ref.projectName, serviceName, hooks); break;
+            case 'stop': await service.composeStop(ref.projectName, serviceName, hooks); break;
           }
           break;
         }
@@ -498,7 +509,10 @@ export class DockerDashboardProvider implements vscode.Disposable {
     };
 
     try {
-      if (meta) {
+      if (composeAction) {
+        await runComposeAction(composeAction, itemName, this.output, run);
+        this._postMessage({ type: 'toast', message: ACTION_META[composeAction].successMessage(itemName), severity: 'success' });
+      } else if (meta) {
         // Slow ops get a native progress notification (survives panel hide).
         // Prefer the action's own outcome text when it has one (prune reports
         // reclaimed space) over the generic success message.
@@ -509,18 +523,30 @@ export class DockerDashboardProvider implements vscode.Disposable {
         this._postMessage({ type: 'toast', message: actionType, severity: 'success' });
       }
     } catch (err: unknown) {
+      if (composeAction && isComposeCancelled(err)) {
+        // Cancelled from the progress notification: not a failure.
+        this._postMessage({ type: 'toast', message: composeCancelledText(composeAction, itemName), severity: 'info' });
+        return;
+      }
       // ACTION_META has an entry for exactly the shared ActionTypes.
       const message = meta ? actionFailedText(actionType as ActionType, itemName, errorMessage(err)) : `${actionType} ${itemName} failed: ${errorMessage(err)}`;
-      this._postMessage({ type: 'toast', message, severity: 'error' });
+      // A toast has room for the reason only; compose's full output is in the channel.
+      const toast = composeAction && this.output ? `${message} (full output: Output › Sidekick Docker)` : message;
+      this._postMessage({ type: 'toast', message: toast, severity: 'error' });
       // A slow action outlives the panel being on screen; its failure must not
       // land only in a hidden webview.
-      if (!this.panel?.visible) this._notifyHiddenFailure(message);
+      if (!this.panel?.visible) this._notifyHiddenFailure(message, composeAction !== null);
     }
   }
 
-  private _notifyHiddenFailure(message: string): void {
-    void vscode.window.showErrorMessage(message, 'Open Dashboard').then((choice) => {
-      if (choice === 'Open Dashboard') this.open();
+  private _notifyHiddenFailure(message: string, compose: boolean): void {
+    const openDashboard = { label: 'Open Dashboard', run: () => this.open() };
+    if (compose) {
+      showComposeError(message, this.output, [openDashboard]);
+      return;
+    }
+    void vscode.window.showErrorMessage(message, openDashboard.label).then((choice) => {
+      if (choice === openDashboard.label) openDashboard.run();
     });
   }
 

@@ -6,7 +6,7 @@ import { ContainerWatcherService } from './services/ContainerWatcherService';
 import { statusBarView, runningCount } from './providers/statusBar';
 import type { DockerStatus } from './providers/statusBar';
 import { requireConnected, withViewProgress } from './providers/connectionGuard';
-import { warnComposeUntrusted } from './providers/composeRunner';
+import { warnComposeUntrusted, runComposeWithNotifications } from './providers/composeRunner';
 import { getSettings, onSettingsChanged, warnIfInvalidEndpoint } from './settings';
 import type { SidekickSettings } from './settings';
 import type { ContainerInfo } from 'sidekick-docker-shared';
@@ -18,6 +18,7 @@ let watcherService: ContainerWatcherService | undefined;
 let treeProvider: ContainerTreeProvider | undefined;
 let treeView: vscode.TreeView<unknown> | undefined;
 let statusBarItem: vscode.StatusBarItem | undefined;
+let composeOutput: vscode.LogOutputChannel | undefined;
 /** Why Docker is unreachable, kept so a later container update keeps saying it. */
 let offlineReason: string | undefined;
 /** Whether the tree's "Connecting…" welcome is still showing. */
@@ -156,8 +157,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const settings = getSettings();
   warnIfInvalidEndpoint();
 
+  // ── Output channel ──────────────────────────────────────────────
+  // The full output of compose actions (tree and dashboard alike); failures
+  // offer "Show Output".
+  composeOutput = vscode.window.createOutputChannel('Sidekick Docker', { log: true });
+  context.subscriptions.push(composeOutput);
+
   // ── Dashboard provider ──────────────────────────────────────────
-  dashboardProvider = new DockerDashboardProvider(context.extensionUri);
+  dashboardProvider = new DockerDashboardProvider(context.extensionUri, composeOutput);
   context.subscriptions.push(dashboardProvider);
 
   // ── Tree provider ───────────────────────────────────────────────
@@ -417,24 +424,20 @@ async function runComposeCommand(action: 'up' | 'down' | 'restart', item?: Compo
     return;
   }
   const shared = await import('sidekick-docker-shared');
-  try {
+  // Cancellable from the progress notification; output streams into the
+  // "Sidekick Docker" channel; a failure offers Show Output.
+  await runComposeWithNotifications(action, name, composeOutput, async (hooks) => {
     const settings = getSettings();
     const source = shared.ComposeDetector.projectSourceFromLabels(item.project.containers[0]?.labels);
-    const options = shared.resolveComposeOptions(source, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath);
+    const options = { ...shared.resolveComposeOptions(source, vscode.workspace.workspaceFolders?.[0]?.uri.fsPath), ...hooks };
     const compose = new shared.ComposeClient(settings.cliEnv);
-    const meta = ACTION_META[action];
-    await runDockerAction(meta, name, async () => {
-      const run = action === 'up' ? compose.up(name, options)
-        : action === 'down' ? compose.down(name, options)
-        : compose.restart(name, undefined, options);
-      shared.throwIfComposeFailed(await run, action);
-    });
-    vscode.window.showInformationMessage(meta.successMessage(name));
-  } catch (err: unknown) {
-    vscode.window.showErrorMessage(actionFailedText(action, name, shared.errorMessage(err)));
-  } finally {
-    await watcherService?.forceRefresh();
-  }
+    const run = action === 'up' ? compose.up(name, options)
+      : action === 'down' ? compose.down(name, options)
+      : compose.restart(name, undefined, options);
+    shared.throwIfComposeFailed(await run, action);
+  });
+  // Also after a failure or cancel: compose may have changed some containers.
+  await watcherService?.forceRefresh().catch((e: unknown) => console.debug('refresh after compose failed:', e));
 }
 
 export function deactivate(): void {
@@ -442,4 +445,6 @@ export function deactivate(): void {
   watcherService = undefined;
   dashboardProvider?.dispose();
   dashboardProvider = undefined;
+  composeOutput?.dispose();
+  composeOutput = undefined;
 }

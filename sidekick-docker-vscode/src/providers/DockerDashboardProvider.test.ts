@@ -310,6 +310,73 @@ describe('DockerDashboardProvider feedback', () => {
   });
 });
 
+describe('DockerDashboardProvider compose actions', () => {
+  let provider: DockerDashboardProvider;
+  let posted: unknown[];
+
+  beforeEach(async () => {
+    const { __mock, window } = await import('../test/vscode');
+    __mock.reset();
+    serviceInstances.length = 0;
+    provider = new DockerDashboardProvider({} as vscode.Uri, window.createOutputChannel('Sidekick Docker') as unknown as vscode.LogOutputChannel);
+    posted = [];
+    (provider as unknown as { _postMessage(m: unknown): void })._postMessage = (m: unknown) => { posted.push(m); };
+    const run = internals(provider)._initializeService();
+    await tick();
+    serviceInstances[0].resolveInitialize(true);
+    await run;
+    posted.length = 0;
+    (serviceInstances[0] as unknown as Record<string, unknown>).getItemDisplayName = () => 'shop';
+  });
+
+  afterEach(() => {
+    provider.dispose();
+  });
+
+  const handle = (a: string, i: string) =>
+    (provider as unknown as { _handleAction(a: string, i: string, panel: string): Promise<void> })._handleAction(a, i, 'services');
+
+  it('streams compose output into the channel under a cancellable progress notification', async () => {
+    const { __mock } = await import('../test/vscode');
+    const svc = serviceInstances[0] as unknown as Record<string, unknown>;
+    const composeUp = vi.fn(async (_project: string, hooks?: { signal?: AbortSignal; onOutput?: (t: string, s: 'stdout' | 'stderr') => void }) => {
+      hooks?.onOutput?.(' Container shop-web-1  Started\n', 'stderr');
+    });
+    svc.composeUp = composeUp;
+    await handle('up', 'project:shop');
+    expect(composeUp).toHaveBeenCalledWith('shop', expect.objectContaining({ signal: expect.any(AbortSignal), onOutput: expect.any(Function) }));
+    expect(__mock.progressCalls).toEqual([expect.objectContaining({ title: 'Bringing shop up…', cancellable: true })]);
+    expect(__mock.outputLines.map(l => l.text)).toContain(' Container shop-web-1  Started');
+    expect(posted).toEqual([{ type: 'toast', message: 'shop is up', severity: 'success' }]);
+  });
+
+  it('reports a cancelled run as information, not "Failed to…"', async () => {
+    const { __mock } = await import('../test/vscode');
+    const { ComposeError } = await import('sidekick-docker-shared');
+    const svc = serviceInstances[0] as unknown as Record<string, unknown>;
+    svc.composeUp = vi.fn((_p: string, hooks?: { signal?: AbortSignal }) => new Promise<void>((_, reject) => {
+      hooks?.signal?.addEventListener('abort', () => reject(new ComposeError('Up', { exitCode: 143, stdout: '', stderr: 'cancelled', cancelled: true })));
+    }));
+    const run = handle('up', 'project:shop');
+    await vi.waitFor(() => expect(__mock.progressCancel).toHaveLength(1));
+    __mock.cancelProgress();
+    await run;
+    expect(posted).toEqual([{ type: 'toast', message: 'Cancelled bringing shop up', severity: 'info' }]);
+    expect(__mock.errorMessages).toEqual([]);
+  });
+
+  it('points a failure at the output channel, and offers Show Output when the panel is hidden', async () => {
+    const { __mock } = await import('../test/vscode');
+    const svc = serviceInstances[0] as unknown as Record<string, unknown>;
+    svc.composeDown = vi.fn(async () => { throw new Error('no such project'); });
+    await handle('down', 'project:shop');
+    expect(posted).toEqual([{ type: 'toast', message: 'Failed to take shop down: no such project (full output: Output › Sidekick Docker)', severity: 'error' }]);
+    // No panel at all here, so it counts as hidden.
+    expect(__mock.errorMessages).toEqual(['Failed to take shop down: no such project']);
+    expect(__mock.messageItems.at(-1)).toEqual(['Show Output', 'Open Dashboard']);
+  });
+});
+
 describe('DockerDashboardProvider connection lifecycle', () => {
   let provider: DockerDashboardProvider;
 
