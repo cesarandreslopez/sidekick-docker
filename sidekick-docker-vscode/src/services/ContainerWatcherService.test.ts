@@ -8,7 +8,7 @@ const { pingMock, listContainersMock } = vi.hoisted(() => ({
 }));
 
 const { watcherRef } = vi.hoisted(() => ({
-  watcherRef: { onEvent: null as null | ((e: unknown) => void), onError: null as null | ((e: Error) => void), created: 0 },
+  watcherRef: { onEvent: null as null | ((e: unknown) => void), onError: null as null | ((e: Error) => void), created: 0, failOnStart: false },
 }));
 
 vi.mock('sidekick-docker-shared', async importOriginal => ({
@@ -34,12 +34,18 @@ vi.mock('sidekick-docker-shared', async importOriginal => ({
     dispose(): void { /* noop */ }
   },
   EventWatcher: class {
+    private readonly onError: ((e: Error) => void) | null;
     constructor(_client: unknown, callbacks: { onEvent: (e: unknown) => void; onError?: (e: Error) => void }) {
       watcherRef.onEvent = callbacks.onEvent;
       watcherRef.onError = callbacks.onError ?? null;
+      this.onError = callbacks.onError ?? null;
       watcherRef.created++;
     }
-    start(): void { /* noop */ }
+    start(): void {
+      // An endpoint whose /events always fails (e.g. a proxy denying it).
+      // After a round trip, as a real stream fails (not while connect() is still in flight).
+      if (watcherRef.failOnStart) setTimeout(() => this.onError?.(new Error('events denied')), 5);
+    }
     stop(): void { /* noop */ }
   },
 }));
@@ -226,6 +232,30 @@ describe('ContainerWatcherService', () => {
     await vi.waitFor(() => expect(watcherRef.created).toBe(watchers + 1));
     expect(callbacks.onConnectionChanged).not.toHaveBeenCalled();
     expect(service.isConnected()).toBe(true);
+  });
+
+  it('does not spin when the event stream keeps failing while ping and list succeed', async () => {
+    vi.useFakeTimers();
+    try {
+      pingMock.mockResolvedValue(true);
+      listContainersMock.mockResolvedValue([makeContainer()]);
+      const callbacks = createCallbacks();
+      service = new ContainerWatcherService(callbacks);
+      await service.start();
+      watcherRef.failOnStart = true;
+      pingMock.mockClear();
+
+      watcherRef.onError?.(new Error('events denied'));
+      await vi.advanceTimersByTimeAsync(3_000);
+      // One immediate reconnect, then the 10 s poll — not thousands of pings.
+      expect(pingMock.mock.calls.length).toBeLessThanOrEqual(2);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(pingMock.mock.calls.length).toBeLessThanOrEqual(8);
+      expect(service.isConnected()).toBe(true);
+    } finally {
+      watcherRef.failOnStart = false;
+      vi.useRealTimers();
+    }
   });
 
   it('reports offline after a dropped event stream only when the ping fails, with its reason', async () => {

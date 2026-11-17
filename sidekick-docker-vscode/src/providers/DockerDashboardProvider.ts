@@ -148,11 +148,14 @@ export class DockerDashboardProvider implements vscode.Disposable {
     }, null, this.disposables);
 
     panel.onDidChangeViewState(() => {
+      const wasVisible = this.viewState.visible;
       this.viewState.visible = this.panel?.visible ?? false;
       void this.service?.setVisible(this.viewState.visible);
       // Coming back to a dashboard whose connect failed: try again rather
       // than show a stale "Cannot connect" banner until Retry is pressed.
-      if (this.viewState.visible) this.retryIfDisconnected();
+      // Only on hidden → visible: this event also fires on focus changes,
+      // which would otherwise retry (and toast) on every click while down.
+      if (this.viewState.visible && !wasVisible) this.retryIfDisconnected();
     }, null, this.disposables);
   }
 
@@ -326,6 +329,11 @@ export class DockerDashboardProvider implements vscode.Disposable {
     this._postMessage({ type: 'connectionState', state: 'connecting' });
     try {
       await this._connect(generation);
+    } catch (err: unknown) {
+      // Never leave the webview on "Connecting…" with Retry disabled.
+      if (generation === this.initGeneration) {
+        this._postMessage({ type: 'connectionState', state: 'disconnected', reason: errorMessage(err) });
+      }
     } finally {
       if (generation === this.initGeneration) this.initializing = false;
     }

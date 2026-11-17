@@ -39,13 +39,19 @@ export interface ComposeOutput {
  */
 export function createComposeOutput(): ComposeOutput & vscode.Disposable {
   let channel: vscode.LogOutputChannel | undefined;
-  const get = (): vscode.LogOutputChannel => (channel ??= vscode.window.createOutputChannel('Sidekick Docker', { log: true }));
+  // A compose run still going at deactivation must not recreate the channel.
+  let disposed = false;
+  const get = (): vscode.LogOutputChannel | undefined => {
+    if (disposed) return undefined;
+    return (channel ??= vscode.window.createOutputChannel('Sidekick Docker', { log: true }));
+  };
   return {
-    info: message => get().info(message),
-    warn: message => get().warn(message),
-    error: message => get().error(message),
-    show: preserveFocus => get().show(preserveFocus),
+    info: message => get()?.info(message),
+    warn: message => get()?.warn(message),
+    error: message => get()?.error(message),
+    show: preserveFocus => get()?.show(preserveFocus),
     dispose: () => {
+      disposed = true;
       channel?.dispose();
       channel = undefined;
     },

@@ -21,6 +21,9 @@ export interface ContainerWatcherOptions {
  * Separate from DockerService (which is webview-lifecycle-bound).
  * Used by: tree view, badge, status bar, quick pick commands.
  */
+
+/** How often a lost connection is retried (and the floor between event-stream reconnects). */
+const RECONNECT_POLL_MS = 10_000;
 export class ContainerWatcherService {
   private client: DockerClient;
   /** Containers-only store: same refresh/event policy as the dashboards, one listing per pass. */
@@ -37,6 +40,8 @@ export class ContainerWatcherService {
   private refreshIntervalMs: number;
   private endpoint: string | undefined;
   private reason: string | undefined;
+  /** When the event stream last triggered an immediate reconnect (0: never). */
+  private lastStreamReconnectAt = 0;
 
   constructor(callbacks: ContainerWatcherCallbacks, options?: ContainerWatcherOptions) {
     this.client = new DockerClient(options?.clientOptions);
@@ -88,6 +93,16 @@ export class ContainerWatcherService {
           // ping reports Docker offline, with the ping's explained reason.
           console.debug('watcher event stream lost:', errorMessage(err));
           this.stopWatcher();
+          // At most one immediate reconnect per reconnect period: an endpoint
+          // whose /events keeps failing while ping and list succeed (a socket
+          // proxy denying events) otherwise spun ping → list → stream → fail
+          // with no delay at all. After that, the regular reconnect poll.
+          const now = Date.now();
+          if (now - this.lastStreamReconnectAt < RECONNECT_POLL_MS) {
+            this.startReconnectPolling();
+            return;
+          }
+          this.lastStreamReconnectAt = now;
           void this.tryConnect().then((ok) => { if (!ok) this.startReconnectPolling(); });
         },
       });
@@ -177,7 +192,7 @@ export class ContainerWatcherService {
     this.reconnectInterval = setInterval(async () => {
       const ok = await this.tryConnect();
       if (ok) this.stopReconnectPolling();
-    }, 10_000);
+    }, RECONNECT_POLL_MS);
   }
 
   private stopReconnectPolling(): void {
