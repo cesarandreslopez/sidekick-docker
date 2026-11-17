@@ -15,6 +15,13 @@ describe('collectLogText', () => {
     expect(collectLogText(LOGS, 'error', 'exact').count).toBe(2);
     expect(collectLogText(LOGS, 'error', 'exact').text).toContain('db timeout');
   });
+
+  it('copies plain text: no colour codes or control characters (Missed-5)', () => {
+    const coloured = [log('\x1b[32mINFO\x1b[0m\tready\r'), log('\x1b[31mERROR\x1b[0m boom\x07')];
+    expect(collectLogText(coloured, '', 'exact').text).toBe('INFO    ready\nERROR boom');
+    // The filter sees the same plain text, across the colour boundary.
+    expect(collectLogText(coloured, 'ERROR boom', 'exact').count).toBe(1);
+  });
 });
 
 describe('copyLogsAction', () => {

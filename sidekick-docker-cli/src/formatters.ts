@@ -106,7 +106,9 @@ export function formatFileChange(change: FilesystemChange): string {
 
 /** One row of the Patterns tab: right-aligned count, then the template with dimmed wildcards. */
 export function formatLogTemplate(t: Pick<LogTemplate, 'count' | 'pattern'>): string {
-  return `${ansi.yellow(String(t.count).padStart(5))}  ${t.pattern.replace(/<\*>/g, ansi.gray('<*>'))}`;
+  // Templates are mined from raw log lines, control characters and all.
+  const pattern = stripSgr(sanitizeLogText(t.pattern));
+  return `${ansi.yellow(String(t.count).padStart(5))}  ${pattern.replace(/<\*>/g, ansi.gray('<*>'))}`;
 }
 
 /** Bold yellow section header for detail panel grouping. */
@@ -196,6 +198,72 @@ function colorizeTokens(message: string): string {
   }).join('');
 }
 
+// ── Log text sanitising ──
+// Container output is arbitrary bytes. A tab drew as one cell (or shifted
+// the row), \r and cursor/erase sequences from progress bars moved Ink's
+// cursor and tore the frame, an OSC sequence could retitle the terminal, and
+// a BEL beeped on every repaint. Colour (SGR) is the one kind of escape a
+// line keeps: Ink draws it, and apps colour their own output.
+
+/** Any escape sequence: CSI, OSC (BEL/ST-terminated), DCS/SOS/PM/APC, or a two-character escape. */
+const ESCAPE_SEQUENCE = /\x1b(?:\[[0-?]*[ -/]*[@-~]|\][\s\S]*?(?:\x07|\x1b\\|$)|[PX^_][\s\S]*?(?:\x1b\\|$)|[ -/]*[0-~])?/g;
+const IS_SGR = /^\x1b\[[0-9;:]*m$/;
+/** Colour/style (SGR) sequences, the only escapes a log line keeps. */
+const SGR_SEQUENCE = /\x1b\[[0-9;:]*m/g;
+const SGR_SPLIT = /(\x1b\[[0-9;:]*m)/;
+const HAS_CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+/** C0 controls except tab (expanded separately), DEL, and C1 controls. */
+const CONTROL_CHARS = /[\u0000-\u0008\u000a-\u001f\u007f-\u009f]/g;
+const TAB_WIDTH = 8;
+
+/**
+ * A log message made safe to draw: tabs expanded to spaces (8-column stops),
+ * every other control character and escape sequence removed — except colour
+ * (SGR), which is kept.
+ */
+export function sanitizeLogText(text: string): string {
+  if (!HAS_CONTROL.test(text)) return text;
+  const kept = text.replace(ESCAPE_SEQUENCE, seq => (IS_SGR.test(seq) ? seq : ''));
+  let column = 0;
+  return kept.split(SGR_SPLIT).map((part, i) => {
+    if (i % 2 === 1) return part; // an SGR sequence: zero width
+    let out = '';
+    for (const ch of part.replace(CONTROL_CHARS, '')) {
+      if (ch === '\t') {
+        const pad = TAB_WIDTH - (column % TAB_WIDTH);
+        out += ' '.repeat(pad);
+        column += pad;
+      } else {
+        out += ch;
+        column++;
+      }
+    }
+    return out;
+  }).join('');
+}
+
+/** `text` without colour (SGR) sequences. */
+export function stripSgr(text: string): string {
+  return text.replace(SGR_SEQUENCE, '');
+}
+
+const plainTextCache = new WeakMap<LogEntry, string>();
+
+/** A log entry's message as plain text: what the log filter matches and Copy Logs copies. */
+export function logPlainText(entry: LogEntry): string {
+  const cached = plainTextCache.get(entry);
+  if (cached !== undefined) return cached;
+  const plain = stripSgr(sanitizeLogText(entry.message));
+  plainTextCache.set(entry, plain);
+  return plain;
+}
+
+/**
+ * Marks a stderr line. The whole line used to be red, which hid its own
+ * highlighting and, with colour off, left nothing to tell it apart.
+ */
+export const STDERR_GUTTER = '┃ ';
+
 let colorizedCache = new WeakMap<LogEntry, string>();
 
 export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[]): string {
@@ -207,18 +275,21 @@ export function colorizeLogEntry(entry: LogEntry, filterMatches?: FilterMatch[])
 
   const ts = entry.timestamp ? formatTimestampTime(entry.timestamp) : '';
   const tsColored = ts ? ansi.dim(ansi.gray(ts)) + ' ' : '';
+  const gutter = entry.stream === 'stderr' ? ansi.dim(ansi.red(STDERR_GUTTER)) : '';
 
-  let result: string;
-  if (entry.stream === 'stderr') {
-    const msg = filterMatches
-      ? highlightMatches(entry.message, filterMatches, ansi.red)
-      : ansi.red(entry.message);
-    result = tsColored + msg;
-  } else if (filterMatches && filterMatches.length > 0) {
-    result = tsColored + highlightMatches(entry.message, filterMatches);
+  let msg: string;
+  if (filterMatches && filterMatches.length > 0) {
+    // Match offsets index the plain text, which is what gets highlighted.
+    msg = highlightMatches(logPlainText(entry), filterMatches);
   } else {
-    result = tsColored + colorizeTokens(entry.message);
+    const sanitized = sanitizeLogText(entry.message);
+    // A line the app coloured itself keeps its colours (unless colour is
+    // off); token colours would only fight them.
+    msg = sanitized.includes('\x1b[')
+      ? (colorEnabled ? sanitized : stripSgr(sanitized))
+      : colorizeTokens(sanitized);
   }
+  const result = tsColored + gutter + msg;
 
   if (!filterMatches) {
     colorizedCache.set(entry, result);
@@ -341,7 +412,7 @@ export function renderLogLines(
   if (filterString) {
     let matchCount = 0;
     for (const l of logs) {
-      const result = filterLine(l.message, filterString, filterMode);
+      const result = filterLine(logPlainText(l), filterString, filterMode);
       if (result.matched) {
         matchCount++;
         lines.push(colorizeLogEntry(l, result.matches));

@@ -1,7 +1,7 @@
 import type { DockerDashboardMetrics } from '../DockerState';
 import type { ActionType, FilterMode, FollowStreamState, LogEntry } from 'sidekick-docker-shared';
 import { filterLine } from 'sidekick-docker-shared';
-import { ansi } from '../../formatters';
+import { ansi, logPlainText } from '../../formatters';
 
 /** An item displayed in the side panel list. */
 export interface PanelItem {
@@ -98,9 +98,14 @@ export function detailFetchError(what: string, reason: string): string {
   return `${ansi.red(`Could not load ${what}.`)}\n\n${reason}\n\n${ansi.gray('Reselect the item to retry.')}`;
 }
 
-/** The lines the Logs tab currently shows: every message, or only those matching the log filter. */
+/**
+ * The lines the Logs tab currently shows: every message, or only those
+ * matching the log filter — as plain text. The raw messages carried colour
+ * codes and control characters into the clipboard.
+ */
 export function collectLogText(logs: readonly LogEntry[], query: string, mode: FilterMode): { text: string; count: number } {
-  const lines = (query ? logs.filter(l => filterLine(l.message, query, mode).matched) : logs).map(l => l.message);
+  const plain = logs.map(logPlainText);
+  const lines = query ? plain.filter(text => filterLine(text, query, mode).matched) : plain;
   return { text: lines.join('\n'), count: lines.length };
 }
 
